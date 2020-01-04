@@ -10,6 +10,8 @@
 #include <QLocale>
 #include <QStringList>
 
+#include <cassert>
+
 BitcoinUnits::BitcoinUnits(QObject *parent)
     : QAbstractListModel(parent), unitlist(availableUnits()) {}
 
@@ -111,7 +113,7 @@ bool BitcoinUnits::decimalSeparatorIsComma() {
 }
 
 QString BitcoinUnits::format(int unit, const Amount nIn, bool fPlus,
-                             SeparatorStyle separators) {
+                             SeparatorStyle separators, bool justify) {
     // Note: not using straight sprintf here because we do NOT want
     // standard localized number formatting.
     if (!valid(unit)) {
@@ -124,6 +126,9 @@ QString BitcoinUnits::format(int unit, const Amount nIn, bool fPlus,
     qint64 n_abs = (n > 0 ? n : -n);
     qint64 quotient = n_abs / coin;
     QString quotient_str = QString::number(quotient);
+    if (justify) {
+        quotient_str = quotient_str.rightJustified(16 - num_decimals, ' ');
+    }
 
     // Use SI-style thin space separators as these are locale independent and
     // can't be confused with the decimal marker.
@@ -170,6 +175,20 @@ QString BitcoinUnits::formatHtmlWithUnit(int unit, const Amount amount,
     QString str(formatWithUnit(unit, amount, plussign, separators));
     str.replace(BitcoinSpaces::thin, QString(BitcoinSpaces::thinHtml));
     return QString("<span style='white-space: nowrap;'>%1</span>").arg(str);
+}
+
+QString BitcoinUnits::formatWithPrivacy(int unit, const Amount &amount,
+                                        SeparatorStyle separators,
+                                        bool privacy) {
+    assert(amount >= Amount::zero());
+    QString value;
+    if (privacy) {
+        value = format(unit, Amount::zero(), false, separators, true)
+                    .replace('0', '#');
+    } else {
+        value = format(unit, amount, false, separators, true);
+    }
+    return value + QString(" ") + ticker(unit);
 }
 
 std::optional<Amount> BitcoinUnits::parse(int unit, bool allowComma, const QString& value) {
