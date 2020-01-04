@@ -128,6 +128,7 @@ public Q_SLOTS:
 Q_SIGNALS:
     /** Signal that we want to show the main window */
     void showNormalIfMinimized();
+    void setPrivacy(bool privacy);
     /**  Fired when a message should be reported to the user */
     void message(const QString &title, const QString &message,
                  unsigned int style);
