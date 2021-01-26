@@ -57,6 +57,8 @@ SignVerifyMessageDialog::SignVerifyMessageDialog(
 
     ui->signatureOut_SM->setFont(GUIUtil::fixedPitchFont());
     ui->signatureIn_VM->setFont(GUIUtil::fixedPitchFont());
+
+    GUIUtil::handleCloseWindowShortcut(this);
 }
 
 SignVerifyMessageDialog::~SignVerifyMessageDialog() {
