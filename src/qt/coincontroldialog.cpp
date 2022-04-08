@@ -679,7 +679,7 @@ void CoinControlDialog::updateView() {
         Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsUserCheckable;
     QFlags<Qt::ItemFlag> flgTristate =
         Qt::ItemIsSelectable | Qt::ItemIsEnabled | Qt::ItemIsUserCheckable |
-        Qt::ItemIsTristate;
+        Qt::ItemIsAutoTristate;
 
     int nDisplayUnit = model->getOptionsModel()->getDisplayUnit();
 
