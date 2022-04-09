@@ -589,8 +589,7 @@ bool RPCConsole::eventFilter(QObject *obj, QEvent *event) {
             case Qt::Key_PageUp: /* pass paging keys to messages widget */
             case Qt::Key_PageDown:
                 if (obj == ui->lineEdit) {
-                    QApplication::postEvent(ui->messagesWidget,
-                                            new QKeyEvent(*keyevt));
+                    QApplication::sendEvent(ui->messagesWidget, keyevt);
                     return true;
                 }
                 break;
@@ -598,8 +597,7 @@ bool RPCConsole::eventFilter(QObject *obj, QEvent *event) {
             case Qt::Key_Enter:
                 // forward these events to lineEdit
                 if (obj == autoCompleter->popup()) {
-                    QApplication::postEvent(ui->lineEdit,
-                                            new QKeyEvent(*keyevt));
+                    QApplication::sendEvent(ui->lineEdit, keyevt);
                     return true;
                 }
                 break;
@@ -613,8 +611,7 @@ bool RPCConsole::eventFilter(QObject *obj, QEvent *event) {
                      ((mod & Qt::ControlModifier) && key == Qt::Key_V) ||
                      ((mod & Qt::ShiftModifier) && key == Qt::Key_Insert))) {
                     ui->lineEdit->setFocus();
-                    QApplication::postEvent(ui->lineEdit,
-                                            new QKeyEvent(*keyevt));
+                    QApplication::sendEvent(ui->lineEdit, keyevt);
                     return true;
                 }
         }
