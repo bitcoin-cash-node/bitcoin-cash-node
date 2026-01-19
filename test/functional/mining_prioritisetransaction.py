@@ -14,7 +14,7 @@ from test_framework.blocktools import (
 from test_framework.cdefs import LEGACY_MAX_BLOCK_SIZE
 from test_framework.messages import COIN
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal, assert_raises_rpc_error
+from test_framework.util import assert_equal, assert_not_equal, assert_raises_rpc_error
 
 
 class PrioritiseTransactionTest(BitcoinTestFramework):
@@ -109,6 +109,7 @@ class PrioritiseTransactionTest(BitcoinTestFramework):
         # LEGACY_MAX_BLOCK_SIZE -- otherwise the test needs to be revised to create
         # more transactions.
         mempool = self.nodes[0].getrawmempool(True)
+        total_fee = sum(mp['fees']['base'] for mp in mempool.values())
         sizes = [0, 0, 0]
         for i in range(3):
             for j in txids[i]:
@@ -117,10 +118,20 @@ class PrioritiseTransactionTest(BitcoinTestFramework):
             # Fail => raise utxo_count
             assert sizes[i] > LEGACY_MAX_BLOCK_SIZE
 
+        # Check getmempoolinfo's "total_fee" key is what we expect
+        assert_equal(total_fee, self.nodes[0].getmempoolinfo()['total_fee'])
+        # Also check that the base and modified fee is the same for each txn in mempool before we prioritisetransaction
+        assert_equal(total_fee, sum(mp['fees']['modified'] for mp in mempool.values()))
+
         # add a fee delta to something in the cheapest bucket and make sure it gets mined
         # also check that a different entry in the cheapest bucket is NOT mined
         self.nodes[0].prioritisetransaction(
             txid=txids[0][0], fee_delta=100 * self.nodes[0].calculate_fee_from_txid(txids[0][0]))
+
+        mempool = self.nodes[0].getrawmempool(True)
+        # Check that the prioritisetransaction call took effect but did not affect total_fee
+        assert_equal(total_fee, self.nodes[0].getmempoolinfo()['total_fee'])
+        assert_not_equal(total_fee,  sum(mp['fees']['modified'] for mp in mempool.values()))
 
         self.generate(self.nodes[0], 1)
 
