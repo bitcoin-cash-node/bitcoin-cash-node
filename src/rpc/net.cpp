@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2023 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -75,8 +75,7 @@ static UniValue ping(const Config &config, const JSONRPCRequest &request) {
     return UniValue();
 }
 
-static UniValue getpeerinfo(const Config &config,
-                            const JSONRPCRequest &request) {
+static UniValue getpeerinfo(const Config &, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() != 0) {
         throw std::runtime_error(RPCHelpMan{
             "getpeerinfo",
@@ -93,6 +92,10 @@ static UniValue getpeerinfo(const Config &config,
                 "    \"mapped_as\":\"mapped_as\",        (string) "
                 "The AS in the BGP route to the peer used for diversifying peer selection (only available if the asmap config flag is set)\n"
                 "    \"services\":\"xxxxxxxxxxxxxxxx\",  (string) The services offered\n"
+                "    \"servicesnames\":[               (array) The services offered, in human-readable form\n"
+                "       \"SERVICE_NAME\",              (string) The service name if it is recognized\n"
+                "       ...\n"
+                "    ],\n"
                 "    \"relaytxes\":true|false,         (boolean) Whether peer has asked us to relay transactions to it\n"
                 "    \"lastsend\": ttt,                (numeric) "
                 "The time in seconds since epoch (Jan 1 1970 GMT) of the last send\n"
@@ -161,7 +164,7 @@ static UniValue getpeerinfo(const Config &config,
         bool minping = stats.dMinPing < double(std::numeric_limits<int64_t>::max()) / 1e6;
         bool pingwait = stats.dPingWait > 0.0;
         UniValue::Object obj;
-        obj.reserve(20 + addrlocal + addrbind + pingtime + minping + pingwait + fStateStats * 4);
+        obj.reserve(25 + addrlocal + addrbind + pingtime + minping + pingwait + fStateStats * 4);
         obj.emplace_back("id", stats.nodeid);
         obj.emplace_back("addr", std::move(stats.addrName));
         if (addrlocal) {
@@ -174,6 +177,7 @@ static UniValue getpeerinfo(const Config &config,
             obj.emplace_back("mapped_as", uint64_t(stats.m_mapped_as));
         }
         obj.emplace_back("services", strprintf("%016x", stats.nServices));
+        obj.emplace_back("servicesnames", GetServicesNames(stats.nServices));
         obj.emplace_back("relaytxes", stats.fRelayTxes);
         obj.emplace_back("lastsend", stats.nLastSend);
         obj.emplace_back("lastrecv", stats.nLastRecv);
@@ -506,8 +510,7 @@ static UniValue::Array GetNetworksInfo() {
     return networks;
 }
 
-static UniValue getnetworkinfo(const Config &config,
-                               const JSONRPCRequest &request) {
+static UniValue getnetworkinfo(const Config &config, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() != 0) {
         throw std::runtime_error(RPCHelpMan{
             "getnetworkinfo",
@@ -519,6 +522,10 @@ static UniValue getnetworkinfo(const Config &config,
                 "  \"subversion\": \"/Bitcoin Cash Node:x.x.x/\",    (string) the server subversion string\n"
                 "  \"protocolversion\": xxxxx,                     (numeric) the protocol version\n"
                 "  \"localservices\": \"xxxxxxxxxxxxxxxx\",          (string) the services we offer to the network\n"
+                "  \"localservicesnames\": [                       (array) the services we offer to the network, in human-readable form\n"
+                "    \"SERVICE_NAME\"                              (string) the service name\n"
+                "    ,...\n"
+                "  ],\n"
                 "  \"localrelay\": true|false,                     (bool) true if transaction relay is requested from peers\n"
                 "  \"timeoffset\": xxxxx,                          (numeric) the time offset\n"
                 "  \"connections\": xxxxx,                         (numeric) the total number of connections\n"
@@ -547,7 +554,7 @@ static UniValue getnetworkinfo(const Config &config,
                 "    \"score\": xxx                                (numeric) relative score\n"
                 "  }\n"
                 "  ,...\n"
-                "  ]\n"
+                "  ],\n"
                 "  \"warnings\": \"...\"                             (string) any network and blockchain warnings\n"
                 "}\n"},
             RPCExamples{HelpExampleCli("getnetworkinfo", "") +
@@ -557,12 +564,14 @@ static UniValue getnetworkinfo(const Config &config,
 
     LOCK(cs_main);
     UniValue::Object obj;
-    obj.reserve(g_connman ? 13 : 10);
+    obj.reserve(g_connman ? 14 : 10);
     obj.emplace_back("version", CLIENT_VERSION);
     obj.emplace_back("subversion", userAgent(config));
     obj.emplace_back("protocolversion", PROTOCOL_VERSION);
     if (g_connman) {
-        obj.emplace_back("localservices", strprintf("%016x", g_connman->GetLocalServices()));
+        const ServiceFlags services = g_connman->GetLocalServices();
+        obj.emplace_back("localservices", strprintf("%016x", services));
+        obj.emplace_back("localservicesnames", GetServicesNames(services));
     }
     obj.emplace_back("localrelay", g_relay_txes);
     obj.emplace_back("timeoffset", GetTimeOffset());

@@ -1,5 +1,5 @@
 // Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,6 +15,7 @@
 
 #include <univalue.h>
 
+#include <utility>
 #include <variant>
 
 NodeContext *g_rpc_node = nullptr;
@@ -473,4 +474,28 @@ std::string RPCArg::ToString(const bool oneline) const
             // no default case, so the compiler can warn about missing cases
     }
     assert(false);
+}
+
+UniValue::Array GetServicesNames(const ServiceFlags services) {
+    UniValue::Array ret;
+
+    constexpr std::pair<ServiceFlags, const char *> flag2String[] = {
+        {NODE_NETWORK, "NETWORK"},
+        {NODE_GETUTXO, "GETUTXO"},
+        {NODE_BLOOM, "BLOOM"},
+        {NODE_XTHIN, "XTHIN"},
+        {NODE_BITCOIN_CASH, "BITCOIN_CASH"},
+        {NODE_GRAPHENE, "GRAPHENE"},
+        {NODE_CF, "CF"},
+        {NODE_NETWORK_LIMITED, "NETWORK_LIMITED"},
+        {NODE_EXTVERSION, "EXTVERSION"},
+    };
+
+    for (const auto & [flag, name] : flag2String) {
+        if (services & flag) {
+            ret.push_back(name);
+        }
+    }
+
+    return ret;
 }
