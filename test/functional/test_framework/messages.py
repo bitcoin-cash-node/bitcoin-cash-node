@@ -2,7 +2,7 @@
 # Copyright (c) 2010 ArtForz -- public domain half-a-node
 # Copyright (c) 2012 Jeff Garzik
 # Copyright (c) 2010-2019 The Bitcoin Core developers
-# Copyright (c) 2022 The Bitcoin developers
+# Copyright (c) 2022-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Bitcoin test framework primitive and message structures
@@ -52,12 +52,15 @@ MAX_PROTOCOL_MESSAGE_LENGTH = 2 * 1024 * 1024  # Maximum length of incoming prot
 MAX_HEADERS_RESULTS = 2000  # Number of headers sent in one getheaders result
 MAX_INV_SIZE = 50000  # Maximum number of entries in an 'inv' protocol message
 
+# Known network service flags; not all of these are used by BCHN
 NODE_NETWORK = (1 << 0)
-# NODE_GETUTXO = (1 << 1)
+NODE_GETUTXO = (1 << 1)
 NODE_BLOOM = (1 << 2)
-# NODE_WITNESS = (1 << 3)
+NODE_WITNESS = (1 << 3)
 NODE_XTHIN = (1 << 4)
 NODE_BITCOIN_CASH = (1 << 5)
+NODE_GRAPHENE = (1 << 6)
+NODE_CF = (1 << 8)
 NODE_NETWORK_LIMITED = (1 << 10)
 NODE_EXTVERSION = (1 << 11)
 
