@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -110,11 +110,10 @@ bool EnsureWalletIsAvailable(CWallet *const pwallet, bool avoidException) {
                        "through /wallet/<filename> uri-path).");
 }
 
-void EnsureWalletIsUnlocked(CWallet *const pwallet) {
-    if (pwallet->IsLocked()) {
+void EnsureWalletIsUnlocked(CWallet &wallet) {
+    if (wallet.IsLocked()) {
         throw JSONRPCError(RPC_WALLET_UNLOCK_NEEDED,
-                           "Error: Please enter the wallet passphrase with "
-                           "walletpassphrase first.");
+                           "Error: Please enter the wallet passphrase with walletpassphrase first.");
     }
 }
 
@@ -519,7 +518,7 @@ static UniValue sendtoaddress(const Config &config,
         coinControl.m_include_unsafe_inputs = request.params[6].get_bool();
     }
 
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(*pwallet);
 
     CTransactionRef tx =
         SendMoney(*locked_chain, pwallet, dest, nAmount, fSubtractFeeFromAmount,
@@ -637,7 +636,7 @@ static UniValue signmessage(const Config &config,
     auto locked_chain = pwallet->chain().lock();
     LOCK(pwallet->cs_wallet);
 
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(*pwallet);
 
     const std::string &strAddress = request.params[0].get_str();
     const std::string &strMessage = request.params[1].get_str();
@@ -1081,7 +1080,7 @@ static UniValue sendmany(const Config &config, const JSONRPCRequest &request) {
         vecSend.push_back(recipient);
     }
 
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(*pwallet);
 
     // Check funds
     if (totalAmount > pwallet->GetLegacyBalance(ISMINE_SPENDABLE, nMinDepth)) {
@@ -2214,7 +2213,7 @@ static UniValue keypoolrefill(const Config &config,
         kpSize = (unsigned int)request.params[0].get_int();
     }
 
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(*pwallet);
     pwallet->TopUpKeyPool(kpSize);
 
     if (pwallet->GetKeyPoolSize() < kpSize) {
@@ -3672,7 +3671,7 @@ UniValue signrawtransactionwithwallet(const Config &config,
     // Sign the transaction
     auto locked_chain = pwallet->chain().lock();
     LOCK(pwallet->cs_wallet);
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(*pwallet);
 
     return SignTransaction(pwallet->chain(), mtx, request.params[1], pwallet,
                            false, request.params[2]);
@@ -4256,7 +4255,7 @@ static UniValue sethdseed(const Config &config, const JSONRPCRequest &request) {
             "-upgradewallet in order to upgrade a non-HD wallet to HD");
     }
 
-    EnsureWalletIsUnlocked(pwallet);
+    EnsureWalletIsUnlocked(*pwallet);
 
     bool flush_key_pool = true;
     if (!request.params[0].isNull()) {
