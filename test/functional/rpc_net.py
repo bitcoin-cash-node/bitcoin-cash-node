@@ -170,6 +170,7 @@ class NetTest(BitcoinTestFramework):
         for a in node_addresses:
             assert_greater_than(a["time"], 1527811200)  # 1st June 2018
             assert_equal(a["services"], NODE_NETWORK)
+            assert_net_servicesnames(a["services"], a["servicesnames"])
             assert a["address"] in imported_addrs
             assert_equal(a["port"], 8333)
 

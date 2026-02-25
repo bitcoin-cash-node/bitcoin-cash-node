@@ -822,6 +822,10 @@ static UniValue getnodeaddresses(const Config &config,
                 "    \"time\": ttt,                (numeric) "
                 "Timestamp in seconds since epoch (Jan 1 1970 GMT) keeping track of when the node was last seen\n"
                 "    \"services\": n,              (numeric) The services offered\n"
+                "    \"servicesnames\":[           (array) The services offered, in human-readable form\n"
+                "       \"SERVICE_NAME\"           (string) The service name if it is recognized\n"
+                "       ,...\n"
+                "    ],\n"
                 "    \"address\": \"host\",          (string) The address of the node\n"
                 "    \"port\": n                   (numeric) The port of the node\n"
                 "  }\n"
@@ -853,9 +857,10 @@ static UniValue getnodeaddresses(const Config &config,
     ret.reserve(address_return_count);
     for (const CAddress& addr : vAddr) {
         UniValue::Object obj;
-        obj.reserve(4);
+        obj.reserve(5);
         obj.emplace_back("time", addr.nTime);
         obj.emplace_back("services", addr.nServices);
+        obj.emplace_back("servicesnames", GetServicesNames(addr.nServices));
         obj.emplace_back("address", addr.ToStringIP());
         obj.emplace_back("port", addr.GetPort());
         ret.emplace_back(std::move(obj));
