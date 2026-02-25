@@ -806,12 +806,11 @@ static UniValue setnetworkactive(const Config &config,
     return g_connman->GetNetworkActive();
 }
 
-static UniValue getnodeaddresses(const Config &config,
-                                 const JSONRPCRequest &request) {
+static UniValue getnodeaddresses(const Config &, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() > 1) {
         throw std::runtime_error(RPCHelpMan{
             "getnodeaddresses",
-            "\nReturn known addresses which can potentially be used to find new nodes in the network\n",
+            "\nReturn known addresses, which can potentially be used to find new nodes on the network.\n",
             {
                 {"count", RPCArg::Type::NUM, /* opt */ true, /* default_val */ "1",
                  "The maximum number of addresses to return. Specify 0 to return all known addresses."},
@@ -821,13 +820,14 @@ static UniValue getnodeaddresses(const Config &config,
                 "  {\n"
                 "    \"time\": ttt,                (numeric) "
                 "Timestamp in seconds since epoch (Jan 1 1970 GMT) keeping track of when the node was last seen\n"
-                "    \"services\": n,              (numeric) The services offered\n"
+                "    \"services\": n,              (numeric) The services offered by the node\n"
                 "    \"servicesnames\":[           (array) The services offered, in human-readable form\n"
                 "       \"SERVICE_NAME\"           (string) The service name if it is recognized\n"
                 "       ,...\n"
                 "    ],\n"
                 "    \"address\": \"host\",          (string) The address of the node\n"
-                "    \"port\": n                   (numeric) The port of the node\n"
+                "    \"port\": n,                  (numeric) The port number of the node\n"
+                "    \"network\": \"name\"           (string) The network (ipv4, ipv6, onion) the node connected through\n"
                 "  }\n"
                 "  ,....\n"
                 "]\n"},
@@ -851,18 +851,19 @@ static UniValue getnodeaddresses(const Config &config,
     }
 
     // returns a shuffled list of CAddress
-    std::vector<CAddress> vAddr = g_connman->GetAddresses(count, /* max_pct */ 0);
-    int address_return_count = std::min<int>(count, vAddr.size());
+    const std::vector<CAddress> vAddr = g_connman->GetAddresses(count, /* max_pct */ 0);
+    const size_t address_return_count = std::min<size_t>(count, vAddr.size());
     UniValue::Array ret;
     ret.reserve(address_return_count);
     for (const CAddress& addr : vAddr) {
         UniValue::Object obj;
-        obj.reserve(5);
+        obj.reserve(6);
         obj.emplace_back("time", addr.nTime);
         obj.emplace_back("services", addr.nServices);
         obj.emplace_back("servicesnames", GetServicesNames(addr.nServices));
         obj.emplace_back("address", addr.ToStringIP());
         obj.emplace_back("port", addr.GetPort());
+        obj.emplace_back("network", GetNetworkName(addr.GetNetClass()));
         ret.emplace_back(std::move(obj));
     }
     return ret;

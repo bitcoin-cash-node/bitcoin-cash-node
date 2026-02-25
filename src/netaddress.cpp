@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -484,7 +484,7 @@ bool CNetAddr::IsAddrV1Compatible() const {
     assert(false);
 }
 
-enum Network CNetAddr::GetNetwork() const {
+Network CNetAddr::GetNetwork() const {
     if (IsInternal()) {
         return NET_INTERNAL;
     }
@@ -635,7 +635,7 @@ uint32_t CNetAddr::GetLinkedIPv4() const {
     assert(false);
 }
 
-uint8_t CNetAddr::GetNetClass() const {
+Network CNetAddr::GetNetClass() const {
     // Make sure that if we return NET_IPV6, then IsIPv6() is true. The callers expect that.
 
     // Check for "internal" first because such addresses are also !IsRoutable()
@@ -653,7 +653,7 @@ uint8_t CNetAddr::GetNetClass() const {
 }
 
 uint32_t CNetAddr::GetMappedAS(const std::vector<bool> &asmap) const {
-    if (uint8_t net_class;
+    if (Network net_class;
             asmap.size() == 0 || ((net_class = GetNetClass()) != NET_IPV4 && net_class != NET_IPV6)) {
         return 0; // Indicates not found, safe because AS0 is reserved per RFC7607.
     }
@@ -706,7 +706,7 @@ std::vector<uint8_t> CNetAddr::GetGroup(const std::vector<bool> &asmap) const {
         return vchRet;
     }
 
-    vchRet.push_back(GetNetClass());
+    vchRet.push_back(static_cast<uint8_t>(GetNetClass()));
     int nBits{0};
 
     if (IsLocal()) {

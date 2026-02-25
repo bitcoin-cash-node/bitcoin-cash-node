@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -46,7 +46,7 @@ bool fNameLookup = DEFAULT_NAME_LOOKUP;
 static const int SOCKS5_RECV_TIMEOUT = 20 * 1000;
 static std::atomic<bool> interruptSocks5Recv(false);
 
-enum Network ParseNetwork(const std::string &net_in) {
+Network ParseNetwork(const std::string &net_in) {
     std::string net = ToLower(net_in);
     if (net == "ipv4") return NET_IPV4;
     if (net == "ipv6") return NET_IPV6;
@@ -59,7 +59,7 @@ enum Network ParseNetwork(const std::string &net_in) {
     return NET_UNROUTABLE;
 }
 
-std::string GetNetworkName(enum Network net) {
+std::string GetNetworkName(Network net) {
     switch (net) {
         case NET_IPV4:
             return "ipv4";
@@ -773,7 +773,7 @@ bool ConnectSocketDirectly(const CService &addrConnect, const SOCKET &hSocket,
     return true;
 }
 
-bool SetProxy(enum Network net, const proxyType &addrProxy) {
+bool SetProxy(Network net, const proxyType &addrProxy) {
     assert(net >= 0 && net < NET_MAX);
     if (!addrProxy.IsValid()) {
         return false;
@@ -783,7 +783,7 @@ bool SetProxy(enum Network net, const proxyType &addrProxy) {
     return true;
 }
 
-bool GetProxy(enum Network net, proxyType &proxyInfoOut) {
+bool GetProxy(Network net, proxyType &proxyInfoOut) {
     assert(net >= 0 && net < NET_MAX);
     LOCK(cs_proxyInfos);
     if (!proxyInfo[net].IsValid()) {
