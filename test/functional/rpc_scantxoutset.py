@@ -68,6 +68,13 @@ class ScantxoutsetTest(BitcoinTestFramework):
 
         self.generate(self.nodes[0], 1)
 
+        scan = self.nodes[0].scantxoutset("start", [])
+        info = self.nodes[0].gettxoutsetinfo()
+        assert_equal(scan['success'], True)
+        assert_equal(scan['height'], info['height'])
+        assert_equal(scan['searched_items'], info['txouts'])
+        assert_equal(scan['bestblock'], info['bestblock'])
+
         self.log.info("Stop node, remove wallet, mine again some blocks...")
         self.stop_node(0)
         shutil.rmtree(os.path.join(self.nodes[0].datadir, self.chain, 'wallets'))
@@ -151,6 +158,13 @@ class ScantxoutsetTest(BitcoinTestFramework):
                      {"desc": "combo(tpubD6NzVbkrYhZ4WaWSyoBvQwbpLkojyoTZPRsgXELWz3Popb3qkjcJyJUGLnL4qHHoQvao8ESaAstxYSnhyswJ76uZPStJRJCTKvosUCJZL5B/1/1/*)", "range": 1499}])['total_amount'], Decimal("12.288"))
         assert_equal(self.nodes[0].scantxoutset("start", [
                      {"desc": "combo(tpubD6NzVbkrYhZ4WaWSyoBvQwbpLkojyoTZPRsgXELWz3Popb3qkjcJyJUGLnL4qHHoQvao8ESaAstxYSnhyswJ76uZPStJRJCTKvosUCJZL5B/1/1/*)", "range": 1500}])['total_amount'], Decimal("28.672"))
+
+        # Check that the blockhash and confirmations fields are correct
+        unspent = self.nodes[0].scantxoutset("start", ["addr(mpQ8rokAhp1TAtJQR6F6TaUmjAWkAWYYBq)"])["unspents"][0]
+        blockhash = self.nodes[0].getblockhash(info["height"])
+        assert_equal(unspent["height"], info["height"])
+        assert_equal(unspent["blockhash"], blockhash)
+        assert_equal(unspent["confirmations"], 111)
 
 
 if __name__ == '__main__':

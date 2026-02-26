@@ -2666,7 +2666,11 @@ static UniValue scantxoutset(const Config &, const JSONRPCRequest &request) {
                 .ToString() +
             "\nResult:\n"
             "{\n"
-            "  \"unspents\": [\n"
+            "  \"success\" : b,                  (boolean) Whether the scan was completed\n"
+            "  \"searched_items\" : n,           (numeric) The number of unspent transaction outputs scanned\n"
+            "  \"height\" : n,                   (numeric) The blockchain tip height against which the scan was done\n"
+            "  \"bestblock\" : \"hex\",            (string) The blockchain tip hash against which the scan was done\n"
+            "  \"unspents\" : [\n"
             "  {\n"
             "    \"txid\" : \"transactionid\",     (string) The transaction "
             "id\n"
@@ -2675,6 +2679,8 @@ static UniValue scantxoutset(const Config &, const JSONRPCRequest &request) {
             "    \"amount\" : x.xxx,             (numeric) The total amount in " + CURRENCY_UNIT + " of the unspent output\n"
             "    \"coinbase\" : b,               (boolean) Whether this is a coinbase output\n"
             "    \"height\" : n,                 (numeric) Height of the unspent transaction output\n"
+            "    \"blockhash\" : \"hex\",          (string) Blockhash of the unspent transaction output\n"
+            "    \"confirmations\" : n,          (numeric) Number of confirmations of the unspent transaction output when the scan was done\n"
             "    \"tokenData\" : {               (json object optional)\n"
             "      \"category\" : \"hex\",         (string) token id\n"
             "      \"amount\" : \"xxx\",           (string) fungible amount (is a string to support >53-bit amounts)\n"
@@ -2788,12 +2794,15 @@ static UniValue scantxoutset(const Config &, const JSONRPCRequest &request) {
         g_scan_progress = 0;
         int64_t count = 0;
         std::unique_ptr<CCoinsViewCursor> pcursor;
+        std::optional<const CChain> chainSnapShot;
         {
             LOCK(cs_main);
             FlushStateToDisk();
-            pcursor = std::unique_ptr<CCoinsViewCursor>(pcoinsdbview->Cursor());
-            assert(pcursor);
+            pcursor.reset(CHECK_NONFATAL(pcoinsdbview->Cursor()));
+            chainSnapShot.emplace(::ChainActive()); // copy the active chain vector with the lock held
         }
+        const auto &chain = Assert(chainSnapShot).value();
+        const CBlockIndex &chainTip = *CHECK_NONFATAL(chain.Tip());
         NodeContext& node = EnsureAnyNodeContext(request.context);
         bool const res = FindScriptPubKeysAndTokens(g_scan_progress, g_should_abort_scan, count, pcursor.get(), needles,
                                                     tokenIds, coins, node.rpc_interruption_point);
@@ -2806,16 +2815,19 @@ static UniValue scantxoutset(const Config &, const JSONRPCRequest &request) {
             const COutPoint &outpoint = it.first;
             const Coin &coin = it.second;
             const CTxOut &txo = coin.GetTxOut();
+            const CBlockIndex &coinBlockIndex = *CHECK_NONFATAL(chain[coin.GetHeight()]);
             total_in += txo.nValue;
 
             UniValue::Object unspent;
-            unspent.reserve(6u + bool(txo.tokenDataPtr));
+            unspent.reserve(8u + bool(txo.tokenDataPtr));
             unspent.emplace_back("txid", outpoint.GetTxId().GetHex());
             unspent.emplace_back("vout", outpoint.GetN());
             unspent.emplace_back("scriptPubKey", HexStr(txo.scriptPubKey));
             unspent.emplace_back("amount", ValueFromAmount(txo.nValue));
             unspent.emplace_back("coinbase", coin.IsCoinBase());
             unspent.emplace_back("height", coin.GetHeight());
+            unspent.emplace_back("blockhash", coinBlockIndex.GetBlockHash().ToString());
+            unspent.emplace_back("confirmations", static_cast<uint32_t>(chainTip.nHeight) - coin.GetHeight() + 1u);
             if (txo.tokenDataPtr) {
                 unspent.emplace_back("tokenData", TokenDataToUniv(*txo.tokenDataPtr));
                 if (txo.tokenDataPtr->HasAmount()) {
@@ -2830,10 +2842,12 @@ static UniValue scantxoutset(const Config &, const JSONRPCRequest &request) {
         }
 
         UniValue::Object result;
-        result.reserve(tokenIdTotals.empty() ? 4u : 5u);
+        result.reserve(tokenIdTotals.empty() ? 6u : 7u);
 
         result.emplace_back("success", res);
         result.emplace_back("searched_items", count);
+        result.emplace_back("height", chainTip.nHeight);
+        result.emplace_back("bestblock", chainTip.GetBlockHash().ToString());
         result.emplace_back("unspents", std::move(unspents));
         result.emplace_back("total_amount", ValueFromAmount(total_in));
         if (!tokenIdTotals.empty()) {
