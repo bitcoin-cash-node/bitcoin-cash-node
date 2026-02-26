@@ -364,7 +364,17 @@ static UniValue getrpcinfo(const Config &, const JSONRPCRequest &request) {
             "getrpcinfo",
             "\nReturns details of the RPC server.\n",
             {},
-            RPCResults{},
+            RPCResult{
+                "{\n"
+                "  \"active_commands\": [      (array) All active commands\n"
+                "    {                       (object) Information about an active command\n"
+                "      \"method\": \"xxx\",      (string) The name of the RPC command \n"
+                "      \"duration\": n,        (numeric) The running time in microseconds\n"
+                "    },...\n"
+                "  ],\n"
+                "  \"logpath\": \"xxx\"          (string) The complete file path to the debug log\n"
+                "}\n"
+            },
             RPCExamples{""},
         }.ToStringWithResultsAndExamples());
     }
