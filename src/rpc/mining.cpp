@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2023 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -38,6 +38,7 @@
 #include <cmath>
 #include <cstdint>
 #include <cstring>
+#include <limits>
 #include <list>
 #include <map>
 #include <memory>
@@ -123,7 +124,6 @@ static UniValue getnetworkhashps(const Config &config,
 UniValue generateBlocks(const Config &config,
                         std::shared_ptr<CReserveScript> coinbaseScript,
                         int nGenerate, uint64_t nMaxTries, bool keepScript) {
-    static const int nInnerLoopCount = 0x100000;
     int nHeightEnd = 0;
     int nHeight = 0;
 
@@ -155,18 +155,18 @@ UniValue generateBlocks(const Config &config,
 
         IncrementExtraNonce(pblock, pindexMinedTip, config, nExtraNonce);
 
-        while (nMaxTries > 0 && pblock->nNonce < nInnerLoopCount &&
-               !CheckProofOfWork(pblock->GetHash(), pblock->nBits,
-                                 config.GetChainParams().GetConsensus())) {
+        while (nMaxTries > 0 && pblock->nNonce < std::numeric_limits<uint32_t>::max()
+               && !CheckProofOfWork(pblock->GetHash(), pblock->nBits, config.GetChainParams().GetConsensus())
+               && !ShutdownRequested()) {
             ++pblock->nNonce;
             --nMaxTries;
         }
 
-        if (nMaxTries == 0) {
+        if (nMaxTries == 0 || ShutdownRequested()) {
             break;
         }
 
-        if (pblock->nNonce == nInnerLoopCount) {
+        if (pblock->nNonce == std::numeric_limits<uint32_t>::max()) {
             continue;
         }
 
