@@ -3,30 +3,40 @@
     "address": "28.0.0.0/8",
     "banned_until": 1643339167,
     "ban_created": 1643252767,
-    "ban_reason": "manually added"
+    "ban_reason": "manually added",
+    "ban_duration": 86400,
+    "time_remaining": 86400
   },
   {
     "address": "188.162.251.56/32",
     "banned_until": 1643339167,
     "ban_created": 1643252767,
-    "ban_reason": "manually added"
+    "ban_reason": "manually added",
+    "ban_duration": 86400,
+    "time_remaining": 86400
   },
   {
     "address": "189.7.128.0/24",
     "banned_until": 1643339167,
     "ban_created": 1643252767,
-    "ban_reason": "manually added"
+    "ban_reason": "manually added",
+    "ban_duration": 86400,
+    "time_remaining": 86400
   },
   {
     "address": "9908:8554:2487:5277::/64",
     "banned_until": 1643339167,
     "ban_created": 1643252767,
-    "ban_reason": "manually added"
+    "ban_reason": "manually added",
+    "ban_duration": 86400,
+    "time_remaining": 86400
   },
   {
     "address": "de41:b9a8:b178:52f:f639:e9bf:4ae3:dca8/128",
     "banned_until": 1643339167,
     "ban_created": 1643252767,
-    "ban_reason": "manually added"
+    "ban_reason": "manually added",
+    "ban_duration": 86400,
+    "time_remaining": 86400
   }
 ]

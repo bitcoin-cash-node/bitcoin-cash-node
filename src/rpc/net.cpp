@@ -22,6 +22,7 @@
 #include <ui_interface.h>
 #include <util/strencodings.h>
 #include <util/system.h>
+#include <util/time.h>
 #include <validation.h>
 #include <version.h>
 #include <warnings.h>
@@ -706,7 +707,16 @@ static UniValue listbanned(const Config&,
             "listbanned",
             "\nList all manually banned IPs/Subnets.\n",
             {},
-            RPCResults{},
+            RPCResult{
+                "{\n"
+                "  \"address\": \"xxx\",       (string) The IP/Subnet of the banned node\n"
+                "  \"ban_created\": n,       (numeric) The UNIX epoch time the ban was created\n"
+                "  \"banned_until\": n,      (numeric) The UNIX epoch time the ban expires\n"
+                "  \"ban_reason\": \"xxx\",    (string) Provided for backwards compatibility, always \"manually added\"\n"
+                "  \"ban_duration\": n,      (numeric) The ban duration, in seconds\n"
+                "  \"time_remaining\": n     (numeric) The time remaining until the ban expires, in seconds\n"
+                "}\n"
+            },
             RPCExamples{HelpExampleCli("listbanned", "") +
                         HelpExampleRpc("listbanned", "")},
         }.ToStringWithResultsAndExamples());
@@ -719,6 +729,7 @@ static UniValue listbanned(const Config&,
 
     BanTables banMap;
     g_banman->GetBanned(banMap);
+    const int64_t now = GetTime();
 
     UniValue::Array bannedAddresses;
     const auto allBans = banMap.toAggregatedMap();
@@ -726,11 +737,13 @@ static UniValue listbanned(const Config&,
     for (const auto &entry : allBans) {
         const CBanEntry &banEntry = entry.second;
         UniValue::Object rec;
-        rec.reserve(4);
+        rec.reserve(6);
         rec.emplace_back("address", entry.first.ToString());
-        rec.emplace_back("banned_until", banEntry.nBanUntil);
         rec.emplace_back("ban_created", banEntry.nCreateTime);
+        rec.emplace_back("banned_until", banEntry.nBanUntil);
         rec.emplace_back("ban_reason", "manually added"); //! For backward compatibility
+        rec.emplace_back("ban_duration", banEntry.nBanUntil - banEntry.nCreateTime);
+        rec.emplace_back("time_remaining", banEntry.nBanUntil - now);
 
         bannedAddresses.emplace_back(std::move(rec));
     }

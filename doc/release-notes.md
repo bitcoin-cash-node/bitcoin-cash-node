@@ -32,6 +32,9 @@ None
   - `confirmations`, which is the number of confirmations of the unspent transaction output when the scan was done
   - `height`, which is the blockchain tip height when the scan was done
   - `bestblock`, which is the blockchain tip hash against which the scan was done
+- The `listbanned` RPC now returns two new numeric fields: `ban_duration` and `time_remaining`.
+  Respectively, these new fields indicate the duration of a ban and the time remaining until a ban expires,
+  both in seconds. Additionally, the `ban_created` field is repositioned to come before `banned_until`.
 
 ## Removed functionality
 
