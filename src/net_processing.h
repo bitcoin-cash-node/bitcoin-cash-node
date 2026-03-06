@@ -10,6 +10,7 @@
 #include <net.h>
 #include <peerratelimiter.h>
 #include <sync.h>
+#include <txorphanage.h>
 #include <txrequest.h>
 #include <validationinterface.h>
 
@@ -59,6 +60,7 @@ private:
     BanMan *const m_banman;
     std::shared_ptr<std::atomic_bool> deleted; ///< Used to suppress further scheduler tasks if this instance is gone.
     TxRequestTracker m_txrequest GUARDED_BY(cs_main);
+    TxOrphanage m_orphanage GUARDED_BY(cs_main);
 
     bool SendRejectsAndCheckIfShouldDiscourage(const NodeRef &pnode, bool enable_bip61)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);

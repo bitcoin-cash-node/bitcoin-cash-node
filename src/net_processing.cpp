@@ -58,11 +58,6 @@
 #error "Bitcoin cannot be compiled without assertions."
 #endif
 
-
-/** Expiration time for orphan transactions in seconds */
-static constexpr int64_t ORPHAN_TX_EXPIRE_TIME = 20 * 60;
-/** Minimum time between orphan transactions expire time checks in seconds */
-static constexpr int64_t ORPHAN_TX_EXPIRE_INTERVAL = 5 * 60;
 /**
  * Headers download timeout expressed in microseconds.
  * Timeout = base + per_header * (expected number of headers)
@@ -121,12 +116,6 @@ static const unsigned int MAX_GETDATA_SZ = 1000;
 
 /// How many non standard orphan do we consider from a node before ignoring it.
 static constexpr uint32_t MAX_NON_STANDARD_ORPHAN_PER_NODE = 5;
-
-namespace internal {
-RecursiveMutex g_cs_orphans;
-MapOrphanTransactions mapOrphanTransactions GUARDED_BY(g_cs_orphans);
-MapOrphanTransactionsByPrev mapOrphanTransactionsByPrev GUARDED_BY(g_cs_orphans);
-}
 
 /**
  * Average delay between local address broadcasts
@@ -228,9 +217,8 @@ std::deque<std::pair<int64_t, MapRelay::iterator>>
 // Used only to inform the wallet of when we last received a block
 std::atomic<int64_t> nTimeBestReceived(0);
 
-static size_t vExtraTxnForCompactIt GUARDED_BY(internal::g_cs_orphans) = 0;
-static std::vector<std::pair<TxHash, CTransactionRef>>
-    vExtraTxnForCompact GUARDED_BY(internal::g_cs_orphans);
+static size_t vExtraTxnForCompactIt GUARDED_BY(cs_main) = 0;
+static std::vector<std::pair<TxHash, CTransactionRef>> vExtraTxnForCompact GUARDED_BY(cs_main);
 
 bool IsBlockRequested(const uint256& hash, BlockDownloadMap::iterator *pit = nullptr)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
@@ -873,7 +861,7 @@ void PeerLogicValidation::FinalizeNode(const Config &config, NodeId nodeid,
             }
         }
     }
-    internal::EraseOrphansFor(nodeid);
+    m_orphanage.EraseForPeer(nodeid);
     m_txrequest.DisconnectedPeer(nodeid);
     nPreferredDownload -= state->fPreferredDownload;
     nPeersWithValidatedDownloads -= (state->nBlocksInFlightValidHeaders != 0);
@@ -914,13 +902,7 @@ bool GetNodeStateStats(NodeId nodeid, CNodeStateStats &stats) {
     return true;
 }
 
-//////////////////////////////////////////////////////////////////////////////
-//
-// mapOrphanTransactions
-//
-
-static void AddToCompactExtraTransactions(const CTransactionRef &tx)
-    EXCLUSIVE_LOCKS_REQUIRED(internal::g_cs_orphans) {
+static void AddToCompactExtraTransactions(const CTransactionRef &tx) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     const int64_t max_extra_txn = gArgs.GetArg("-blockreconstructionextratxn", DEFAULT_BLOCK_RECONSTRUCTION_EXTRA_TXN);
     if (max_extra_txn <= 0 || uint64_t(max_extra_txn) > uint64_t(std::numeric_limits<size_t>::max())) {
         return;
@@ -932,131 +914,6 @@ static void AddToCompactExtraTransactions(const CTransactionRef &tx)
 
     vExtraTxnForCompact[vExtraTxnForCompactIt] = std::make_pair(tx->GetHash(), tx);
     vExtraTxnForCompactIt = (vExtraTxnForCompactIt + 1) % vExtraTxnForCompact.size();
-}
-
-bool internal::AddOrphanTx(const CTransactionRef &tx, NodeId peer)
-    EXCLUSIVE_LOCKS_REQUIRED(g_cs_orphans) {
-    const TxId &txid = tx->GetId();
-    if (mapOrphanTransactions.count(txid)) {
-        return false;
-    }
-
-    // Ignore big transactions, to avoid a send-big-orphans memory exhaustion
-    // attack. If a peer has a legitimate large transaction with a missing
-    // parent then we assume it will rebroadcast it later, after the parent
-    // transaction(s) have been mined or received.
-    // 100 orphans, each of which is at most 100,000 bytes big is at most 10
-    // megabytes of orphans and somewhat more byprev index (in the worst case):
-    unsigned int sz = tx->GetTotalSize();
-    if (sz > MAX_STANDARD_TX_SIZE) {
-        LogPrint(BCLog::MEMPOOL,
-                 "ignoring large orphan tx (size: %u, hash: %s)\n", sz,
-                 txid.ToString());
-        return false;
-    }
-
-    auto ret = mapOrphanTransactions.try_emplace(
-        txid,
-        /* COrphanTx c'tor: */ tx, peer, GetTime() + ORPHAN_TX_EXPIRE_TIME
-    );
-    assert(ret.second);
-    for (const CTxIn &txin : tx->vin) {
-        mapOrphanTransactionsByPrev[txin.prevout].insert(ret.first);
-    }
-
-    AddToCompactExtraTransactions(tx);
-
-    LogPrint(BCLog::MEMPOOL, "stored orphan tx %s (mapsz %u outsz %u)\n",
-             txid.ToString(), mapOrphanTransactions.size(), mapOrphanTransactionsByPrev.size());
-    return true;
-}
-
-static int EraseOrphanTx(const TxId &id) EXCLUSIVE_LOCKS_REQUIRED(internal::g_cs_orphans) {
-    const auto it = internal::mapOrphanTransactions.find(id);
-    if (it == internal::mapOrphanTransactions.end()) {
-        return 0;
-    }
-    // Note: parameter `id` may not be used beyond this point since it may point
-    // to data we will erase, potentially. So we wrap the work we do here in the
-    // lambda below, to ensure no future programmer inadvertently accesses `id`
-    // while looping below.
-    return [&it]() EXCLUSIVE_LOCKS_REQUIRED(internal::g_cs_orphans) {
-        for (const CTxIn &txin : it->second.tx->vin) {
-            const auto itPrev = internal::mapOrphanTransactionsByPrev.find(txin.prevout);
-            if (itPrev == internal::mapOrphanTransactionsByPrev.end()) {
-                continue;
-            }
-            itPrev->second.erase(it);
-            if (itPrev->second.empty()) {
-                internal::mapOrphanTransactionsByPrev.erase(itPrev);
-            }
-        }
-        internal::mapOrphanTransactions.erase(it);
-        return 1;
-    }();
-}
-
-void internal::EraseOrphansFor(NodeId peer) {
-    LOCK(g_cs_orphans);
-    int nErased = 0;
-    auto iter = mapOrphanTransactions.begin();
-    while (iter != mapOrphanTransactions.end()) {
-        // Increment to avoid iterator becoming invalid.
-        const auto maybeErase = iter++;
-        if (maybeErase->second.fromPeer == peer) {
-            nErased += EraseOrphanTx(maybeErase->second.tx->GetId());
-        }
-    }
-    if (nErased > 0) {
-        LogPrint(BCLog::MEMPOOL, "Erased %d orphan tx from peer=%d\n", nErased,
-                 peer);
-    }
-}
-
-unsigned int internal::LimitOrphanTxSize(unsigned int nMaxOrphans) {
-    LOCK(g_cs_orphans);
-
-    unsigned int nEvicted = 0;
-    static int64_t nNextSweep GUARDED_BY(g_cs_orphans);
-    int64_t nNow = GetTime();
-    if (nNextSweep <= nNow) {
-        // Sweep out expired orphan pool entries:
-        int nErased = 0;
-        int64_t nMinExpTime =
-            nNow + ORPHAN_TX_EXPIRE_TIME - ORPHAN_TX_EXPIRE_INTERVAL;
-        auto iter = mapOrphanTransactions.begin();
-        while (iter != mapOrphanTransactions.end()) {
-            const auto maybeErase = iter++;
-            if (maybeErase->second.nTimeExpire <= nNow) {
-                nErased += EraseOrphanTx(maybeErase->second.tx->GetId());
-            } else {
-                nMinExpTime =
-                    std::min(maybeErase->second.nTimeExpire, nMinExpTime);
-            }
-        }
-        // Sweep again 5 minutes after the next entry that expires in order to
-        // batch the linear scan.
-        nNextSweep = nMinExpTime + ORPHAN_TX_EXPIRE_INTERVAL;
-        if (nErased > 0) {
-            LogPrint(BCLog::MEMPOOL, "Erased %d orphan tx due to expiration\n",
-                     nErased);
-        }
-    }
-    FastRandomContext rng;
-    while (mapOrphanTransactions.size() > nMaxOrphans) {
-        // Evict a random orphan:
-        TxId randomTxId{TxId::Uninitialized};
-        static_assert (sizeof(uint256) == sizeof(randomTxId),
-                       "Assumption here is that TxId and uint256 are byte-wise identical types");
-        rng.rand256(randomTxId); // generate random bytes in-place
-        auto it = mapOrphanTransactions.lower_bound(randomTxId);
-        if (it == mapOrphanTransactions.end()) {
-            it = mapOrphanTransactions.begin();
-        }
-        EraseOrphanTx(it->first);
-        ++nEvicted;
-    }
-    return nEvicted;
 }
 
 /**
@@ -1151,56 +1008,19 @@ PeerLogicValidation::~PeerLogicValidation() {
 }
 
 /**
- * Evict orphan txn pool entries (EraseOrphanTx) based on a newly connected
- * block, and also delete tracked announcements for recently confirmed transactions.
+ * Evict orphan txn pool entries (m_orphanage) based on a newly connected block,
+ * and also delete tracked announcements for recently confirmed transactions.
  * Also save the time of the last tip update.
  */
-void PeerLogicValidation::BlockConnected(
-    const std::shared_ptr<const CBlock> &pblock, const CBlockIndex *pindex,
-    const std::vector<CTransactionRef> &vtxConflicted) {
-    {
-        LOCK(internal::g_cs_orphans);
-
-        std::vector<TxId> vOrphanErase;
-
-        for (const CTransactionRef &ptx : pblock->vtx) {
-            const CTransaction &tx = *ptx;
-
-            // Which orphan pool entries must we evict?
-            for (const auto &txin : tx.vin) {
-                auto itByPrev = internal::mapOrphanTransactionsByPrev.find(txin.prevout);
-                if (itByPrev == internal::mapOrphanTransactionsByPrev.end()) {
-                    continue;
-                }
-
-                for (auto mi = itByPrev->second.begin();
-                     mi != itByPrev->second.end(); ++mi) {
-                    const CTransaction &orphanTx = *(*mi)->second.tx;
-                    const TxId &orphanId = orphanTx.GetId();
-                    vOrphanErase.push_back(orphanId);
-                }
-            }
-        }
-
-        // Erase orphan transactions included or precluded by this block
-        if (vOrphanErase.size()) {
-            int nErased = 0;
-            for (const auto &orphanId : vOrphanErase) {
-                nErased += EraseOrphanTx(orphanId);
-            }
-            LogPrint(BCLog::MEMPOOL,
-                     "Erased %d orphan tx included or conflicted by block\n",
-                     nErased);
-        }
+void PeerLogicValidation::BlockConnected(const std::shared_ptr<const CBlock> &pblock,
+                                         const CBlockIndex *, const std::vector<CTransactionRef> &) {
+    LOCK(cs_main);
+    m_orphanage.EraseForBlock(*pblock);
+    for (const auto &ptx : pblock->vtx) {
+        m_txrequest.ForgetTxId(ptx->GetId());
     }
-    {
-        LOCK(cs_main);
-        for (const auto &ptx : pblock->vtx) {
-            m_txrequest.ForgetTxId(ptx->GetId());
-        }
 
-        g_last_tip_update = GetTime();
-    }
+    g_last_tip_update = GetTime();
 }
 
 // All of the following cache a recent block, and are protected by
@@ -1366,7 +1186,7 @@ bool PeerLogicValidation::IsPerPeerRateLimitingTemporarilySuppressed() const /* 
 // Messages
 //
 
-static bool AlreadyHave(const CInv &inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
+static bool AlreadyHave(const CInv &inv, const TxOrphanage &txorphanage) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     switch (inv.type) {
         case MSG_TX: {
             assert(recentRejects);
@@ -1382,11 +1202,8 @@ static bool AlreadyHave(const CInv &inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
             }
 
             const TxId txid(inv.hash);
-            {
-                LOCK(internal::g_cs_orphans);
-                if (internal::mapOrphanTransactions.count(txid)) {
-                    return true;
-                }
+            if (txorphanage.HaveTx(txid)) {
+                return true;
             }
 
             // Use pcoinsTip->HaveCoinInCache as a quick approximation to
@@ -2087,71 +1904,53 @@ static void PushVerACK(CConnman *connman, const NodeRef &pfrom, int nVersion = 0
     connman->PushMessage(pfrom, msg_maker.Make(NetMsgType::VERACK));
 }
 
-static void ProcessOrphanTx(const Config &config, CConnman *connman,
-                            std::set<TxId> &orphan_work_set) EXCLUSIVE_LOCKS_REQUIRED(cs_main, internal::g_cs_orphans) {
+static void ProcessOrphanTx(const Config &config, CConnman *connman, const NodeId fromPeer, TxOrphanage &orphanage)
+    EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     AssertLockHeld(cs_main);
-    AssertLockHeld(internal::g_cs_orphans);
 
-    std::unordered_map<NodeId, uint32_t> rejectCountPerNode;
-
+    CTransactionRef tx;
     bool done = false;
-    while (!done && !orphan_work_set.empty()) {
-        const TxId orphanId = *orphan_work_set.begin();
-        orphan_work_set.erase(orphan_work_set.begin());
-
-        const auto orphan_it = internal::mapOrphanTransactions.find(orphanId);
-        if (orphan_it == internal::mapOrphanTransactions.end()) {
+    size_t rejectCount = 0;
+    while (!done && (tx = orphanage.GetTxToReconsider(fromPeer))) {
+        if (rejectCount > MAX_NON_STANDARD_ORPHAN_PER_NODE) {
             continue;
         }
 
-        const CTransactionRef porphanTx = orphan_it->second.tx;
-        const CTransaction &orphanTx = *porphanTx;
-        const NodeId fromPeer = orphan_it->second.fromPeer;
-        bool fMissingInputs2 = false;
+        bool fMissingInputs = false;
         // Use a dummy CValidationState so someone can't setup nodes to counter-DoS based on orphan
         // resolution (that is, feeding people an invalid transaction based on LegitTxX in order to get
         // anyone relaying LegitTxX banned)
         CValidationState stateDummy;
 
-
-        if (const auto it = rejectCountPerNode.find(fromPeer);
-            it != rejectCountPerNode.end() && it->second > MAX_NON_STANDARD_ORPHAN_PER_NODE) {
-            continue;
-        }
         MempoolAcceptExtraInfo info;
-        if (AcceptToMemoryPool(config, g_mempool, stateDummy, porphanTx, &fMissingInputs2,
+        const TxId &txid = tx->GetId();
+        if (AcceptToMemoryPool(config, g_mempool, stateDummy, tx, &fMissingInputs,
                                false /* bypass_limits */, Amount::zero() /* nAbsurdFee */, false /* test_accept */,
                                &info)) {
-            LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanId.ToString());
-            RelayTransaction(orphanTx, connman, *Assert(info.entryId));
-            for (size_t i = 0; i < orphanTx.vout.size(); ++i) {
-                auto it_by_prev = internal::mapOrphanTransactionsByPrev.find(COutPoint(orphanId, i));
-                if (it_by_prev != internal::mapOrphanTransactionsByPrev.end()) {
-                    for (const auto &elem : it_by_prev->second) {
-                        orphan_work_set.insert(elem->first);
-                    }
-                }
-            }
-            EraseOrphanTx(orphanId);
+            LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s (poolsz %u txn, %u kB)\n", txid.ToString(),
+                     g_mempool.size(), g_mempool.DynamicMemoryUsage() / 1000);
+            RelayTransaction(*tx, connman, *Assert(info.entryId));
+            orphanage.AddChildrenToWorkSet(*tx);
+            orphanage.EraseTx(txid);
             done = true;
-        } else if (!fMissingInputs2) {
+        } else if (!fMissingInputs) {
             int nDos = 0;
             if (stateDummy.IsInvalid(nDos)) {
-                rejectCountPerNode[fromPeer]++;
+                ++rejectCount;
                 if (nDos > 0) {
                     // Punish peer that gave us an invalid orphan tx
                     Misbehaving(fromPeer, nDos);
-                    LogPrint(BCLog::MEMPOOL, "   invalid orphan tx %s\n", orphanId.ToString());
+                    LogPrint(BCLog::MEMPOOL, "   invalid orphan tx %s\n", txid.ToString());
                 }
             }
             // Has inputs but not accepted to mempool
             // Probably non-standard or insufficient fee
-            LogPrint(BCLog::MEMPOOL, "   removed orphan tx %s\n", orphanId.ToString());
+            LogPrint(BCLog::MEMPOOL, "   removed orphan tx %s\n", txid.ToString());
             if (!stateDummy.CorruptionPossible()) {
                 assert(recentRejects);
-                recentRejects->insert(orphanId);
+                recentRejects->insert(txid);
             }
-            EraseOrphanTx(orphanId);
+            orphanage.EraseTx(txid);
             done = true;
         }
         g_mempool.check(pcoinsTip.get());
@@ -2207,7 +2006,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
                            const std::string &msg_type, CDataStream &vRecv,
                            int64_t nTimeReceived, CConnman *connman,
                            const std::atomic<bool> &interruptMsgProc,
-                           bool enable_bip61, TxRequestTracker &txrequest) {
+                           bool enable_bip61, TxRequestTracker &txrequest, TxOrphanage &txorphanage) {
     const CChainParams &chainparams = config.GetChainParams();
     LogPrint(BCLog::NET, "received: %s (%u bytes) peer=%d\n",
              SanitizeString(msg_type), vRecv.size(), pfrom->GetId());
@@ -2762,7 +2561,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
                 return true;
             }
 
-            bool fAlreadyHave = AlreadyHave(inv);
+            bool fAlreadyHave = AlreadyHave(inv, txorphanage);
             LogPrint(BCLog::NET, "got inv: %s  %s peer=%d\n", inv.ToString(),
                      fAlreadyHave ? "have" : "new", pfrom->GetId());
 
@@ -3069,7 +2868,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
         const CInv inv(MSG_TX, txid);
         pfrom->AddInventoryKnown(inv);
 
-        LOCK2(cs_main, internal::g_cs_orphans);
+        LOCK(cs_main);
 
         bool fMissingInputs = false;
         CValidationState state;
@@ -3077,7 +2876,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
         txrequest.ReceivedResponse(pfrom->GetId(), txid);
 
         MempoolAcceptExtraInfo info;
-        if (!AlreadyHave(inv) &&
+        if (!AlreadyHave(inv, txorphanage) &&
             AcceptToMemoryPool(config, g_mempool, state, ptx, &fMissingInputs,
                                false /* bypass_limits */,
                                Amount::zero() /* nAbsurdFee */, false /* test_accept */, &info)) {
@@ -3086,14 +2885,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
             // requests for it.
             txrequest.ForgetTxId(tx.GetId());
             RelayTransaction(tx, connman, *Assert(info.entryId));
-            for (size_t i = 0; i < tx.vout.size(); ++i) {
-                auto it_by_prev = internal::mapOrphanTransactionsByPrev.find(COutPoint(txid, i));
-                if (it_by_prev != internal::mapOrphanTransactionsByPrev.end()) {
-                    for (const auto &elem : it_by_prev->second) {
-                        pfrom->orphan_work_set.insert(elem->first);
-                    }
-                }
-            }
+            txorphanage.AddChildrenToWorkSet(tx);
 
             pfrom->nLastTXTime = GetTime();
 
@@ -3104,7 +2896,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
                      g_mempool.DynamicMemoryUsage() / 1000);
 
             // Recursively process any orphan transactions that depended on this one
-            ProcessOrphanTx(config, connman, pfrom->orphan_work_set);
+            ProcessOrphanTx(config, connman, pfrom->GetId(), txorphanage);
 
         } else if (fMissingInputs) {
             // It may be the case that the orphans parents have all been
@@ -3124,25 +2916,23 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
                     const TxId _txid = txin.prevout.GetTxId();
                     CInv _inv(MSG_TX, _txid);
                     pfrom->AddInventoryKnown(_inv);
-                    if (!AlreadyHave(_inv)) {
+                    if (!AlreadyHave(_inv, txorphanage)) {
                         AddTxAnnouncement(txrequest, *pfrom, _txid, current_time);
                     }
                 }
-                internal::AddOrphanTx(ptx, pfrom->GetId());
+
+                if (txorphanage.AddTx(ptx, pfrom->GetId())) {
+                    AddToCompactExtraTransactions(ptx);
+                }
 
                 // Once added to the orphan pool, a tx is considered AlreadyHave, and we shouldn't request it anymore.
                 txrequest.ForgetTxId(tx.GetId());
 
                 // DoS prevention: do not allow mapOrphanTransactions to grow
                 // unbounded
-                unsigned int nMaxOrphanTx = (unsigned int)std::max(
-                    int64_t(0), gArgs.GetArg("-maxorphantx",
-                                             DEFAULT_MAX_ORPHAN_TRANSACTIONS));
-                unsigned int nEvicted = internal::LimitOrphanTxSize(nMaxOrphanTx);
-                if (nEvicted > 0) {
-                    LogPrint(BCLog::MEMPOOL,
-                             "mapOrphan overflow, removed %u tx\n", nEvicted);
-                }
+                const size_t nMaxOrphanTx = std::max(int64_t{0}, gArgs.GetArg("-maxorphantx",
+                                                                              DEFAULT_MAX_ORPHAN_TRANSACTIONS));
+                txorphanage.LimitOrphans(nMaxOrphanTx);
             } else {
                 LogPrint(BCLog::MEMPOOL,
                          "not keeping orphan with rejected parents %s\n",
@@ -3298,7 +3088,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
         bool fBlockReconstructed = false;
 
         {
-            LOCK2(cs_main, internal::g_cs_orphans);
+            LOCK(cs_main);
             // If AcceptBlockHeader returned true, it set pindex
             assert(pindex);
             UpdateBlockAvailability(pfrom->GetId(), pindex->GetBlockHash());
@@ -3461,7 +3251,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
 
         if (fProcessBLOCKTXN) {
             return ProcessMessage(config, pfrom, NetMsgType::BLOCKTXN, blockTxnMsg, nTimeReceived, connman, interruptMsgProc,
-                                  enable_bip61, txrequest);
+                                  enable_bip61, txrequest, txorphanage);
         }
 
         if (fRevertToHeaderProcessing) {
@@ -4026,9 +3816,12 @@ bool PeerLogicValidation::ProcessMessages(const Config &config, NodeRef pfrom, s
         ProcessGetData(config, pfrom, connman, interruptMsgProc);
     }
 
-    if (!pfrom->orphan_work_set.empty()) {
-        LOCK2(cs_main, internal::g_cs_orphans);
-        ProcessOrphanTx(config, connman, pfrom->orphan_work_set);
+    {
+        LOCK(cs_main);
+        if (m_orphanage.HaveTxToReconsider(pfrom->GetId())) {
+            ProcessOrphanTx(config, connman, pfrom->GetId(), m_orphanage);
+        }
+
     }
 
     if (pfrom->fDisconnect) {
@@ -4040,8 +3833,12 @@ bool PeerLogicValidation::ProcessMessages(const Config &config, NodeRef pfrom, s
     if (!pfrom->vRecvGetData.empty()) {
         return true;
     }
-    if (!pfrom->orphan_work_set.empty()) {
-        return true;
+
+    {
+        LOCK(cs_main);
+        if (m_orphanage.HaveTxToReconsider(pfrom->GetId())) {
+            return true;
+        }
     }
 
     // Don't bother if send buffer is too full to respond anyway
@@ -4116,7 +3913,7 @@ bool PeerLogicValidation::ProcessMessages(const Config &config, NodeRef pfrom, s
     bool fRet = false;
     try {
         fRet = ProcessMessage(config, pfrom, msg_type, vRecv, msg.nTime,
-                              connman, interruptMsgProc, m_enable_bip61, m_txrequest);
+                              connman, interruptMsgProc, m_enable_bip61, m_txrequest, m_orphanage);
         if (interruptMsgProc) {
             return false;
         }
@@ -4974,7 +4771,7 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
     }
     for (const TxId &txid : requestable) {
         const CInv inv(MSG_TX, txid);
-        if (!AlreadyHave(inv)) {
+        if (!AlreadyHave(inv, m_orphanage)) {
             LogPrint(BCLog::NET, "Requesting tx %s peer=%d\n", txid.ToString(), pto->GetId());
             vGetData.push_back(inv);
             if (vGetData.size() >= MAX_GETDATA_SZ) {
@@ -5052,13 +4849,3 @@ void PeerLogicValidation::BadDSProofsDetectedFromNodeIds(const std::vector<NodeI
         Misbehaving(nodeId, 10, "bad-dsproof");
     }
 }
-
-class CNetProcessingCleanup {
-public:
-    CNetProcessingCleanup() {}
-    ~CNetProcessingCleanup() {
-        // orphan transactions
-        internal::mapOrphanTransactions.clear();
-        internal::mapOrphanTransactionsByPrev.clear();
-    }
-} instance_of_cnetprocessingcleanup;

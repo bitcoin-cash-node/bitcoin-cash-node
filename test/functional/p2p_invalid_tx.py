@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2015-2017 The Bitcoin Core developers
+# Copyright (c) 2017-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test node responses to invalid transactions.
@@ -188,7 +189,7 @@ class InvalidTxRequestTest(BitcoinTestFramework):
             orphan_tx_pool[i].vout.append(CTxOut(nValue=11 * COIN, scriptPubKey=SCRIPT_PUB_KEY_OP_TRUE))
             pad_tx(orphan_tx_pool[i])
 
-        with node.assert_debug_log(['mapOrphan overflow, removed 1 tx']):
+        with node.assert_debug_log(['orphanage overflow, removed 1 tx']):
             node.p2p.send_txs_and_test(orphan_tx_pool, node, success=False)
 
         rejected_parent = CTransaction()

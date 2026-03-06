@@ -861,8 +861,6 @@ public:
     Amount lastSentFeeFilter{Amount::zero()};
     int64_t nextSendTimeFeeFilter{0};
 
-    std::set<TxId> orphan_work_set;
-
 private:
     // Never use this c'tor. Always use `Make()`
     CNode(NodeId id, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn,
