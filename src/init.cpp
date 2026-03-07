@@ -98,7 +98,6 @@ static constexpr bool DEFAULT_REST_ENABLE = false;
 static constexpr int DUMP_BANS_INTERVAL = 60 * 15;
 
 std::unique_ptr<CConnman> g_connman;
-std::unique_ptr<PeerLogicValidation> peerLogic;
 std::unique_ptr<BanMan> g_banman;
 
 #ifdef WIN32
@@ -241,8 +240,8 @@ void Shutdown(NodeContext &node) {
 
     // Because these depend on each-other, we make sure that neither can be
     // using the other before destroying them.
-    if (peerLogic) {
-        UnregisterValidationInterface(peerLogic.get());
+    if (node.peerLogic) {
+        UnregisterValidationInterface(node.peerLogic.get());
     }
     if (g_connman) {
         g_connman->Stop();
@@ -270,7 +269,7 @@ void Shutdown(NodeContext &node) {
 
     // After the threads that potentially access these pointers have been
     // stopped, destruct and reset all to nullptr.
-    peerLogic.reset();
+    node.peerLogic.reset();
     g_connman.reset();
     g_banman.reset();
     g_txindex.reset();
@@ -2326,10 +2325,10 @@ bool AppInitMain(Config &config, RPCServer &rpcServer,
         config, GetRand(std::numeric_limits<uint64_t>::max()),
         GetRand(std::numeric_limits<uint64_t>::max()));
 
-    peerLogic.reset(new PeerLogicValidation(
+    node.peerLogic = std::make_unique<PeerLogicValidation>(
         g_connman.get(), g_banman.get(), scheduler,
-        gArgs.GetBoolArg("-enablebip61", DEFAULT_ENABLE_BIP61), gArgs.GetBoolArg("-feefilter", DEFAULT_FEEFILTER)));
-    RegisterValidationInterface(peerLogic.get());
+        gArgs.GetBoolArg("-enablebip61", DEFAULT_ENABLE_BIP61), gArgs.GetBoolArg("-feefilter", DEFAULT_FEEFILTER));
+    RegisterValidationInterface(node.peerLogic.get());
 
     if (gArgs.IsArgSet("-peerratelimit")) {
         std::vector<PeerRateLimitRule> rules{};
@@ -2342,7 +2341,7 @@ bool AppInitMain(Config &config, RPCServer &rpcServer,
                 return InitError(strprintf("Invalid -peerratelimit rule '%s': %s", strRule, rule.GetError()));
             }
         }
-        peerLogic->SetPeerRateLimitRules(rules);
+        node.peerLogic->SetPeerRateLimitRules(rules);
     }
 
     // sanitize comments per BIP-0014, format user agent and check total size
@@ -2862,7 +2861,7 @@ bool AppInitMain(Config &config, RPCServer &rpcServer,
     connOptions.nBestHeight = chain_active_height;
     connOptions.uiInterface = &uiInterface;
     connOptions.m_banman = g_banman.get();
-    connOptions.m_msgproc = peerLogic.get();
+    connOptions.m_msgproc = node.peerLogic.get();
     connOptions.nSendBufferMaxSize =
         1000 * gArgs.GetArg("-maxsendbuffer", DEFAULT_MAXSENDBUFFER);
     connOptions.nReceiveFloodSize =
