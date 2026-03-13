@@ -3,17 +3,18 @@
 # Copyright (c) 2024-present The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
-"""Test the getorphantxs RPC."""
+"""Tests for orphan related RPCs."""
 
+import time
 from typing import List, NamedTuple, Optional, Tuple
 
 from test_framework.address import scripthash_to_p2sh
-from test_framework.mempool_util import tx_in_orphanage
+from test_framework.mempool_util import ORPHAN_TX_EXPIRE_TIME, tx_in_orphanage
 from test_framework.messages import CBlock, COutPoint, CTransaction, CTxIn, CTxOut, FromHex
 from test_framework.p2p import P2PDataStore
 from test_framework.script import CScript, hash160, OP_DROP, OP_EQUAL, OP_HASH160, OP_RETURN, OP_TRUE
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal
+from test_framework.util import assert_equal, assert_raises_rpc_error
 
 
 class UTXO(NamedTuple):
@@ -21,7 +22,7 @@ class UTXO(NamedTuple):
     txout: CTxOut
 
 
-class GetOrphanTxsTest(BitcoinTestFramework):
+class OrphanRPCsTest(BitcoinTestFramework):
 
     redeem_script = CScript([b"Some padding for GetOrphanTxsTest", OP_DROP, OP_TRUE])
     addr_hash = hash160(redeem_script)
@@ -82,6 +83,7 @@ class GetOrphanTxsTest(BitcoinTestFramework):
         # Run tests
         self.test_orphan_activity()
         self.test_orphan_details()
+        self.test_misc()
 
     def create_self_send(self, utxo: UTXO, opreturn: Optional[bytes] = None, update_utxos: Optional[List[UTXO]] = None,
                          fee_sats=1000) -> CTransaction:
@@ -114,14 +116,15 @@ class GetOrphanTxsTest(BitcoinTestFramework):
         self.log.info("Check that neither parent is in the mempool")
         assert_equal(node.getmempoolinfo()["size"], 0)
 
-        self.log.info("Check that both children are in the orphanage")
-
         self.log.info("Check the size of the orphanage")
         orphanage = node.getorphantxs(verbosity=0)
         assert_equal(len(orphanage), 2)
 
-        self.log.info("Check that negative verbosity is treated as 0")
-        assert_equal(orphanage, node.getorphantxs(verbosity=-1))
+        self.log.info("Check that undefined verbosity is disallowed")
+        assert_raises_rpc_error(-8, "Invalid verbosity value -1", node.getorphantxs, verbosity=-1)
+        assert_raises_rpc_error(-8, "Invalid verbosity value 3", node.getorphantxs, verbosity=3)
+
+        self.log.info("Check that both children are in the orphanage")
         assert tx_in_orphanage(node, tx_child_1)
         assert tx_in_orphanage(node, tx_child_2)
 
@@ -168,6 +171,8 @@ class GetOrphanTxsTest(BitcoinTestFramework):
         tx_parent_2, tx_child_2 = self.create_1p_1c_txns(self.utxos[1])
         peer_1 = node.p2ps[0]
         peer_2 = node.p2ps[1]
+        entry_time = int(time.time())
+        node.setmocktime(entry_time)
         peer_1.send_txs_and_test([tx_child_1], node, success=False)
         peer_2.send_txs_and_test([tx_child_2], node, success=False)
 
@@ -187,6 +192,9 @@ class GetOrphanTxsTest(BitcoinTestFramework):
         assert_equal(len(node.getorphantxs()), 1)
         orphan_1 = orphanage[0]
         self.orphan_details_match(orphan_1, tx_child_1, verbosity=1)
+        self.log.info("Checking orphan entry/expiration times")
+        assert_equal(orphan_1["entry"], entry_time)
+        assert_equal(orphan_1["expiration"], entry_time + ORPHAN_TX_EXPIRE_TIME)
 
         self.log.info("Checking orphan details (verbosity 2)")
         orphanage = node.getorphantxs(verbosity=2)
@@ -204,6 +212,15 @@ class GetOrphanTxsTest(BitcoinTestFramework):
             self.log.info("Check the transaction hex of orphan")
             assert_equal(orphan["hex"], tx.serialize().hex())
 
+    def test_misc(self):
+        node = self.nodes[0]
+        assert_raises_rpc_error(-3, "Verbosity was boolean but only integer allowed", node.getorphantxs, verbosity=True)
+        assert_raises_rpc_error(-3, "Verbosity was boolean but only integer allowed", node.getorphantxs, verbosity=False)
+        help_output = node.help()
+        self.log.info("Check that getorphantxs is a hidden RPC")
+        assert "getorphantxs" not in help_output
+        assert "unknown command: getorphantxs" not in node.help("getorphantxs")
+
 
 if __name__ == '__main__':
-    GetOrphanTxsTest().main()
+    OrphanRPCsTest().main()

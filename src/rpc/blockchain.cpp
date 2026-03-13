@@ -1071,7 +1071,7 @@ static UniValue getblock(const Config &config, const JSONRPCRequest &request) {
 
     BlockHash hash(ParseHashV(request.params[0], "blockhash"));
 
-    const int verbosity = ParseVerbosity(request.params[1], /* default_verbosity = */ 1);
+    const int verbosity = ParseVerbosity(request.params[1], /* default_verbosity = */ 1, /* allow_bool = */ true);
 
     bool fPatterns = false;
     if (!request.params[2].isNull()) {
@@ -3054,9 +3054,10 @@ static UniValue fillmempool(const Config &config, const JSONRPCRequest &request)
 static UniValue::Object OrphanToJSON(const TxOrphanage::OrphanTxBase &orphan, const size_t extraReserve = 0) {
     const CTransaction &tx = *CHECK_NONFATAL(orphan.tx);
     UniValue::Object o;
-    o.reserve(4 + extraReserve);
+    o.reserve(5 + extraReserve);
     o.emplace_back("txid", tx.GetId().ToString());
     o.emplace_back("bytes", tx.GetTotalSize());
+    o.emplace_back("entry", orphan.nTimeExpire - ORPHAN_TX_EXPIRE_TIME);
     o.emplace_back("expiration", orphan.nTimeExpire);
     {
         UniValue::Array from;
@@ -3089,7 +3090,8 @@ Result (for verbosity >= 1):
   {
     "txid": "xxx",     (string) The transaction id hex
     "bytes": n,        (numeric) The serialized transaction size in bytes
-    "expiration": n,   (numeric) The orphan expiration time expressed in UNIX epoch time"
+    "entry": n,        (numeric) The entry time into the orphanage expressed in UNIX epoch time
+    "expiration": n,   (numeric) The orphan expiration time expressed in UNIX epoch time
     "from": [          (array) Peers that announced this orphan tx (array size is always 1 for now)
       "peer_id": n     (numeric) Peer ID
     ],
@@ -3104,7 +3106,7 @@ Result (for verbosity >= 1):
         );
     }
 
-    const int verbosity = ParseVerbosity(request.params[0], /* default_verbosity = */0);
+    const int verbosity = ParseVerbosity(request.params[0], /* default_verbosity = */ 0, /* allow_bool = */ false);
 
     const PeerLogicValidation &peerman = EnsureAnyPeerLogicValidation(request.context);
     const std::vector<TxOrphanage::OrphanTxBase> orphanage = peerman.GetOrphanTransactions();
@@ -3112,7 +3114,7 @@ Result (for verbosity >= 1):
     UniValue::Array ret;
     ret.reserve(orphanage.size());
 
-    if (verbosity <= 0) {
+    if (verbosity == 0) {
         for (auto const &orphan : orphanage) {
             ret.push_back(orphan.tx->GetId().ToString());
         }
@@ -3120,13 +3122,14 @@ Result (for verbosity >= 1):
         for (auto const &orphan : orphanage) {
             ret.push_back(OrphanToJSON(orphan));
         }
-    } else {
-        // >= 2
+    } else if (verbosity == 2) {
         for (auto const &orphan : orphanage) {
             UniValue::Object o = OrphanToJSON(orphan, 1);
             o.emplace_back("hex", EncodeHexTx(*orphan.tx));
             ret.push_back(std::move(o));
         }
+    } else {
+        throw JSONRPCError(RPC_INVALID_PARAMETER, "Invalid verbosity value " + std::to_string(verbosity));
     }
 
     return ret;
