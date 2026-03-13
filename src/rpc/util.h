@@ -40,6 +40,15 @@ void DescribeAddress(const CTxDestination &dest, UniValue::Object& obj);
 UniValue::Array GetServicesNames(ServiceFlags services);
 
 /**
+ * Parses verbosity from provided UniValue.
+ *
+ * @param[in] arg The verbosity argument as a bool (true) or int (0, 1, 2,...)
+ * @param[in] default_verbosity The value to return if verbosity argument is null
+ * @returns An integer describing the verbosity level (e.g. 0, 1, 2, etc.)
+ */
+int ParseVerbosity(const UniValue &arg, int default_verbosity);
+
+/**
  * Serializing JSON objects depends on the outer type. Only arrays and
  * dictionaries can be nested in json. The top-level outer type is "NONE".
  */

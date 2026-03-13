@@ -107,6 +107,17 @@ void DescribeAddress(const CTxDestination &dest, UniValue::Object& obj) {
         }, dest);
 }
 
+int ParseVerbosity(const UniValue &arg, int default_verbosity) {
+    if (!arg.isNull()) {
+        if (arg.isBool()) {
+            return arg.get_bool(); // true = 1, false = 0
+        } else {
+            return arg.get_int();
+        }
+    }
+    return default_verbosity;
+}
+
 struct Section {
     Section(const std::string& left, const std::string& right)
         : m_left{left}, m_right{right} {}

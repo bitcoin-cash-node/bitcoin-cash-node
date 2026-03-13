@@ -4849,3 +4849,8 @@ void PeerLogicValidation::BadDSProofsDetectedFromNodeIds(const std::vector<NodeI
         Misbehaving(nodeId, 10, "bad-dsproof");
     }
 }
+
+std::vector<TxOrphanage::OrphanTxBase> PeerLogicValidation::GetOrphanTransactions() const {
+    LOCK(cs_main);
+    return m_orphanage.GetOrphanTransactions();
+}
