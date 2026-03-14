@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -58,6 +58,7 @@
 #include <txmempool.h>
 #include <ui_interface.h>
 #include <util/asmap.h>
+#include <util/check.h>
 #include <util/moneystr.h>
 #include <util/string.h>
 #include <util/syserror.h>
@@ -191,10 +192,7 @@ public:
 static std::unique_ptr<CCoinsViewErrorCatcher> pcoinscatcher;
 static std::unique_ptr<ECCVerifyHandle> globalVerifyHandle;
 
-static std::thread schedulerThread;
 static std::thread loadBlockThread;
-
-static CScheduler scheduler;
 
 void Interrupt() {
     InterruptHTTPServer();
@@ -257,10 +255,7 @@ void Shutdown(NodeContext &node) {
 
     // After everything has been shut down, but before things get flushed, stop
     // the scheduler and load block threads
-    scheduler.stop();
-    if (schedulerThread.joinable()) {
-        schedulerThread.join();
-    }
+    node.scheduler->stop();
     if (loadBlockThread.joinable()) {
         loadBlockThread.join();
     }
@@ -1383,7 +1378,7 @@ static bool AppInitServers(Config &config,
     }
 
     try {
-        gbtl::Initialize(scheduler);
+        gbtl::Initialize(*Assert(node.scheduler));
     } catch (const std::exception &e) {
         return InitError(strprintf("Unable to initialize GBTLight subsystem: %s. Aborting.", e.what()));
     }
@@ -2182,8 +2177,12 @@ bool AppInitMain(Config &config, RPCServer &rpcServer,
         StartScriptCheckWorkerThreads(script_threads);
     }
 
+    assert(!node.scheduler);
+    node.scheduler = std::make_unique<CScheduler>();
+    auto &scheduler = *node.scheduler;
+
     // Start the lightweight task scheduler thread
-    schedulerThread = std::thread(util::TraceThread, "scheduler", []{ scheduler.serviceQueue(); });
+    scheduler.serviceThread = std::thread(util::TraceThread, "scheduler", [&scheduler]{ scheduler.serviceQueue(); });
 
     GetMainSignals().RegisterBackgroundSignalScheduler(scheduler);
     GetMainSignals().RegisterWithMempoolSignals(g_mempool);

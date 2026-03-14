@@ -1,5 +1,5 @@
 // Copyright (c) 2015-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2025 The Bitcoin developers
+// Copyright (c) 2021-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -108,7 +108,6 @@ struct BasicTestingSetupWithDeadlockExceptions : BasicTestingSetup, EnableDeadlo
  * Included are data directory, coins database, script check threads setup.
  */
 struct TestingSetup : public BasicTestingSetup {
-    std::thread schedulerThread;
     CScheduler scheduler;
 
     explicit TestingSetup(
