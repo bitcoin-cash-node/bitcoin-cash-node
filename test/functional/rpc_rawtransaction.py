@@ -488,15 +488,15 @@ class RawTransactionsTest(BitcoinTestFramework):
 
         # 6. invalid parameters - supply txid and string "Flase"
         assert_raises_rpc_error(
-            -1, "not a boolean", self.nodes[0].getrawtransaction, txHash, "False")
+            -1, "not an integer", self.nodes[0].getrawtransaction, txHash, "False")
 
         # 7. invalid parameters - supply txid and empty array
         assert_raises_rpc_error(
-            -1, "not a boolean", self.nodes[0].getrawtransaction, txHash, [])
+            -1, "not an integer", self.nodes[0].getrawtransaction, txHash, [])
 
         # 8. invalid parameters - supply txid and empty dict
         assert_raises_rpc_error(
-            -1, "not a boolean", self.nodes[0].getrawtransaction, txHash, {})
+            -1, "not an integer", self.nodes[0].getrawtransaction, txHash, {})
 
         # Sanity checks on verbose getrawtransaction output
         rawTxOutput = self.nodes[0].getrawtransaction(txHash, True)
