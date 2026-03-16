@@ -75,6 +75,16 @@ bool HasWallets();
 std::vector<std::shared_ptr<CWallet>> GetWallets();
 std::shared_ptr<CWallet> GetWallet(const std::string &name);
 
+enum WalletCreationStatus {
+    SUCCESS,
+    CREATION_FAILED,
+    ENCRYPTION_FAILED
+};
+
+std::shared_ptr<CWallet> CreateWallet(const CChainParams &chainParams, interfaces::Chain& chain, const std::string& name,
+                                      std::string& error, std::string& warning, WalletCreationStatus& status,
+                                      const SecureString& passphrase, uint64_t wallet_creation_flags);
+
 //! Default for -keypool
 static constexpr unsigned int DEFAULT_KEYPOOL_SIZE = 1000;
 //! -paytxfee default

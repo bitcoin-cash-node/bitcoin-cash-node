@@ -145,8 +145,11 @@ class CreateWalletTest(BitcoinTestFramework):
         walletinfo = w6.getwalletinfo()
         assert_equal(walletinfo['keypoolsize'], 1)
         assert_equal(walletinfo['keypoolsize_hd_internal'], 1)
-        # Empty passphrase, error
-        assert_raises_rpc_error(-16, 'Cannot encrypt a wallet with a blank password', self.nodes[0].createwallet, 'w7', False, False, '')
+        # Allow empty passphrase, but there should be a warning
+        resp = self.nodes[0].createwallet(wallet_name='w7', disable_private_keys=False, blank=False, passphrase='')
+        assert_equal(resp['warning'], 'Empty string given as passphrase, wallet will not be encrypted.')
+        w7 = node.get_wallet_rpc('w7')
+        assert_raises_rpc_error(-15, 'Error: running with an unencrypted wallet, but walletpassphrase was called.', w7.walletpassphrase, '', 10)
 
 if __name__ == '__main__':
     CreateWalletTest().main()
