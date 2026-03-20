@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2024 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,9 +12,7 @@
 #include <util/threadnames.h>
 #include <validation.h>
 
-#include <atomic>
 #include <future>
-#include <list>
 #include <tuple>
 #include <utility>
 
@@ -119,66 +117,79 @@ CMainSignals &GetMainSignals() {
     return g_signals;
 }
 
-static std::atomic_bool g_reg_unsafe{false};
-
-void SetValidationInterfaceRegistrationsUnsafe(bool unsafe) { g_reg_unsafe = unsafe; }
-
-static void LogIfUnsafe(const char *func) {
-    if (g_reg_unsafe) {
-        LogPrintf("WARNING: %s called from outside of the init/shutdown code paths (thread: %s)."
-                  " This is not supported! FIXME!\n", func, util::ThreadGetInternalName());
-    }
+static bool IsImmediateModificationOfTheMainSignalsMapUnsafe(const SingleThreadedSchedulerClient &schedulerClient) {
+    return schedulerClient.IsAcceptingJobs()
+           && schedulerClient.GetServiceThread().get_id() != std::this_thread::get_id();
 }
 
 void RegisterValidationInterface(CValidationInterface *pwalletIn) {
-    LogIfUnsafe(__func__);
-    ValidationInterfaceConnections &conns =
-        g_signals.m_internals->m_connMainSignals[pwalletIn];
-    conns.UpdatedBlockTip = g_signals.m_internals->UpdatedBlockTip.connect(
-        std::bind(&CValidationInterface::UpdatedBlockTip, pwalletIn,
-                  std::placeholders::_1, std::placeholders::_2,
-                  std::placeholders::_3));
-    conns.TransactionAddedToMempool =
-        g_signals.m_internals->TransactionAddedToMempool.connect(
-            std::bind(&CValidationInterface::TransactionAddedToMempool,
-                      pwalletIn, std::placeholders::_1));
-    conns.BlockConnected = g_signals.m_internals->BlockConnected.connect(
-        std::bind(&CValidationInterface::BlockConnected, pwalletIn,
-                  std::placeholders::_1, std::placeholders::_2,
-                  std::placeholders::_3));
-    conns.BlockDisconnected = g_signals.m_internals->BlockDisconnected.connect(
-        std::bind(&CValidationInterface::BlockDisconnected, pwalletIn,
-                  std::placeholders::_1));
-    conns.TransactionRemovedFromMempool =
-        g_signals.m_internals->TransactionRemovedFromMempool.connect(
-            std::bind(&CValidationInterface::TransactionRemovedFromMempool,
-                      pwalletIn, std::placeholders::_1));
-    conns.ChainStateFlushed = g_signals.m_internals->ChainStateFlushed.connect(
-        std::bind(&CValidationInterface::ChainStateFlushed, pwalletIn,
-                  std::placeholders::_1));
-    conns.Broadcast = g_signals.m_internals->Broadcast.connect(
-        std::bind(&CValidationInterface::ResendWalletTransactions, pwalletIn,
-                  std::placeholders::_1, std::placeholders::_2));
-    conns.BlockChecked = g_signals.m_internals->BlockChecked.connect(
-        std::bind(&CValidationInterface::BlockChecked, pwalletIn,
-                  std::placeholders::_1, std::placeholders::_2));
-    conns.NewPoWValidBlock = g_signals.m_internals->NewPoWValidBlock.connect(
-        std::bind(&CValidationInterface::NewPoWValidBlock, pwalletIn,
-                  std::placeholders::_1, std::placeholders::_2));
-    conns.TransactionDoubleSpent =
-        g_signals.m_internals->TransactionDoubleSpent.connect(
-            std::bind(&CValidationInterface::TransactionDoubleSpent,
-                      pwalletIn, std::placeholders::_1, std::placeholders::_2));
-    conns.BadDSProofsDetectedFromNodeIds =
-        g_signals.m_internals->BadDSProofsDetectedFromNodeIds.connect(
-            std::bind(&CValidationInterface::BadDSProofsDetectedFromNodeIds,
-                      pwalletIn, std::placeholders::_1));
+    AssertLockNotHeld(cs_main);
+    assert(g_signals.m_internals);
+    std::promise<void> promise;
+    auto func = [pwalletIn, &promise] {
+        ValidationInterfaceConnections &conns = g_signals.m_internals->m_connMainSignals[pwalletIn];
+        conns.UpdatedBlockTip = g_signals.m_internals->UpdatedBlockTip.connect(
+            std::bind(&CValidationInterface::UpdatedBlockTip, pwalletIn, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
+        );
+        conns.TransactionAddedToMempool = g_signals.m_internals->TransactionAddedToMempool.connect(
+            std::bind(&CValidationInterface::TransactionAddedToMempool, pwalletIn, std::placeholders::_1)
+        );
+        conns.BlockConnected = g_signals.m_internals->BlockConnected.connect(
+            std::bind(&CValidationInterface::BlockConnected, pwalletIn, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
+        );
+        conns.BlockDisconnected = g_signals.m_internals->BlockDisconnected.connect(
+            std::bind(&CValidationInterface::BlockDisconnected, pwalletIn, std::placeholders::_1)
+        );
+        conns.TransactionRemovedFromMempool = g_signals.m_internals->TransactionRemovedFromMempool.connect(
+            std::bind(&CValidationInterface::TransactionRemovedFromMempool, pwalletIn, std::placeholders::_1)
+        );
+        conns.ChainStateFlushed = g_signals.m_internals->ChainStateFlushed.connect(
+            std::bind(&CValidationInterface::ChainStateFlushed, pwalletIn, std::placeholders::_1)
+        );
+        conns.Broadcast = g_signals.m_internals->Broadcast.connect(
+            std::bind(&CValidationInterface::ResendWalletTransactions, pwalletIn, std::placeholders::_1, std::placeholders::_2)
+        );
+        conns.BlockChecked = g_signals.m_internals->BlockChecked.connect(
+            std::bind(&CValidationInterface::BlockChecked, pwalletIn, std::placeholders::_1, std::placeholders::_2)
+        );
+        conns.NewPoWValidBlock = g_signals.m_internals->NewPoWValidBlock.connect(
+            std::bind(&CValidationInterface::NewPoWValidBlock, pwalletIn, std::placeholders::_1, std::placeholders::_2)
+        );
+        conns.TransactionDoubleSpent = g_signals.m_internals->TransactionDoubleSpent.connect(
+            std::bind(&CValidationInterface::TransactionDoubleSpent, pwalletIn, std::placeholders::_1,
+                      std::placeholders::_2)
+        );
+        conns.BadDSProofsDetectedFromNodeIds = g_signals.m_internals->BadDSProofsDetectedFromNodeIds.connect(
+            std::bind(&CValidationInterface::BadDSProofsDetectedFromNodeIds, pwalletIn, std::placeholders::_1)
+        );
+        promise.set_value();
+    };
+    if (IsImmediateModificationOfTheMainSignalsMapUnsafe(g_signals.m_internals->m_schedulerClient)) {
+        // This is necessary to ensure we don't touch m_connMainSignals from anything but the scheduler thread
+        CallFunctionInValidationInterfaceQueue(std::move(func));
+    } else {
+        // Either we are *in* the scheduler thread *or* it's not running -- m_connMainSignals can be directly modified
+        func();
+    }
+    promise.get_future().wait(); // so that we don't return until the above is completed.
 }
 
 void UnregisterValidationInterface(CValidationInterface *pwalletIn) {
+    AssertLockNotHeld(cs_main);
     if (g_signals.m_internals) {
-        LogIfUnsafe(__func__);
-        g_signals.m_internals->m_connMainSignals.erase(pwalletIn);
+        std::promise<void> promise;
+        auto func = [pwalletIn, &promise] {
+            g_signals.m_internals->m_connMainSignals.erase(pwalletIn);
+            promise.set_value();
+        };
+        if (IsImmediateModificationOfTheMainSignalsMapUnsafe(g_signals.m_internals->m_schedulerClient)) {
+            // This is necessary to ensure we don't touch m_connMainSignals from anything but the scheduler thread
+            CallFunctionInValidationInterfaceQueue(std::move(func));
+        } else {
+            // Either we are *in* the scheduler thread *or* it's not running -- m_connMainSignals can be directly modified
+            func();
+        }
+        promise.get_future().wait(); // so that we don't return until the above is completed.
     }
 }
 
@@ -186,7 +197,6 @@ void UnregisterAllValidationInterfaces() {
     if (!g_signals.m_internals) {
         return;
     }
-    LogIfUnsafe(__func__);
     g_signals.m_internals->m_connMainSignals.clear();
 }
 

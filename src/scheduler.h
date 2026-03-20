@@ -86,6 +86,8 @@ public:
     // Returns true if there are threads actively running in serviceQueue()
     bool AreThreadsServicingQueue() const;
 
+    bool IsStoppedOrAboutToStop() const { return stopRequested || stopWhenEmpty; }
+
 private:
     std::multimap<std::chrono::system_clock::time_point, Function> taskQueue;
     std::condition_variable newTaskScheduled;
@@ -136,4 +138,9 @@ public:
     void EmptyQueue();
 
     size_t CallbacksPending();
+
+    bool IsAcceptingJobs() const {
+        return m_pscheduler && !m_pscheduler->IsStoppedOrAboutToStop() && GetServiceThread().joinable();
+    }
+    const std::thread &GetServiceThread() const { return m_pscheduler->serviceThread; }
 };

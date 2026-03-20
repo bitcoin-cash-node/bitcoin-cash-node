@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -32,27 +32,21 @@ enum class MemPoolRemovalReason;
 // These functions dispatch to one or all registered wallets
 
 /**
- *  Register a wallet to receive updates from core.
- *  WARNING: Do not call this after the app has initialized and threads are started.  It is not thread-safe.
+ *  Register a wallet to receive updates from core. NOTE: This function is thread-safe, but *only* if called
+ *  *after* GetMainSignals().RegisterBackgroundSignalScheduler() has been called.
  */
-void RegisterValidationInterface(CValidationInterface *pwalletIn);
+void RegisterValidationInterface(CValidationInterface *pwalletIn) LOCKS_EXCLUDED(cs_main);
 /**
- *  Unregister a wallet from core.
- *  WARNING: Do not call this after the app has initialized and threads are started.  It is not thread-safe.
- *           It may, however, be called by the "shutdown" code.
+ *  Unregister a wallet from core. NOTE: This function is thread-safe, but *only* if called *after*
+ *  GetMainSignals().RegisterBackgroundSignalScheduler() has been called.
  */
-void UnregisterValidationInterface(CValidationInterface *pwalletIn);
+void UnregisterValidationInterface(CValidationInterface *pwalletIn) LOCKS_EXCLUDED(cs_main);
 /**
  *  Unregister all wallets from core
  *  WARNING: Do not call this after the app has initialized and threads are started.  It is not thread-safe.
  *           It may, however, be called by the "shutdown" code.
  */
 void UnregisterAllValidationInterfaces();
-/**
- *  Called from the init process to indicate that future calls to Register/UnregisterValidationInterface()
- *  are no longer safe (this is for debug log purposes only).
- */
-void SetValidationInterfaceRegistrationsUnsafe(bool unsafe);
 /**
  * Pushes a function to callback onto the notification queue, guaranteeing any
  * callbacks generated prior to now are finished when the function is called.
@@ -210,8 +204,7 @@ private:
     friend void ::RegisterValidationInterface(CValidationInterface *);
     friend void ::UnregisterValidationInterface(CValidationInterface *);
     friend void ::UnregisterAllValidationInterfaces();
-    friend void ::CallFunctionInValidationInterfaceQueue(
-        std::function<void()> func);
+    friend void ::CallFunctionInValidationInterfaceQueue(std::function<void()> func);
 
     void MempoolEntryRemoved(CTransactionRef tx, MemPoolRemovalReason reason);
 

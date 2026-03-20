@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -116,8 +116,13 @@ BOOST_AUTO_TEST_CASE(manythreads) {
         microTasks.schedule(f, t);
     }
 
+    BOOST_CHECK(!microTasks.IsStoppedOrAboutToStop());
+
     // Drain the task queue then exit threads
     microTasks.stop(true);
+
+    BOOST_CHECK(microTasks.IsStoppedOrAboutToStop());
+
     // ... wait until all the threads are done
     for (auto &thread : microThreads) {
         thread.join();
