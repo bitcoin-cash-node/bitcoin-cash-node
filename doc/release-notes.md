@@ -28,6 +28,9 @@ None
 ## Modified functionality
 
 - The `createwallet` RPC can now create encrypted wallets if a non-empty passphrase is specified.
+- The default values for -rpcthreads and -rpcworkqueue have been increased from
+  4 to 16, and 16 to 64 respectively. The original defaults were set in
+  2013/2015 and are now unreasonably low even for low spec machines.
 
 ## Removed functionality
 
