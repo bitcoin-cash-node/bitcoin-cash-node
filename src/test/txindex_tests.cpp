@@ -1,5 +1,5 @@
 // Copyright (c) 2017-2018 The Bitcoin Core developers
-// Copyright (c) 2019-2022 The Bitcoin developers
+// Copyright (c) 2019-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -78,7 +78,6 @@ BOOST_FIXTURE_TEST_CASE(txindex_initial_sync, TestChain100Setup) {
     txindex.Stop();
 
     scheduler.stop();
-    schedulerThread.join();
 
     // Rest of shutdown sequence and destructors happen in ~TestingSetup()
 }

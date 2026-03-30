@@ -1,5 +1,5 @@
 // Copyright (c) 2015-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -84,6 +84,9 @@ void CScheduler::stop(bool drain) {
         }
     }
     newTaskScheduled.notify_all();
+    if (serviceThread.joinable()) {
+        serviceThread.join();
+    }
 }
 
 void CScheduler::schedule(Function f, std::chrono::system_clock::time_point t) {

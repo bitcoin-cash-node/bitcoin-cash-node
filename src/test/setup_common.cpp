@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2023 The Bitcoin developers
+// Copyright (c) 2021-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -175,7 +175,7 @@ TestingSetup::TestingSetup(const std::string &chainName)
 
     // We have to run a scheduler thread to prevent ActivateBestChain
     // from blocking due to queue overrun.
-    schedulerThread = std::thread(&CScheduler::serviceQueue, &scheduler);
+    scheduler.serviceThread = std::thread(&CScheduler::serviceQueue, &scheduler);
     GetMainSignals().RegisterBackgroundSignalScheduler(scheduler);
     rpc::RegisterSubmitBlockCatcher();
 
@@ -222,9 +222,6 @@ TestingSetup::~TestingSetup() {
 void TestingSetup::StopScheduler() {
     if (!schedulerIsStopped) {
         scheduler.stop();
-        if (schedulerThread.joinable()) {
-            schedulerThread.join();
-        }
         schedulerIsStopped = true;
     }
 }

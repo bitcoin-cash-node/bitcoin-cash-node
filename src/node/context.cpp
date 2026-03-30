@@ -5,6 +5,7 @@
 
 #include <node/context.h>
 
+#include <scheduler.h>
 #include <interfaces/chain.h>
 #include <net_processing.h>
 

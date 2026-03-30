@@ -14,6 +14,7 @@ class Chain;
 class ChainClient;
 } // namespace interfaces
 
+class CScheduler;
 class PeerLogicValidation;
 
 //! Pointers to interfaces used during init and destroyed on shutdown.
@@ -23,6 +24,7 @@ struct NodeContext {
     std::function<void()> rpc_interruption_point = [] {};
 
     std::unique_ptr<PeerLogicValidation> peerLogic;
+    std::unique_ptr<CScheduler> scheduler;
 
     //! Declare default constructor and destructor that are not inline, so code
     //! instantiating the NodeContext struct doesn't need to #include class

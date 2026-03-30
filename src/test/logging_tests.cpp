@@ -1,5 +1,5 @@
 // Copyright (c) 2019-2025 The Bitcoin Core developers
-// Copyright (c) 2025 The Bitcoin developers
+// Copyright (c) 2025-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -39,16 +39,14 @@ static std::vector<std::string> ReadDebugLogLines() {
 
 struct ScopedScheduler {
     CScheduler scheduler;
-    std::thread service_thread;
     bool did_set_limiter = false;
 
-    ScopedScheduler()
-        : service_thread([this] { scheduler.serviceQueue(); })
-    {}
+    ScopedScheduler() {
+        scheduler.serviceThread = std::thread([this] { scheduler.serviceQueue(); });
+    }
     ~ScopedScheduler() {
         if (did_set_limiter) LogInstance().DisableRateLimiting();
         scheduler.stop();
-        if (service_thread.joinable()) service_thread.join();
     }
     void MockForwardAndSync(std::chrono::seconds duration) {
         scheduler.MockForward(duration);
