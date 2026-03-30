@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -244,6 +244,7 @@ UniValue::Object ScriptToUniv(const Config &config, const CScript &script, bool 
 UniValue::Object ScriptPubKeyToUniv(const Config &config, const CScript &scriptPubKey, bool fIncludeHex,
                                     bool fIncludeP2SH, bool include_pattern) {
     UniValue::Object out;
+    out.reserve(4 + fIncludeHex + 2*fIncludeP2SH + include_pattern);
     out.emplace_back("asm", ScriptToAsmStr(scriptPubKey, false));
     if (fIncludeHex) {
         out.emplace_back("hex", HexStr(scriptPubKey));

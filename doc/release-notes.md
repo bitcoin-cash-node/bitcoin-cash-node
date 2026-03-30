@@ -20,7 +20,6 @@ None
 
 None
 
-
 ## Deprecated functionality
 
 None
@@ -35,6 +34,9 @@ None
   all transactions currently in the mempool, in BCH.
 - The `testmempoolaccept` RPC now returns more information in its JSON object results. For more information see the
   RPC help for `testmempoolaccept`.
+- The `gettxout` RPC has a new 4th argument, `patterns` (boolean, optional) which, if set to `true`, will cause the RPC
+  results to also contain an additional `"byteCodePatterns"` JSON object. See the JSON-RPC help for `gettxout` for more
+  information.
 
 ## Removed functionality
 
