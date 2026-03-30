@@ -1,5 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
-// Copyright (c) 2019-2021 The Bitcoin developers
+// Copyright (c) 2019-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,9 +14,15 @@
 #include <pow.h>
 #include <random.h>
 #include <test/setup_common.h>
+#include <util/defer.h>
 #include <util/time.h>
 #include <validation.h>
 #include <validationinterface.h>
+
+#include <functional>
+#include <future>
+#include <thread>
+#include <vector>
 
 struct RegtestingSetup : public TestingSetup {
     RegtestingSetup() : TestingSetup(CBaseChainParams::REGTEST) {}
@@ -203,6 +209,126 @@ BOOST_AUTO_TEST_CASE(processnewblock_signals_ordering) {
 
     BOOST_CHECK_EQUAL(sub.m_expected_tip,
                       ::ChainActive().Tip()->GetBlockHash());
+}
+
+BOOST_AUTO_TEST_CASE(register_unregister_thread_safety) {
+    struct TestValidationInterface final : CValidationInterface {
+        unsigned callbackCt = 0;
+        void UpdatedBlockTip(const CBlockIndex *, const CBlockIndex *, bool) override { ++callbackCt; }
+    };
+
+    // Case 1: Register 2 validation interfaces both from the same thread, ensure they both get registered and events propagate
+    for (int i = 0; i < 100; ++i) {
+        TestValidationInterface v1, v2;
+        RegisterValidationInterface(&v1);
+        RegisterValidationInterface(&v2);
+        Defer d([&]{
+            UnregisterValidationInterface(&v1);
+            UnregisterValidationInterface(&v2);
+        });
+        BOOST_CHECK_EQUAL(v1.callbackCt, 0);
+        BOOST_CHECK_EQUAL(v2.callbackCt, 0);
+        GetMainSignals().UpdatedBlockTip({}, {}, {});
+        SyncWithValidationInterfaceQueue(); // ensure the above signal fires before proceeding
+        BOOST_CHECK_EQUAL(v1.callbackCt, 1);
+        BOOST_CHECK_EQUAL(v2.callbackCt, 1);
+
+        // Now, unregister; triggering the signal should do nothing
+        UnregisterValidationInterface(&v1);
+        UnregisterValidationInterface(&v2);
+        GetMainSignals().UpdatedBlockTip({}, {}, {});
+        SyncWithValidationInterfaceQueue(); // ensure the above signal fires before proceeding
+        BOOST_CHECK_EQUAL(v1.callbackCt, 1);
+        BOOST_CHECK_EQUAL(v2.callbackCt, 1);
+    }
+
+    // Case 2: Register 2 validation interfaces both from the scheduler thread, ensure they both get registered and events propagate
+    for (int i = 0; i < 100; ++i) {
+        TestValidationInterface v1, v2;
+        std::promise<void> p1, p2;
+
+        scheduler.schedule([&]{ RegisterValidationInterface(&v1); p1.set_value(); });
+        scheduler.schedule([&]{ RegisterValidationInterface(&v2); p2.set_value(); });
+        p1.get_future().wait(); // ensure the above code runs before proceeding
+        p2.get_future().wait(); // ensure the above code runs before proceeding
+        Defer d([&]{
+            UnregisterValidationInterface(&v1);
+            UnregisterValidationInterface(&v2);
+        });
+        BOOST_CHECK_EQUAL(v1.callbackCt, 0);
+        BOOST_CHECK_EQUAL(v2.callbackCt, 0);
+        GetMainSignals().UpdatedBlockTip({}, {}, {});
+        SyncWithValidationInterfaceQueue(); // ensure the above signal fires before proceeding
+        BOOST_CHECK_EQUAL(v1.callbackCt, 1);
+        BOOST_CHECK_EQUAL(v2.callbackCt, 1);
+
+        // Now, unregister; triggering the signal should do nothing
+        p1 = std::promise<void>();
+        p2 = std::promise<void>();
+        scheduler.schedule([&]{ UnregisterValidationInterface(&v1); p1.set_value(); });
+        scheduler.schedule([&]{ UnregisterValidationInterface(&v2); p2.set_value(); });
+        p1.get_future().wait(); // ensure the above code runs before proceeding
+        p2.get_future().wait(); // ensure the above code runs before proceeding
+        GetMainSignals().UpdatedBlockTip({}, {}, {});
+        SyncWithValidationInterfaceQueue(); // ensure the above signal fires before proceeding
+        BOOST_CHECK_EQUAL(v1.callbackCt, 1);
+        BOOST_CHECK_EQUAL(v2.callbackCt, 1);
+    }
+
+    // Case 3: Register validation interfaces from 4 different threads simultaneously, ensure each interface receives events
+    {
+        using TVIVec = std::vector<TestValidationInterface>;
+        constexpr size_t nThreads = 4;
+        constexpr size_t nInterfacesPerThread = 100;
+        std::vector<TVIVec> vecOfVecs;
+        std::vector<std::thread> threads;
+        vecOfVecs.resize(nThreads, TVIVec(nInterfacesPerThread));
+        threads.resize(nThreads);
+        auto funcReg = [](TVIVec & vec) {
+            for (size_t i = 0; i < nInterfacesPerThread; ++i) {
+                RegisterValidationInterface(&vec[i]);
+            }
+        };
+        // Register 100 validation interfaces per thread, concurrently
+        for (size_t i = 0; i < nThreads; ++i) {
+            threads[i] = std::thread(funcReg, std::ref(vecOfVecs[i]));
+        }
+        // Wait for threads to complete
+        for (auto &thread : threads) {
+            thread.join();
+        }
+
+        auto CheckCounts = [&](unsigned expected) {
+            for (auto &vec : vecOfVecs) {
+                for (auto &valInterface : vec) {
+                    BOOST_CHECK_EQUAL(valInterface.callbackCt, expected);
+                }
+            }
+        };
+        CheckCounts(0);
+        GetMainSignals().UpdatedBlockTip({}, {}, {});
+        SyncWithValidationInterfaceQueue(); // ensure the above signal fires before proceeding
+        CheckCounts(1);
+
+        auto funcUnreg = [](TVIVec & vec) {
+            for (auto &valInterface : vec) {
+                UnregisterValidationInterface(&valInterface);
+            }
+        };
+        // Unregister 100 validation interfaces per thread, concurrently
+        for (size_t i = 0; i < nThreads; ++i) {
+            threads[i] = std::thread(funcUnreg, std::ref(vecOfVecs[i]));
+        }
+        // Wait for threads to complete
+        for (auto &thread : threads) {
+            thread.join();
+        }
+
+        // This should fire but be a no-op
+        GetMainSignals().UpdatedBlockTip({}, {}, {});
+        SyncWithValidationInterfaceQueue(); // ensure the above signal fires before proceeding
+        CheckCounts(1); // Counts are unchanged
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()

@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,7 +24,6 @@
 #include <util/syserror.h>
 #include <util/system.h>
 #include <util/threadnames.h>
-#include <validationinterface.h>
 #include <walletinitinterface.h>
 
 #include <cstdio>
@@ -213,9 +212,7 @@ static bool AppInit(int argc, char *argv[]) {
     if (!fRet) {
         Interrupt();
     } else {
-        SetValidationInterfaceRegistrationsUnsafe(true);
         WaitForShutdown();
-        SetValidationInterfaceRegistrationsUnsafe(false);
     }
     Shutdown(node);
 
