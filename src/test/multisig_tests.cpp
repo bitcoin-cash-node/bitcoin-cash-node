@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2024 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -52,17 +52,17 @@ BOOST_AUTO_TEST_CASE(multisig_verify) {
     }
 
     CScript a_and_b;
-    a_and_b << OP_2 << ToByteVector(key[0].GetPubKey())
-            << ToByteVector(key[1].GetPubKey()) << OP_2 << OP_CHECKMULTISIG;
+    a_and_b << OP_2 << key[0].GetPubKey()
+            << key[1].GetPubKey() << OP_2 << OP_CHECKMULTISIG;
 
     CScript a_or_b;
-    a_or_b << OP_1 << ToByteVector(key[0].GetPubKey())
-           << ToByteVector(key[1].GetPubKey()) << OP_2 << OP_CHECKMULTISIG;
+    a_or_b << OP_1 << key[0].GetPubKey()
+           << key[1].GetPubKey() << OP_2 << OP_CHECKMULTISIG;
 
     CScript escrow;
-    escrow << OP_2 << ToByteVector(key[0].GetPubKey())
-           << ToByteVector(key[1].GetPubKey())
-           << ToByteVector(key[2].GetPubKey()) << OP_3 << OP_CHECKMULTISIG;
+    escrow << OP_2 << key[0].GetPubKey()
+           << key[1].GetPubKey()
+           << key[2].GetPubKey() << OP_3 << OP_CHECKMULTISIG;
 
     // Funding transaction
     CMutableTransaction txFrom;
@@ -180,45 +180,45 @@ BOOST_AUTO_TEST_CASE(multisig_IsStandard) {
     txnouttype whichType;
 
     CScript a_and_b;
-    a_and_b << OP_2 << ToByteVector(key[0].GetPubKey())
-            << ToByteVector(key[1].GetPubKey()) << OP_2 << OP_CHECKMULTISIG;
+    a_and_b << OP_2 << key[0].GetPubKey()
+            << key[1].GetPubKey() << OP_2 << OP_CHECKMULTISIG;
     BOOST_CHECK(::IsStandard(a_and_b, whichType, flags));
 
     CScript a_or_b;
-    a_or_b << OP_1 << ToByteVector(key[0].GetPubKey())
-           << ToByteVector(key[1].GetPubKey()) << OP_2 << OP_CHECKMULTISIG;
+    a_or_b << OP_1 << key[0].GetPubKey()
+           << key[1].GetPubKey() << OP_2 << OP_CHECKMULTISIG;
     BOOST_CHECK(::IsStandard(a_or_b, whichType, flags));
 
     CScript escrow;
-    escrow << OP_2 << ToByteVector(key[0].GetPubKey())
-           << ToByteVector(key[1].GetPubKey())
-           << ToByteVector(key[2].GetPubKey()) << OP_3 << OP_CHECKMULTISIG;
+    escrow << OP_2 << key[0].GetPubKey()
+           << key[1].GetPubKey()
+           << key[2].GetPubKey() << OP_3 << OP_CHECKMULTISIG;
     BOOST_CHECK(::IsStandard(escrow, whichType, flags));
 
     CScript one_of_four;
-    one_of_four << OP_1 << ToByteVector(key[0].GetPubKey())
-                << ToByteVector(key[1].GetPubKey())
-                << ToByteVector(key[2].GetPubKey())
-                << ToByteVector(key[3].GetPubKey()) << OP_4 << OP_CHECKMULTISIG;
+    one_of_four << OP_1 << key[0].GetPubKey()
+                << key[1].GetPubKey()
+                << key[2].GetPubKey()
+                << key[3].GetPubKey() << OP_4 << OP_CHECKMULTISIG;
     BOOST_CHECK(!::IsStandard(one_of_four, whichType, flags));
 
     CScript malformed[6];
-    malformed[0] << OP_3 << ToByteVector(key[0].GetPubKey())
-                 << ToByteVector(key[1].GetPubKey()) << OP_2
+    malformed[0] << OP_3 << key[0].GetPubKey()
+                 << key[1].GetPubKey() << OP_2
                  << OP_CHECKMULTISIG;
-    malformed[1] << OP_2 << ToByteVector(key[0].GetPubKey())
-                 << ToByteVector(key[1].GetPubKey()) << OP_3
+    malformed[1] << OP_2 << key[0].GetPubKey()
+                 << key[1].GetPubKey() << OP_3
                  << OP_CHECKMULTISIG;
-    malformed[2] << OP_0 << ToByteVector(key[0].GetPubKey())
-                 << ToByteVector(key[1].GetPubKey()) << OP_2
+    malformed[2] << OP_0 << key[0].GetPubKey()
+                 << key[1].GetPubKey() << OP_2
                  << OP_CHECKMULTISIG;
-    malformed[3] << OP_1 << ToByteVector(key[0].GetPubKey())
-                 << ToByteVector(key[1].GetPubKey()) << OP_0
+    malformed[3] << OP_1 << key[0].GetPubKey()
+                 << key[1].GetPubKey() << OP_0
                  << OP_CHECKMULTISIG;
-    malformed[4] << OP_1 << ToByteVector(key[0].GetPubKey())
-                 << ToByteVector(key[1].GetPubKey()) << OP_CHECKMULTISIG;
-    malformed[5] << OP_1 << ToByteVector(key[0].GetPubKey())
-                 << ToByteVector(key[1].GetPubKey());
+    malformed[4] << OP_1 << key[0].GetPubKey()
+                 << key[1].GetPubKey() << OP_CHECKMULTISIG;
+    malformed[5] << OP_1 << key[0].GetPubKey()
+                 << key[1].GetPubKey();
 
     for (int i = 0; i < 6; i++) {
         BOOST_CHECK(!::IsStandard(malformed[i], whichType, flags));
@@ -237,17 +237,17 @@ BOOST_AUTO_TEST_CASE(multisig_Sign) {
     }
 
     CScript a_and_b;
-    a_and_b << OP_2 << ToByteVector(key[0].GetPubKey())
-            << ToByteVector(key[1].GetPubKey()) << OP_2 << OP_CHECKMULTISIG;
+    a_and_b << OP_2 << key[0].GetPubKey()
+            << key[1].GetPubKey() << OP_2 << OP_CHECKMULTISIG;
 
     CScript a_or_b;
-    a_or_b << OP_1 << ToByteVector(key[0].GetPubKey())
-           << ToByteVector(key[1].GetPubKey()) << OP_2 << OP_CHECKMULTISIG;
+    a_or_b << OP_1 << key[0].GetPubKey()
+           << key[1].GetPubKey() << OP_2 << OP_CHECKMULTISIG;
 
     CScript escrow;
-    escrow << OP_2 << ToByteVector(key[0].GetPubKey())
-           << ToByteVector(key[1].GetPubKey())
-           << ToByteVector(key[2].GetPubKey()) << OP_3 << OP_CHECKMULTISIG;
+    escrow << OP_2 << key[0].GetPubKey()
+           << key[1].GetPubKey()
+           << key[2].GetPubKey() << OP_3 << OP_CHECKMULTISIG;
 
     // Funding transaction
     CMutableTransaction txFrom;

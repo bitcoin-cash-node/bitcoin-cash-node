@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2024 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -42,7 +42,7 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, TestChain100Setup) {
     // Make sure skipping validation of transactions that were validated going
     // into the memory pool does not allow double-spends in blocks to pass
     // validation when they should not.
-    CScript scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey())
+    CScript scriptPubKey = CScript() << coinbaseKey.GetPubKey()
                                      << OP_CHECKSIG;
 
     // Create a double-spend of mature coinbase txn:
@@ -186,7 +186,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
         InitScriptExecutionCache();
     }
 
-    CScript p2pk_scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript p2pk_scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     CScript p2sh_scriptPubKey = GetScriptForDestination(ScriptID(p2pk_scriptPubKey, false /*=p2sh20*/));
     CScript p2sh_32_scriptPubKey = GetScriptForDestination(ScriptID(p2pk_scriptPubKey, true /*=p2sh32*/));
     CScript p2pkh_scriptPubKey = GetScriptForDestination(coinbaseKey.GetPubKey().GetID());
@@ -242,10 +242,10 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
     spend_tx.vout[0].scriptPubKey = p2sh_scriptPubKey;
     spend_tx.vout[1].nValue = 11 * CENT;
     spend_tx.vout[1].scriptPubKey = CScript() << OP_CHECKLOCKTIMEVERIFY << OP_DROP
-                                              << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+                                              << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     spend_tx.vout[2].nValue = 11 * CENT;
     spend_tx.vout[2].scriptPubKey = CScript() << OP_CHECKSEQUENCEVERIFY << OP_DROP
-                                              << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+                                              << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     spend_tx.vout[3].nValue = 11 * CENT;
     spend_tx.vout[3].scriptPubKey = p2sh_scriptPubKey;
     spend_tx.vout[4].nValue = 11 * CENT;

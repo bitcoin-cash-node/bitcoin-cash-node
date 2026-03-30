@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2020 The Bitcoin developers
+// Copyright (c) 2018-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,7 +16,7 @@ BOOST_FIXTURE_TEST_SUITE(finalization_tests, TestChain100Setup)
 
 BOOST_AUTO_TEST_CASE(finalizationDelay) {
     CScript p2pk_scriptPubKey =
-        CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+        CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     CBlock block;
 
     {

@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2023 The Bitcoin developers
+// Copyright (c) 2021-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -31,7 +31,7 @@ static const CScript SCRIPT_PUB_KEY = GetScriptForDestination(ScriptID(REDEEM_SC
 
 static const CScript SCRIPT_SIG = CScript()
     << std::vector<uint8_t>(100, 0xff)
-    << ToByteVector(REDEEM_SCRIPT);
+    << ByteView(REDEEM_SCRIPT);
 
 /// Mine new utxos
 static std::vector<CTxIn> createUTXOs(const Config& config, size_t n) {

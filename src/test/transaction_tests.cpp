@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -299,10 +299,10 @@ SetupDummyInputs(CBasicKeyStore &keystoreRet, CCoinsViewCache &coinsRet) {
     dummyTransactions[0].vout.resize(2);
     dummyTransactions[0].vout[0].nValue = 11 * CENT;
     dummyTransactions[0].vout[0].scriptPubKey
-        << ToByteVector(key[0].GetPubKey()) << OP_CHECKSIG;
+        << key[0].GetPubKey() << OP_CHECKSIG;
     dummyTransactions[0].vout[1].nValue = 50 * CENT;
     dummyTransactions[0].vout[1].scriptPubKey
-        << ToByteVector(key[1].GetPubKey()) << OP_CHECKSIG;
+        << key[1].GetPubKey() << OP_CHECKSIG;
     AddCoins(coinsRet, CTransaction(dummyTransactions[0]), 0);
 
     dummyTransactions[1].vout.resize(2);
@@ -437,7 +437,7 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
     CBasicKeyStore keystore;
     BOOST_CHECK(keystore.AddKeyPubKey(key, key.GetPubKey()));
     CScript scriptPubKey = CScript()
-                           << ToByteVector(key.GetPubKey()) << OP_CHECKSIG;
+                           << key.GetPubKey() << OP_CHECKSIG;
 
     std::vector<SigHashType> sigHashes;
     sigHashes.emplace_back(SIGHASH_NONE | SIGHASH_FORKID);
@@ -546,10 +546,10 @@ BOOST_AUTO_TEST_CASE(test_witness) {
     BOOST_CHECK(keystore.AddKeyPubKey(key2L, pubkey2L));
     CScript scriptPubkey1, scriptPubkey2, scriptPubkey1L, scriptPubkey2L,
         scriptMulti;
-    scriptPubkey1 << ToByteVector(pubkey1) << OP_CHECKSIG;
-    scriptPubkey2 << ToByteVector(pubkey2) << OP_CHECKSIG;
-    scriptPubkey1L << ToByteVector(pubkey1L) << OP_CHECKSIG;
-    scriptPubkey2L << ToByteVector(pubkey2L) << OP_CHECKSIG;
+    scriptPubkey1 << pubkey1 << OP_CHECKSIG;
+    scriptPubkey2 << pubkey2 << OP_CHECKSIG;
+    scriptPubkey1L << pubkey1L << OP_CHECKSIG;
+    scriptPubkey2L << pubkey2L << OP_CHECKSIG;
     std::vector<CPubKey> oneandthree;
     oneandthree.push_back(pubkey1);
     oneandthree.push_back(pubkey3);
@@ -959,7 +959,7 @@ BOOST_AUTO_TEST_CASE(txsize_activation_test) {
 }
 
 BOOST_FIXTURE_TEST_CASE(checktxinput_test, TestChain100Setup) {
-    CScript const p2pk_scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript const p2pk_scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     CScript const p2sh_scriptPubKey = GetScriptForDestination(ScriptID(p2pk_scriptPubKey, false /*=p2sh_20*/));
 
     CMutableTransaction funding_tx_1;

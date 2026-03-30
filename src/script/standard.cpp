@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -239,14 +239,14 @@ CScript GetScriptForDestination(const CTxDestination &dest) {
                 return CScript();
             },
             [](const CKeyID &keyID) {
-                return CScript() << OP_DUP << OP_HASH160 << ToByteVector(keyID) << OP_EQUALVERIFY << OP_CHECKSIG;
+                return CScript() << OP_DUP << OP_HASH160 << keyID << OP_EQUALVERIFY << OP_CHECKSIG;
             },
             [](const ScriptID &scriptID) {
                 CScript script;
                 if (scriptID.IsP2SH_20()) {
-                    script << OP_HASH160 << ToByteVector(scriptID) << OP_EQUAL;
+                    script << OP_HASH160 << scriptID << OP_EQUAL;
                 } else if (scriptID.IsP2SH_32()) {
-                    script << OP_HASH256 << ToByteVector(scriptID) << OP_EQUAL;
+                    script << OP_HASH256 << scriptID << OP_EQUAL;
                 } else {
                     assert(!"Unexpected state in class ScriptID");
                     // not reached
@@ -266,7 +266,7 @@ CScript GetScriptForMultisig(int nRequired, const std::vector<CPubKey> &keys) {
 
     script << CScript::EncodeOP_N(nRequired);
     for (const CPubKey &key : keys) {
-        script << ToByteVector(key);
+        script << key;
     }
     script << CScript::EncodeOP_N(keys.size()) << OP_CHECKMULTISIG;
     return script;

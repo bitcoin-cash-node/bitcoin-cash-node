@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2025 The Bitcoin developers
+// Copyright (c) 2022-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -1711,7 +1711,7 @@ BOOST_FIXTURE_TEST_CASE(with_mempool_check_oversized_token_commitment, TestChain
 // active, but work otherwise if used correctly in client code (requires a full and valid ScriptExecutionContext).
 BOOST_FIXTURE_TEST_CASE(sighash_utxos_test, TestChain100Setup) {
     size_t coinbase_txn_idx = 0;
-    CScript const p2pk_scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript const p2pk_scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
 
     for (const bool isUpgrade9Active : {false, true}) {
         // Paranoia: mine 2 blocks to ensure maturity of up to 2 coinbase txns

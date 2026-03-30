@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 The Bitcoin developers
+# Copyright (c) 2018-2026 The Bitcoin developers
 
 project(bench_bitcoin)
 
@@ -69,6 +69,7 @@ add_executable(bench_bitcoin
 	rollingbloom.cpp
 	rpc_blockchain.cpp
 	rpc_mempool.cpp
+	script.cpp
 	util_string.cpp
 	util_time.cpp
 	verify_script.cpp

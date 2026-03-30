@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2016 The Bitcoin Core developers
-// Copyright (c) 2019-2024 The Bitcoin developers
+// Copyright (c) 2019-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -75,9 +75,9 @@ BOOST_AUTO_TEST_CASE(sign) {
         // 8 Scripts: checking all combinations of
         // different keys, straight/P2SH, pubkey/pubkeyhash
         CScript standardScripts[4];
-        standardScripts[0] << ToByteVector(key[0].GetPubKey()) << OP_CHECKSIG;
+        standardScripts[0] << key[0].GetPubKey() << OP_CHECKSIG;
         standardScripts[1] = GetScriptForDestination(key[1].GetPubKey().GetID());
-        standardScripts[2] << ToByteVector(key[1].GetPubKey()) << OP_CHECKSIG;
+        standardScripts[2] << key[1].GetPubKey() << OP_CHECKSIG;
         standardScripts[3] = GetScriptForDestination(key[2].GetPubKey().GetID());
         CScript evalScripts[4];
         for (int i = 0; i < 4; i++) {
@@ -247,14 +247,14 @@ BOOST_AUTO_TEST_CASE(is) {
         // Test CScript::IsPayToScriptHash()
         uint160 dummy;
         CScript p2sh;
-        p2sh << OP_HASH160 << ToByteVector(dummy) << OP_EQUAL;
+        p2sh << OP_HASH160 << dummy << OP_EQUAL;
         BOOST_CHECK(p2sh.IsPayToScriptHash(flags));
         BOOST_CHECK(!p2sh.IsPayToPubKeyHash());
 
         // Test for p2sh32
         uint256 dummy32;
         CScript p2sh32;
-        p2sh32 << OP_HASH256 << ToByteVector(dummy32) << OP_EQUAL;
+        p2sh32 << OP_HASH256 << dummy32 << OP_EQUAL;
         BOOST_CHECK_EQUAL(p2sh32.IsPayToScriptHash(flags), is_p2sh_32);
         BOOST_CHECK(!p2sh32.IsPayToPubKeyHash());
 
@@ -398,35 +398,35 @@ BOOST_AUTO_TEST_CASE(is) {
         BOOST_CHECK(!not_p2sh.IsPayToPubKeyHash());
 
         not_p2sh.clear();
-        not_p2sh << OP_HASH160 << ToByteVector(dummy) << ToByteVector(dummy)
+        not_p2sh << OP_HASH160 << dummy << dummy
                  << OP_EQUAL;
         BOOST_CHECK(!not_p2sh.IsPayToScriptHash(flags));
         BOOST_CHECK(!not_p2sh.IsPayToPubKeyHash());
 
         not_p2sh.clear();
-        not_p2sh << OP_HASH256 << ToByteVector(dummy) << ToByteVector(dummy)
+        not_p2sh << OP_HASH256 << dummy << dummy
                  << OP_EQUAL;
         BOOST_CHECK(!not_p2sh.IsPayToScriptHash(flags));
         BOOST_CHECK(!not_p2sh.IsPayToPubKeyHash());
 
         not_p2sh.clear();
-        not_p2sh << OP_NOP << ToByteVector(dummy) << OP_EQUAL;
+        not_p2sh << OP_NOP << dummy << OP_EQUAL;
         BOOST_CHECK(!not_p2sh.IsPayToScriptHash(flags));
         BOOST_CHECK(!not_p2sh.IsPayToPubKeyHash());
 
         not_p2sh.clear();
-        not_p2sh << OP_HASH160 << ToByteVector(dummy) << OP_CHECKSIG;
+        not_p2sh << OP_HASH160 << dummy << OP_CHECKSIG;
         BOOST_CHECK(!not_p2sh.IsPayToScriptHash(flags));
         BOOST_CHECK(!not_p2sh.IsPayToPubKeyHash());
 
         not_p2sh.clear();
-        not_p2sh << OP_HASH256 << ToByteVector(dummy) << OP_CHECKSIG;
+        not_p2sh << OP_HASH256 << dummy << OP_CHECKSIG;
         BOOST_CHECK(!not_p2sh.IsPayToScriptHash(flags));
         BOOST_CHECK(!not_p2sh.IsPayToPubKeyHash());
 
         // lastly, check p2pkh
         CScript p2pkh;
-        p2pkh << OP_DUP << OP_HASH160 << ToByteVector(dummy) << OP_EQUALVERIFY << OP_CHECKSIG;
+        p2pkh << OP_DUP << OP_HASH160 << dummy << OP_EQUALVERIFY << OP_CHECKSIG;
         BOOST_CHECK(!p2pkh.IsPayToScriptHash(flags));
         BOOST_CHECK(p2pkh.IsPayToPubKeyHash());
         // break p2pkh by erasing the 10th byte
@@ -435,12 +435,12 @@ BOOST_AUTO_TEST_CASE(is) {
         BOOST_CHECK(!p2pkh.IsPayToPubKeyHash());
 
         CScript not_p2pkh;
-        not_p2pkh << OP_DUP << OP_HASH160 << ToByteVector(dummy32) << OP_EQUALVERIFY << OP_CHECKSIG;
+        not_p2pkh << OP_DUP << OP_HASH160 << dummy32 << OP_EQUALVERIFY << OP_CHECKSIG;
         BOOST_CHECK(!not_p2pkh.IsPayToScriptHash(flags));
         BOOST_CHECK(!not_p2pkh.IsPayToPubKeyHash());
 
         not_p2pkh.clear();
-        not_p2pkh << OP_DUP << OP_HASH256 << ToByteVector(dummy32) << OP_EQUALVERIFY << OP_CHECKSIG;
+        not_p2pkh << OP_DUP << OP_HASH256 << dummy32 << OP_EQUALVERIFY << OP_CHECKSIG;
         BOOST_CHECK(!not_p2pkh.IsPayToScriptHash(flags));
         BOOST_CHECK(!not_p2pkh.IsPayToPubKeyHash());
     }
@@ -510,13 +510,13 @@ BOOST_AUTO_TEST_CASE(AreInputsStandard) {
         // vout[3] is complicated 1-of-3 AND 2-of-3
         // ... that is OK if wrapped in P2SH:
         CScript oneAndTwo;
-        oneAndTwo << OP_1 << ToByteVector(key[0].GetPubKey())
-                  << ToByteVector(key[1].GetPubKey())
-                  << ToByteVector(key[2].GetPubKey());
+        oneAndTwo << OP_1 << key[0].GetPubKey()
+                  << key[1].GetPubKey()
+                  << key[2].GetPubKey();
         oneAndTwo << OP_3 << OP_CHECKMULTISIGVERIFY;
-        oneAndTwo << OP_2 << ToByteVector(key[3].GetPubKey())
-                  << ToByteVector(key[4].GetPubKey())
-                  << ToByteVector(key[5].GetPubKey());
+        oneAndTwo << OP_2 << key[3].GetPubKey()
+                  << key[4].GetPubKey()
+                  << key[5].GetPubKey();
         oneAndTwo << OP_3 << OP_CHECKMULTISIG;
         BOOST_CHECK(keystore.AddCScript(oneAndTwo, is_p2sh_32, targetedVmLimitsEnabled));
         txFrom.vout[3].scriptPubKey = GetScriptForDestination(ScriptID(oneAndTwo, is_p2sh_32));
