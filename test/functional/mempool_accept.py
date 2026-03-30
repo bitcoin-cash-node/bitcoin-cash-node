@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-# Copyright (c) 2017-2025 The Bitcoin Core developers
+# Copyright (c) 2017-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mempool acceptance of raw transactions."""
+
+from decimal import Decimal
 
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.cdefs import MAX_OP_RETURN_RELAY
@@ -25,6 +27,7 @@ from test_framework.script import (
 )
 from test_framework.util import (
     assert_equal,
+    assert_not_equal,
     assert_raises_rpc_error,
     wait_until,
 )
@@ -82,36 +85,53 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         self.mempool_size = 0
         self.check_mempool_result(
             result_expected=[{'txid': txid_in_block, 'allowed': False,
-                              'reject-reason': '18: txn-already-known'}],
+                              'reject-reason': '18: txn-already-known',
+                              'reject-details': 'txn-already-known'}],
             rawtxs=[raw_tx_in_block],
         )
 
         self.log.info('A transaction not in the mempool')
-        fee = 0.00000700
+        fee = Decimal('0.00000700')
         raw_tx_0 = node.signrawtransactionwithwallet(node.createrawtransaction(
             inputs=[{"txid": txid_in_block, "vout": 0,
                      "sequence": 0xfffffffd}],
-            outputs=[{node.getnewaddress(): 0.3 - fee}],
+            outputs=[{node.getnewaddress(): Decimal('0.3') - fee}],
         ))['hex']
+        txsize_0 = len(raw_tx_0) // 2
+        fee_rate_sats_0 = int(1000 * fee / txsize_0 * COIN)  # Force truncation to appropriate precision
+        fee_rate_0 = Decimal(fee_rate_sats_0) / COIN  # Convert sats to BCH amount
         tx = FromHex(CTransaction(), raw_tx_0)
         txid_0 = tx.rehash()
         self.check_mempool_result(
-            result_expected=[{'txid': txid_0, 'allowed': True}],
+            result_expected=[{'txid': txid_0, 'allowed': True, 'size': txsize_0, 'vsize': txsize_0,
+                              'fees': {
+                                  'base': fee,
+                                  'effective-feerate': fee_rate_0
+                              }}],
             rawtxs=[raw_tx_0],
         )
 
         self.log.info('A final transaction not in the mempool')
         # Pick a random coin(base) to spend
         coin = coins.pop()
+        send_amt = Decimal('0.025')
+        fee_1 = Decimal('50.0') - send_amt
         raw_tx_final = node.signrawtransactionwithwallet(node.createrawtransaction(
             inputs=[{'txid': coin['txid'], 'vout': coin['vout'],
                      "sequence": 0xffffffff}],  # SEQUENCE_FINAL
-            outputs=[{node.getnewaddress(): 0.025}],
+            outputs=[{node.getnewaddress(): send_amt}],
             locktime=node.getblockcount() + 2000,  # Can be anything
         ))['hex']
         tx = FromHex(CTransaction(), raw_tx_final)
+        txsize_1 = len(raw_tx_final) // 2
+        fee_rate_sats_1 = int(1000 * fee_1 / txsize_1 * COIN)  # Force truncation to appropriate precision
+        fee_rate_1 = Decimal(fee_rate_sats_1) / COIN  # Convert sats to BCH amount
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(), 'allowed': True}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': True, 'size': txsize_1, 'vsize': txsize_1,
+                              'fees': {
+                                  'base': fee_1,
+                                  'effective-feerate': fee_rate_1
+                              }}],
             rawtxs=[ToHex(tx)],
             allowhighfees=True,
         )
@@ -123,7 +143,8 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         self.mempool_size += 1
         self.check_mempool_result(
             result_expected=[{'txid': txid_0, 'allowed': False,
-                              'reject-reason': '18: txn-already-in-mempool'}],
+                              'reject-reason': '18: txn-already-in-mempool',
+                              'reject-details': 'txn-already-in-mempool'}],
             rawtxs=[raw_tx_0],
         )
 
@@ -140,8 +161,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx.vout[0].nValue -= int(4 * fee * COIN)  # Set more fee
         # skip re-signing the tx
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(
-            ), 'allowed': False, 'reject-reason': '18: txn-mempool-conflict'}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False,
+                              'reject-reason': '18: txn-mempool-conflict',
+                              'reject-details': 'txn-mempool-conflict'}],
             rawtxs=[ToHex(tx)],
             allowhighfees=True,
         )
@@ -198,9 +220,34 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
             outputs=[{node.getnewaddress(): 0.05}],
         ))['hex']
         tx = FromHex(CTransaction(), raw_tx_reference)
+        txsize_2 = len(raw_tx_reference) // 2
+        fee_2 = Decimal('0.05')
+        fee_rate_sats_2 = int(1000 * fee_2 / txsize_2 * COIN)  # Force truncation to appropriate precision
+        fee_rate_2 = Decimal(fee_rate_sats_2) / COIN  # Convert sats to BCH amount
         # Reference tx should be valid on itself
+        txid_2 = tx.rehash()
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(), 'allowed': True}],
+            result_expected=[{'txid': txid_2, 'allowed': True, 'size': txsize_2, 'vsize': txsize_2,
+                              'fees': {
+                                  'base': fee_2,
+                                  'effective-feerate': fee_rate_2,
+                              }}],
+            rawtxs=[ToHex(tx)],
+        )
+
+        # Test effective-feerate key works by adding +1000 sats to the fee paid for the txn via `prioritisetransaction`
+        fee_delta_2 = Decimal('0.00001000')
+        node.prioritisetransaction(txid_2, 0, int(fee_delta_2 * COIN))  # prioritisetransaction expects argument in sats
+        effective_fee_2 = fee_2 + fee_delta_2
+        effective_fee_rate_sats_2 = int(1000 * effective_fee_2 / txsize_2 * COIN)  # Force truncation
+        effective_fee_rate_2 = Decimal(effective_fee_rate_sats_2) / COIN  # Convert sats to BCH amount
+        assert_not_equal(fee_rate_2, effective_fee_rate_2)  # Sanity check
+        self.check_mempool_result(
+            result_expected=[{'txid': txid_2, 'allowed': True, 'size': txsize_2, 'vsize': txsize_2,
+                              'fees': {
+                                  'base': fee_2,
+                                  'effective-feerate': effective_fee_rate_2,
+                              }}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -210,8 +257,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         # Skip re-signing the transaction for context independent checks from now on
         # FromHex(tx, node.signrawtransactionwithwallet(ToHex(tx))['hex'])
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(
-            ), 'allowed': False, 'reject-reason': '16: bad-txns-vout-empty'}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False,
+                              'reject-reason': '16: bad-txns-vout-empty',
+                              'reject-details': 'bad-txns-vout-empty'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -221,7 +269,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
                                 // len(tx.vin[0].serialize()))
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '16: bad-txns-oversize'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '16: bad-txns-oversize',
+                 'reject-details': 'bad-txns-oversize'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -229,8 +279,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx = FromHex(CTransaction(), raw_tx_reference)
         tx.vout[0].nValue *= -1
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(
-            ), 'allowed': False, 'reject-reason': '16: bad-txns-vout-negative'}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False,
+                              'reject-reason': '16: bad-txns-vout-negative',
+                              'reject-details': 'bad-txns-vout-negative'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -238,8 +289,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx = FromHex(CTransaction(), raw_tx_reference)
         tx.vout[0].nValue = 21000000 * COIN + 1
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(
-            ), 'allowed': False, 'reject-reason': '16: bad-txns-vout-toolarge'}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False,
+                              'reject-reason': '16: bad-txns-vout-toolarge',
+                              'reject-details': 'bad-txns-vout-toolarge'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -248,8 +300,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx.vout = [tx.vout[0]] * 2
         tx.vout[0].nValue = 21000000 * COIN
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(
-            ), 'allowed': False, 'reject-reason': '16: bad-txns-txouttotal-toolarge'}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False,
+                              'reject-reason': '16: bad-txns-txouttotal-toolarge',
+                              'reject-details': 'bad-txns-txouttotal-toolarge'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -257,8 +310,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx = FromHex(CTransaction(), raw_tx_reference)
         tx.vin = [tx.vin[0]] * 2
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(
-            ), 'allowed': False, 'reject-reason': '16: bad-txns-inputs-duplicate'}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False,
+                              'reject-reason': '16: bad-txns-inputs-duplicate',
+                              'reject-details': 'bad-txns-inputs-duplicate'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -270,7 +324,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx = FromHex(CTransaction(), raw_tx_coinbase_spent)
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '16: bad-tx-coinbase'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '16: bad-tx-coinbase',
+                 'reject-details': 'bad-tx-coinbase'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -279,22 +335,27 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx.nVersion = 3  # A version currently non-standard
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '64: version'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '64: version',
+                 'reject-details': 'version'}],
             rawtxs=[ToHex(tx)],
         )
         tx = FromHex(CTransaction(), raw_tx_reference)
         tx.vout[0].scriptPubKey = CScript([OP_0])  # Some non-standard script
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '64: scriptpubkey'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '64: scriptpubkey',
+                 'reject-details': 'scriptpubkey'}],
             rawtxs=[ToHex(tx)],
         )
         tx = FromHex(CTransaction(), raw_tx_reference)
         # Some not-pushonly scriptSig
         tx.vin[0].scriptSig = CScript([OP_HASH160])
         self.check_mempool_result(
-            result_expected=[{'txid': tx.rehash(
-            ), 'allowed': False, 'reject-reason': '64: scriptsig-not-pushonly'}],
+            result_expected=[{'txid': tx.rehash(), 'allowed': False,
+                              'reject-reason': '64: scriptsig-not-pushonly',
+                              'reject-details': 'scriptsig-not-pushonly'}],
             rawtxs=[ToHex(tx)],
         )
         tx = FromHex(CTransaction(), raw_tx_reference)
@@ -305,7 +366,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx.vout = [output_p2sh_burn] * num_scripts
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '64: tx-size'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '64: tx-size',
+                 'reject-details': 'tx-size'}],
             rawtxs=[ToHex(tx)],
         )
         tx = FromHex(CTransaction(), raw_tx_reference)
@@ -314,7 +377,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx.vout[0].nValue -= 1
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '64: dust'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '64: dust',
+                 'reject-details': 'dust'}],
             rawtxs=[ToHex(tx)],
         )
         tx = FromHex(CTransaction(), raw_tx_reference)
@@ -323,7 +388,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx.vout = [output_datacarrier] * 13
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '64: oversize-op-return'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '64: oversize-op-return',
+                 'reject-details': 'oversize-op-return'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -334,7 +401,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         tx.nLockTime = node.getblockcount() + 1
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '64: bad-txns-nonfinal'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '64: bad-txns-nonfinal',
+                 'reject-details': 'bad-txns-nonfinal, non-final transaction'}],
             rawtxs=[ToHex(tx)],
         )
 
@@ -346,7 +415,9 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
         # Can skip re-signing the tx because of early rejection
         self.check_mempool_result(
             result_expected=[
-                {'txid': tx.rehash(), 'allowed': False, 'reject-reason': '64: non-BIP68-final'}],
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '64: non-BIP68-final',
+                 'reject-details': 'non-BIP68-final'}],
             rawtxs=[ToHex(tx)],
             allowhighfees=True,
         )

@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
 // Copyright (C) 2019-2020 Tom Zander <tomz@freedommail.ch>
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -37,6 +37,7 @@
 #include <tinyformat.h>
 #include <txmempool.h>
 #include <ui_interface.h>
+#include <util/check.h>
 #include <util/moneystr.h>
 #include <util/strencodings.h>
 #include <util/system.h>
@@ -2117,12 +2118,12 @@ static void ProcessOrphanTx(const Config &config, CConnman *connman,
             it != rejectCountPerNode.end() && it->second > MAX_NON_STANDARD_ORPHAN_PER_NODE) {
             continue;
         }
-        uint64_t entryId{};
+        MempoolAcceptExtraInfo info;
         if (AcceptToMemoryPool(config, g_mempool, stateDummy, porphanTx, &fMissingInputs2,
                                false /* bypass_limits */, Amount::zero() /* nAbsurdFee */, false /* test_accept */,
-                               &entryId)) {
+                               &info)) {
             LogPrint(BCLog::MEMPOOL, "   accepted orphan tx %s\n", orphanId.ToString());
-            RelayTransaction(orphanTx, connman, entryId);
+            RelayTransaction(orphanTx, connman, *Assert(info.entryId));
             for (size_t i = 0; i < orphanTx.vout.size(); ++i) {
                 auto it_by_prev = internal::mapOrphanTransactionsByPrev.find(COutPoint(orphanId, i));
                 if (it_by_prev != internal::mapOrphanTransactionsByPrev.end()) {
@@ -3075,16 +3076,16 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
 
         txrequest.ReceivedResponse(pfrom->GetId(), txid);
 
-        uint64_t entryId{};
+        MempoolAcceptExtraInfo info;
         if (!AlreadyHave(inv) &&
             AcceptToMemoryPool(config, g_mempool, state, ptx, &fMissingInputs,
                                false /* bypass_limits */,
-                               Amount::zero() /* nAbsurdFee */, false /* test_accept */, &entryId)) {
+                               Amount::zero() /* nAbsurdFee */, false /* test_accept */, &info)) {
             g_mempool.check(pcoinsTip.get());
             // As this version of the transaction was acceptable, we can forget about any
             // requests for it.
             txrequest.ForgetTxId(tx.GetId());
-            RelayTransaction(tx, connman, entryId);
+            RelayTransaction(tx, connman, *Assert(info.entryId));
             for (size_t i = 0; i < tx.vout.size(); ++i) {
                 auto it_by_prev = internal::mapOrphanTransactionsByPrev.find(COutPoint(txid, i));
                 if (it_by_prev != internal::mapOrphanTransactionsByPrev.end()) {
@@ -3174,7 +3175,7 @@ static bool ProcessMessage(const Config &config, const NodeRef &pfrom,
                 if (!state.IsInvalid(nDoS) || nDoS == 0) {
                     LogPrintf("Force relaying tx %s from whitelisted peer=%d\n",
                               tx.GetId().ToString(), pfrom->GetId());
-                    RelayTransaction(tx, connman, entryId);
+                    RelayTransaction(tx, connman, info.entryId.value_or(0));
                 } else {
                     LogPrintf("Not relaying invalid transaction %s from "
                               "whitelisted peer=%d (%s)\n",

@@ -33,6 +33,8 @@ None
   2013/2015 and are now unreasonably low even for low spec machines.
 - The  `getmempoolinfo` RPC results now contain a new additional key, `total_fee`, which is the sum of all fees paid by
   all transactions currently in the mempool, in BCH.
+- The `testmempoolaccept` RPC now returns more information in its JSON object results. For more information see the
+  RPC help for `testmempoolaccept`.
 
 ## Removed functionality
 

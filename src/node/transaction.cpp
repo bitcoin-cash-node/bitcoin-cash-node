@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -27,7 +27,7 @@ TxId BroadcastTransaction(const Config &config, const CTransactionRef tx,
         nMaxRawTxFee = Amount::zero();
     }
 
-    uint64_t entryId{};
+    MempoolAcceptExtraInfo info;
 
     { // cs_main scope
         LOCK(cs_main);
@@ -45,7 +45,7 @@ TxId BroadcastTransaction(const Config &config, const CTransactionRef tx,
             bool fMissingInputs;
             if (!AcceptToMemoryPool(config, g_mempool, state, std::move(tx),
                                     &fMissingInputs, false /* bypass_limits */,
-                                    nMaxRawTxFee, false /* test_accept */, &entryId)) {
+                                    nMaxRawTxFee, false /* test_accept */, &info)) {
                 if (state.IsInvalid()) {
                     throw JSONRPCError(RPC_TRANSACTION_REJECTED,
                                        FormatStateMessage(state));
@@ -86,6 +86,7 @@ TxId BroadcastTransaction(const Config &config, const CTransactionRef tx,
     }
 
     CInv inv(MSG_TX, txid);
+    const auto entryId = info.entryId.value_or(0);
     g_connman->ForEachNode([&inv, entryId](const NodeRef &pnode) { pnode->PushInventory(inv, entryId); });
 
     return txid;

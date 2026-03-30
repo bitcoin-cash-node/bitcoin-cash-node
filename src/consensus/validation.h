@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2024 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -94,6 +94,19 @@ public:
     bool HasDspId() const { return bool(dspIdPtr); }
     DspId GetDspId() const { return dspIdPtr ? *dspIdPtr : DspId{}; }
     void SetDspId(const DspId &dspId) { dspIdPtr = dspId; }
+
+    // Used by e.g. the testmempoolaccept RPC for the "reject-details" result key
+    std::string ToString() const {
+        if (IsValid()) {
+            return "Valid";
+        }
+
+        if (!strDebugMessage.empty()) {
+            return strRejectReason + ", " + strDebugMessage;
+        }
+
+        return strRejectReason;
+    }
 };
 
 /// Class used to paramaterize operation of certain validation functions such as e.g. CheckBlock() in validation.h

@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -12,6 +12,7 @@
 #include <consensus/activation.h>
 #include <consensus/validation.h>
 #include <core_io.h>
+#include <feerate.h>
 #include <index/txindex.h>
 #include <init.h>
 #include <key_io.h>
@@ -1420,35 +1421,43 @@ static UniValue testmempoolaccept(const Config &config,
         request.params.size() > 2) {
         throw std::runtime_error(
             RPCHelpMan{"testmempoolaccept",
-                "\nReturns result of mempool acceptance tests indicating if raw transaction (serialized, hex-encoded) would be accepted by mempool.\n"
-                "\nThis checks if the transaction violates the consensus or policy rules.\n"
-                "\nSee sendrawtransaction call.\n",
+                "\nReturns result of mempool acceptance tests indicating if raw transaction (serialized, hex-encoded) would be accepted by mempool."
+                "This checks if the transaction violates the consensus or policy rules.\n"
+                "See sendrawtransaction call.\n",
                 {
-                    {"rawtxs", RPCArg::Type::ARR, /* opt */ false, /* default_val */ "", "An array of hex strings of raw transactions.\n"
-            "                                        Length must be one for now.",
+                    {"rawtxs", RPCArg::Type::ARR, /* opt */ false, /* default_val */ "",
+                               "An array of hex strings of raw transactions. Array length must be exactly one for now.",
                         {
-                            {"rawtx", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", ""},
+                            {"rawtx", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", "Serialized transaction hex"},
                         },
                         },
                     {"allowhighfees", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Allow high fees"},
-                }}
-                .ToString() +
+                }}.ToString() +
             "\nResult:\n"
             "[                   (array) The result of the mempool acceptance test for each raw transaction in the input array.\n"
             "                            Length is exactly one for now.\n"
             " {\n"
-            "  \"txid\"           (string) The transaction hash in hex\n"
-            "  \"allowed\"        (boolean) If the mempool allows this tx to be inserted\n"
-            "  \"reject-reason\"  (string) Rejection string (only present when 'allowed' is false)\n"
+            "  \"txid\"            (string) The transaction hash in hex\n"
+            "  \"allowed\"         (boolean) If the mempool allows this tx to be inserted\n"
+            "  \"size\"            (numeric, optional) Serialized byte size of the tx (only present when 'allowed' is true)\n"
+            "  \"vsize\"           (numeric, optional) \"Size\" of the tx for the purposes of fee calculations. Often the same as 'size'\n"
+            "                                        but may be larger for sigcheck-dense txs (only present when 'allowed' is true).\n"
+            "  \"fees\" : {        (json object, optional) Transaction fee information (only present if 'allowed' is true)\n"
+            "    \"base\"                        (numeric) Transaction fee in " + CURRENCY_UNIT + "\n"
+            "    \"effective-feerate\"           (numeric) The effective feerate in " + CURRENCY_UNIT + " per KvB. May differ from the base feerate if\n"
+            "                                            there are modified fees from prioritisetransaction and/or 'vsize' > 'size'.\n"
+            "  }\n"
+            "  \"reject-reason\"   (string, optional) Rejection string (only present when 'allowed' is false)\n"
+            "  \"reject-details\"  (string, optional) Rejection details (only present when 'allowed' is false and rejection details exist)\n"
             " }\n"
             "]\n"
             "\nExamples:\n"
             "\nCreate a transaction\n"
-            + HelpExampleCli("createrawtransaction", "\"[{\\\"txid\\\" : \\\"mytxid\\\",\\\"vout\\\":0}]\" \"{\\\"myaddress\\\":0.01}\"") +
+            + HelpExampleCli("createrawtransaction", "'[{\"txid\" : \"mytxid\",\"vout\":0}]\" \"{\"myaddress\":0.01}'") +
             "Sign the transaction, and get back the hex\n"
             + HelpExampleCli("signrawtransactionwithwallet", "\"myhex\"") +
             "\nTest acceptance of the transaction (signed hex)\n"
-            + HelpExampleCli("testmempoolaccept", "\"signedhex\"") +
+            + HelpExampleCli("testmempoolaccept", "'[\"signedhex\"]'") +
             "\nAs a JSON-RPC call\n"
             + HelpExampleRpc("testmempoolaccept", "[\"signedhex\"]")
         );
@@ -1465,8 +1474,7 @@ static UniValue testmempoolaccept(const Config &config,
     if (!DecodeHexTx(mtx, request.params[0].get_array()[0].get_str())) {
         throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "TX decode failed");
     }
-    CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
-    const uint256 &txid = tx->GetId();
+    const CTransactionRef tx(MakeTransactionRef(std::move(mtx)));
 
     Amount max_raw_tx_fee = maxTxFee;
     if (!request.params[1].isNull() && request.params[1].get_bool()) {
@@ -1474,28 +1482,43 @@ static UniValue testmempoolaccept(const Config &config,
     }
 
     CValidationState state;
+    MempoolAcceptExtraInfo info;
     bool missing_inputs;
     bool test_accept_res;
     {
         LOCK(cs_main);
         test_accept_res = AcceptToMemoryPool(
-            config, g_mempool, state, std::move(tx), &missing_inputs,
-            false /* bypass_limits */, max_raw_tx_fee, true /* test_accept */);
+            config, g_mempool, state, tx, &missing_inputs,
+            false /* bypass_limits */, max_raw_tx_fee, true /* test_accept */, &info /* pinfo */);
     }
 
     UniValue::Array result;
     result.reserve(1);
     UniValue::Object result_0;
-    result_0.reserve(test_accept_res ? 2 : 3);
-    result_0.emplace_back("txid", txid.GetHex());
+    result_0.reserve(test_accept_res ? 5 : 4);
+    result_0.emplace_back("txid", tx->GetId().GetHex());
     result_0.emplace_back("allowed", test_accept_res);
-    if (!test_accept_res) {
+    if (test_accept_res) {
+        // Below are only present when accepted
+        result_0.emplace_back("size", Assume(info.size).value());
+        const size_t vsize = Assume(info.vsize).value();
+        result_0.emplace_back("vsize", vsize);
+        UniValue::Object fees;
+        fees.reserve(2);
+        fees.emplace_back("base", ValueFromAmount(Assume(info.baseFee).value()));
+        const CFeeRate feeRate(Assume(info.modifiedFee).value(), vsize);
+        fees.emplace_back("effective-feerate", ValueFromAmount(feeRate.GetFeePerK()));
+        result_0.emplace_back("fees", std::move(fees));
+    } else {
+        // Below are only present when rejected
         if (state.IsInvalid()) {
             result_0.emplace_back("reject-reason", strprintf("%i: %s", state.GetRejectCode(), state.GetRejectReason()));
+            result_0.emplace_back("reject-details", state.ToString());
         } else if (missing_inputs) {
             result_0.emplace_back("reject-reason", "missing-inputs");
         } else {
             result_0.emplace_back("reject-reason", state.GetRejectReason());
+            result_0.emplace_back("reject-details", state.ToString());
         }
     }
     result.emplace_back(std::move(result_0));
