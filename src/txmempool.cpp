@@ -207,6 +207,7 @@ uint64_t CTxMemPool::addUnchecked(CTxMemPoolEntry &&entry) {
 
     nTransactionsUpdated++;
     totalTxSize += entry.GetTxSize();
+    totalTxFee += entry.GetFee();
     return newit->GetEntryId();
 }
 
@@ -222,6 +223,7 @@ void CTxMemPool::removeUnchecked(txiter it, MemPoolRemovalReason reason) {
     }
 
     totalTxSize -= it->GetTxSize();
+    totalTxFee -= it->GetFee();
     cachedInnerUsage -= it->DynamicMemoryUsage();
     if (const auto linksiter = mapLinks.find(it); linksiter != mapLinks.end()) {
         cachedInnerUsage -= memusage::DynamicUsage(linksiter->second.parents) +
@@ -350,6 +352,7 @@ void CTxMemPool::_clear(bool clearDspOrphans /*= true*/) {
     mapTx.clear();
     mapNextTx.clear();
     totalTxSize = 0;
+    totalTxFee = Amount::zero();
     cachedInnerUsage = 0;
     lastRollingFeeUpdate = GetTime();
     blockSinceLastRollingFeeBump = false;
@@ -390,6 +393,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
              (unsigned int)mapTx.size(), (unsigned int)mapNextTx.size());
 
     uint64_t checkTotal = 0;
+    Amount checkFee = Amount::zero();
     uint64_t innerUsage = 0;
 
     CCoinsViewCache mempoolDuplicate(const_cast<CCoinsViewCache *>(pcoins));
@@ -398,6 +402,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
     std::list<const CTxMemPoolEntry *> waitingOnDependants;
     for (txiter it = mapTx.begin(); it != mapTx.end(); ++it) {
         checkTotal += it->GetTxSize();
+        checkFee += it->GetFee();
         innerUsage += it->DynamicMemoryUsage();
         const CTransaction &tx = it->GetTx();
         auto linksiter = mapLinks.find(it);
@@ -480,6 +485,7 @@ void CTxMemPool::check(const CCoinsViewCache *pcoins) const {
     }
 
     assert(totalTxSize == checkTotal);
+    assert(totalTxFee == checkFee);
     assert(innerUsage == cachedInnerUsage);
 }
 

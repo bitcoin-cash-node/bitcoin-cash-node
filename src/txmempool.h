@@ -302,7 +302,9 @@ private:
     unsigned int nTransactionsUpdated;
 
     //! sum of all mempool tx's sizes.
-    size_t totalTxSize;
+    size_t totalTxSize GUARDED_BY(cs);
+    //! sum of all mempool tx fees
+    Amount totalTxFee GUARDED_BY(cs);
     //! sum of dynamic memory usage of all the map elements (NOT the maps
     //! themselves)
     size_t cachedInnerUsage;
@@ -664,6 +666,11 @@ public:
     auto GetTotalTxSize() const {
         LOCK(cs);
         return totalTxSize;
+    }
+
+    auto GetTotalFee() const {
+        LOCK(cs);
+        return totalTxFee;
     }
 
     bool exists(const TxId &txid) const {

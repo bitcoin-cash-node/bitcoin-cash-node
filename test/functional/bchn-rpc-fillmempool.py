@@ -8,6 +8,7 @@ from test_framework.cdefs import DEFAULT_CONSENSUS_BLOCK_SIZE, ONE_MEGABYTE
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_greater_than,
     assert_greater_than_or_equal,
     assert_raises_rpc_error,
 )
@@ -39,11 +40,17 @@ class FillMempoolTest(BitcoinTestFramework):
         assert MAX_MEMPOOL_MB > 100  # Required by below loop
 
         fuzziness = 500  # fuzziness about how well fillmempool can meet the requirement -> +/- 500 bytes
+        prev_size = 0
         for size_mb in [1, 10, 64, 100]:
             res = node.fillmempool(size_mb)
             assert_greater_than_or_equal(res['mempool_dynamic_usage'] + fuzziness, size_mb * ONE_MEGABYTE)
             mpi = node.getmempoolinfo()
             assert_greater_than_or_equal(mpi['usage'] + fuzziness, size_mb * ONE_MEGABYTE)
+            # Check some getmempoolinfo keys while we are here
+            new_size = mpi['size']
+            assert_greater_than(new_size, prev_size)
+            prev_size = new_size
+            assert_equal(sum(mp['fees']['base'] for mp in node.getrawmempool(True).values()), mpi['total_fee'])
 
 
 if __name__ == '__main__':
