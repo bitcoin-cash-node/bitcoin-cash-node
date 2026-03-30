@@ -1,4 +1,4 @@
-// Copyright (c) 2024-2025 The Bitcoin developers
+// Copyright (c) 2024-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -532,9 +532,9 @@ BOOST_AUTO_TEST_CASE(test_verifyscript) {
     swscript << OP_0 << std::vector<uint8_t>(20);
     hashIters = 2 + (swscript.size() + 8) / 64;
     opCost = 100 + swscript.size() + 300 + 20 + 64*hashIters + 20 + 1;
-    CHECK_VERIFYSCRIPT(CScript() << ToByteVector(swscript),
+    CHECK_VERIFYSCRIPT(CScript() << ByteView(swscript),
                        CScript()
-                           << OP_HASH160 << ToByteVector(ScriptID(swscript, false /*=p2sh_20*/))
+                           << OP_HASH160 << ScriptID(swscript, false /*=p2sh_20*/)
                            << OP_EQUAL,
                        SCRIPT_VERIFY_P2SH | SCRIPT_VERIFY_CLEANSTACK | SCRIPT_ENABLE_MAY2025,
                        0, hashIters, opCost);

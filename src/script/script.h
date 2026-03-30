@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,7 @@
 #include <crypto/common.h>
 #include <prevector.h>
 #include <script/bigint.h>
+#include <script/container_types.h>
 #include <script/script_error.h>
 #include <script/script_num_encoding.h>
 #include <script/vm_limits.h> // for constants MAX_SCRIPT_SIZE, MAX_STACK_SIZE, etc
@@ -28,10 +29,6 @@
 #include <utility>
 #include <variant>
 #include <vector>
-
-template <typename T> std::vector<uint8_t> ToByteVector(const T &in) {
-    return std::vector<uint8_t>(in.begin(), in.end());
-}
 
 /** Script opcodes */
 enum opcodetype {
@@ -1130,7 +1127,18 @@ public:
         return push_int64(x.getint64());
     }
 
-    CScript &operator<<(const std::vector<uint8_t> &b) {
+    /// Append a byte blob to the script, including the pushdata opcode, if any, and the length byte(s) prepended.
+    ///
+    /// Note that unlike the streams classes in streams.h, pushing a vector vs pushing a span (ByteView) will yield
+    /// identical results, with the length byte(s) *always* present; e.g. the following are identical:
+    ///     `script << someVector`
+    ///     `script << std::span{someVector}`
+    CScript &operator<<(const ByteView &b) {
+        if (!b.empty() && b.data() >= begin() && b.data() < end()) [[unlikely]] {
+            // Detect class mis-use which may result in UB: an attempt to push a (sub)script onto itself, and compensate
+            // by allocating a temporary vector to hold the bytes to be pushed.
+            return this->operator<<(ByteView{std::vector<uint8_t>(b.begin(), b.end())});
+        }
         if (b.size() < OP_PUSHDATA1) {
             insert(end(), uint8_t(b.size()));
         } else if (b.size() <= 0xff) {
@@ -1151,8 +1159,9 @@ public:
         return *this;
     }
 
-    // Intentionally unimplemented; it's not clear if this should push the script or concatenate scripts. If there's
-    // ever a use for pushing a script onto a script, this may then be implemented.
+    /// Intentionally unimplemented; it's not clear if this should push the script or concatenate scripts. If there's
+    /// ever a need for pushing one script onto another script, one may cast the argument to `ByteView`, e.g.:
+    ///     `script << ByteView{otherScript}`
     CScript &operator<<(const CScript &) = delete;
 
     bool GetOp(const_iterator &pc, opcodetype &opcodeRet,

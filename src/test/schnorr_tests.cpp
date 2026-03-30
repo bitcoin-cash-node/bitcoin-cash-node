@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2025 The Bitcoin developers
+// Copyright (c) 2019-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -62,7 +62,7 @@ BOOST_AUTO_TEST_CASE(opcodes_random_flags) {
 
     // Grab the various pubkey types.
     KeyData kd;
-    valtype pubkeyC = ToByteVector(kd.pubkeyC);
+    valtype pubkeyC(kd.pubkeyC.begin(), kd.pubkeyC.end());
 
     // Script endings. The non-verify variants will complete OK and the verify
     // variant will complete with ScriptError::<opcodename>, that is, unless

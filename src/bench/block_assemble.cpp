@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2017 The Bitcoin Core developers
-// Copyright (c) 2020-2022 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,7 +20,7 @@ static void AssembleBlock(benchmark::State &state) {
     const CScript SCRIPT_PUB = GetScriptForDestination(ScriptID(redeemScript, false /* p2sh_32 = false */));
 
     const CScript scriptSig = CScript() << std::vector<uint8_t>(100, 0xff)
-                                        << ToByteVector(redeemScript);
+                                        << ByteView{redeemScript};
 
     // Collect some loose transactions that spend the coinbases of our mined
     // blocks

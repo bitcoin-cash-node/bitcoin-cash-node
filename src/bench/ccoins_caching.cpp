@@ -1,5 +1,5 @@
 // Copyright (c) 2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -35,10 +35,10 @@ SetupDummyInputs(CBasicKeyStore &keystoreRet, CCoinsViewCache &coinsRet) {
     dummyTransactions[0].vout.resize(2);
     dummyTransactions[0].vout[0].nValue = 11 * COIN;
     dummyTransactions[0].vout[0].scriptPubKey
-        << ToByteVector(key[0].GetPubKey()) << OP_CHECKSIG;
+        << key[0].GetPubKey() << OP_CHECKSIG;
     dummyTransactions[0].vout[1].nValue = 50 * COIN;
     dummyTransactions[0].vout[1].scriptPubKey
-        << ToByteVector(key[1].GetPubKey()) << OP_CHECKSIG;
+        << key[1].GetPubKey() << OP_CHECKSIG;
     AddCoins(coinsRet, CTransaction(dummyTransactions[0]), 0);
 
     dummyTransactions[1].vout.resize(2);

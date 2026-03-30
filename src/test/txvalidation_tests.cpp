@@ -1,5 +1,5 @@
 // Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2019-2021 The Bitcoin developers
+// Copyright (c) 2019-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,7 +22,7 @@ BOOST_AUTO_TEST_SUITE(txvalidation_tests)
  * Ensure that the mempool won't accept coinbase transactions.
  */
 BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_coinbase, TestChain100Setup) {
-    CScript scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey())
+    CScript scriptPubKey = CScript() << coinbaseKey.GetPubKey()
                                      << OP_CHECKSIG;
     CMutableTransaction coinbaseTx;
 
@@ -64,7 +64,7 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_coinbase, TestChain100Setup) {
  * Ensure that transactions with duplicate inputs are appropriately rejected regardless of the length of vin
  */
 BOOST_FIXTURE_TEST_CASE(tx_mempool_reject_dup_txin, TestChain100Setup) {
-    CScript scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
 
     CMutableTransaction tx;
     for (size_t vinSize = 2; vinSize < 2000; vinSize < 20 ? vinSize++ : vinSize *= 2) {

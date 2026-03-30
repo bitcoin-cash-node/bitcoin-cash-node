@@ -1,4 +1,4 @@
-// Copyright (c) 2020 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -92,7 +92,7 @@ static void CreateNewHeaderAndCheckIsRejected(const Config &config, CBlockIndex 
 
 BOOST_AUTO_TEST_CASE(headerFinalizationEnabledDefault) {
     const Config &config = GetConfig();
-    CScript p2pk_scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript p2pk_scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     CBlock block;
     {
         LOCK(cs_main);
@@ -140,7 +140,7 @@ BOOST_AUTO_TEST_CASE(headerFinalizationEnabledNonDefault) {
     gArgs.ForceSetArg("-maxreorgdepth", std::string("1"));
     gArgs.ForceSetArg("-finalizeheaders", std::string("1"));
     const Config &config = GetConfig();
-    CScript p2pk_scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript p2pk_scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     CBlock block;
     {
         LOCK(cs_main);
@@ -199,7 +199,7 @@ BOOST_AUTO_TEST_CASE(headerFinalizationDisabledOne) {
     gArgs.ForceSetArg("-finalizationdelay", std::string("0"));
 
     const Config &config = GetConfig();
-    CScript p2pk_scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript p2pk_scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     CBlock block;
     {
         LOCK(cs_main);
@@ -260,7 +260,7 @@ BOOST_AUTO_TEST_CASE(headerFinalizationDisabledZero) {
     gArgs.ForceSetArg("-maxreorgdepth", std::string("0"));
 
     const Config &config = GetConfig();
-    CScript p2pk_scriptPubKey = CScript() << ToByteVector(coinbaseKey.GetPubKey()) << OP_CHECKSIG;
+    CScript p2pk_scriptPubKey = CScript() << coinbaseKey.GetPubKey() << OP_CHECKSIG;
     CBlock block;
 
     // Ancestor of tip is finalized.

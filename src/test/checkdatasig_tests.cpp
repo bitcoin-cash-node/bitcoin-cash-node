@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2025 The Bitcoin developers
+// Copyright (c) 2018-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -95,9 +95,9 @@ BOOST_AUTO_TEST_CASE(checkdatasig_test) {
     uint256 messageHash(vchHash);
 
     KeyData kd;
-    valtype pubkey = ToByteVector(kd.pubkey);
-    valtype pubkeyC = ToByteVector(kd.pubkeyC);
-    valtype pubkeyH = ToByteVector(kd.pubkeyH);
+    valtype pubkey(kd.pubkey.begin(), kd.pubkey.end());
+    valtype pubkeyC(kd.pubkeyC.begin(), kd.pubkeyC.end());
+    valtype pubkeyH(kd.pubkeyH.begin(), kd.pubkeyH.end());
 
     CheckTestResultForAllFlags({{}, message, pubkey},
                                CScript() << OP_CHECKDATASIG, {{}});
