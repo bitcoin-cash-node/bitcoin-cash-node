@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2015-2019 The Bitcoin Core developers
+# Copyright (c) 2019-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test BIP65 (CHECKLOCKTIMEVERIFY).
@@ -166,7 +167,8 @@ class BIP65Test(BitcoinTestFramework):
         # rejected from the mempool for exactly that reason.
         assert_equal(
             [{'txid': spendtx.hash, 'allowed': False,
-                'reject-reason': '64: non-mandatory-script-verify-flag (Negative locktime)'}],
+              'reject-reason': '64: non-mandatory-script-verify-flag (Negative locktime)',
+              'reject-details': 'non-mandatory-script-verify-flag (Negative locktime)'}],
             self.nodes[0].testmempoolaccept(
                 rawtxs=[spendtx.serialize().hex()], allowhighfees=True)
         )

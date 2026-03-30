@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -406,6 +406,14 @@ void PruneAndFlush();
 /** Prune block files up to a given height */
 void PruneBlockFilesManual(int nManualPruneHeight);
 
+struct MempoolAcceptExtraInfo {
+    // Note: Some of the below optionals may not be engaged if the txn failed acceptance
+    std::optional<uint64_t> entryId; ///< Entry id (only engaged if accepted to memory pool in *non-test* mode)
+    std::optional<size_t> size;      ///< Serialized size in bytes
+    std::optional<size_t> vsize;     ///< This is usually the same as `size`, but may be larger for sigcheck-dense txns.
+    std::optional<Amount> baseFee;   ///< Base fee (sum of inputs minus sum of outputs)
+    std::optional<Amount> modifiedFee; ///< Modified fee after applying feeDelta, if any, or may be same as baseFee.
+};
 /**
  * (try to) add transaction to memory pool
  */
@@ -413,7 +421,7 @@ bool AcceptToMemoryPool(const Config &config, CTxMemPool &pool,
                         CValidationState &state, const CTransactionRef &tx,
                         bool *pfMissingInputs, bool bypass_limits,
                         const Amount nAbsurdFee, bool test_accept = false,
-                        uint64_t *pEntryId = nullptr)
+                        MempoolAcceptExtraInfo *pinfo = nullptr)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /**
@@ -425,7 +433,7 @@ AcceptToMemoryPoolWithTime(const Config &config, CTxMemPool &pool,
                            CValidationState &state, const CTransactionRef &tx,
                            bool *pfMissingInputs, int64_t nAcceptTime,
                            bool bypass_limits, const Amount nAbsurdFee,
-                           bool test_accept = false, uint64_t *pEntryId = nullptr)
+                           bool test_accept = false, MempoolAcceptExtraInfo *pinfo = nullptr)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 /** Convert CValidationState to a human-readable message for logging */

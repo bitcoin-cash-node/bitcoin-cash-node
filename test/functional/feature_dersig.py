@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2015-2019 The Bitcoin Core developers
+# Copyright (c) 2019-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test BIP66 (DER SIG).
@@ -88,7 +89,8 @@ class BIP66Test(BitcoinTestFramework):
         # rejected from the mempool for exactly that reason.
         assert_equal(
             [{'txid': spendtx.hash, 'allowed': False,
-                'reject-reason': '16: mandatory-script-verify-flag-failed (Non-canonical DER signature)'}],
+              'reject-reason': '16: mandatory-script-verify-flag-failed (Non-canonical DER signature)',
+              'reject-details': 'mandatory-script-verify-flag-failed (Non-canonical DER signature)'}],
             self.nodes[0].testmempoolaccept(
                 rawtxs=[ToHex(spendtx)], allowhighfees=True)
         )
