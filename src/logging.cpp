@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,8 +9,8 @@
 #include <util/threadnames.h>
 #include <util/time.h>
 
+#include <cstdio>
 #include <memory>
-#include <mutex>
 
 bool fLogIPs = DEFAULT_LOGIPS;
 const char *const DEFAULT_DEBUGLOGFILE = "debug.log";
@@ -42,11 +42,11 @@ void BCLog::ReconstructLogInstance() {
 }
 
 static int FileWriteStr(const std::string &str, FILE *fp) {
-    return fwrite(str.data(), 1, str.size(), fp);
+    return std::fwrite(str.data(), 1, str.size(), fp);
 }
 
 bool BCLog::Logger::OpenDebugLog() {
-    std::lock_guard scoped_lock(m_cs);
+    LOCK(m_cs);
 
     assert(m_fileout == nullptr);
     assert(!m_file_path.empty());
@@ -57,7 +57,7 @@ bool BCLog::Logger::OpenDebugLog() {
     }
 
     // Unbuffered.
-    setbuf(m_fileout, nullptr);
+    std::setbuf(m_fileout, nullptr);
     // Dump buffered messages from before we opened the log.
     while (!m_msgs_before_open.empty()) {
         FileWriteStr(m_msgs_before_open.front(), m_fileout);
@@ -153,7 +153,7 @@ std::vector<CLogCategoryActive> ListActiveLogCategories() {
 
 BCLog::Logger::~Logger() {
     if (m_fileout) {
-        fclose(m_fileout);
+        std::fclose(m_fileout);
     }
 }
 
@@ -189,7 +189,7 @@ void BCLog::Logger::LogPrintStr(std::string &&str, std::source_location &&sloc, 
     bool rateLimit = false;
     bool suppressionActive = false;
     {
-        std::unique_lock g(m_cs);
+        LOCK(m_cs);
 
         if (m_limiter && should_rate_limit) {
             const auto status = m_limiter->Consume(sloc, str);
@@ -235,11 +235,11 @@ void BCLog::Logger::LogPrintStr(std::string &&str, std::source_location &&sloc, 
     if (m_print_to_console) {
         // print to console
         FileWriteStr(str, stdout);
-        fflush(stdout);
+        std::fflush(stdout);
     }
 
     if (m_print_to_file && !rateLimit) {
-        std::lock_guard scoped_lock(m_cs);
+        LOCK(m_cs);
 
         // Buffer if we haven't opened the log yet.
         if (m_fileout == nullptr) {
@@ -250,8 +250,8 @@ void BCLog::Logger::LogPrintStr(std::string &&str, std::source_location &&sloc, 
                 m_reopen_file = false;
                 FILE *new_fileout = fsbridge::fopen(m_file_path, "a");
                 if (new_fileout) {
-                    setbuf(new_fileout, nullptr); // unbuffered.
-                    fclose(m_fileout);
+                    std::setbuf(new_fileout, nullptr); // unbuffered.
+                    std::fclose(m_fileout);
                     m_fileout = new_fileout;
                 }
             }
@@ -281,21 +281,21 @@ void BCLog::Logger::ShrinkDebugFile() {
     if (file && log_size > 11 * (RECENT_DEBUG_HISTORY_SIZE / 10)) {
         // Restart the file with some of the end.
         std::vector<char> vch(RECENT_DEBUG_HISTORY_SIZE, 0);
-        if (fseek(file, -((long)vch.size()), SEEK_END)) {
+        if (std::fseek(file, -((long)vch.size()), SEEK_END)) {
             LogPrintf("Failed to shrink debug log file: fseek(...) failed\n");
-            fclose(file);
+            std::fclose(file);
             return;
         }
-        int nBytes = fread(vch.data(), 1, vch.size(), file);
-        fclose(file);
+        const size_t nBytes = std::fread(vch.data(), 1, vch.size(), file);
+        std::fclose(file);
 
         file = fsbridge::fopen(m_file_path, "w");
         if (file) {
-            fwrite(vch.data(), 1, nBytes, file);
-            fclose(file);
+            std::fwrite(vch.data(), 1, nBytes, file);
+            std::fclose(file);
         }
     } else if (file != nullptr) {
-        fclose(file);
+        std::fclose(file);
     }
 }
 
@@ -389,7 +389,7 @@ bool BCLog::LogRateLimiter::Stats::Consume(uint64_t bytes) {
 }
 
 auto BCLog::LogRateLimiter::Consume(const std::source_location& source_loc, const std::string& str) -> Status {
-    std::unique_lock g(m_mutex);
+    LOCK(m_mutex);
     auto& stats = m_source_locations.try_emplace(source_loc, m_max_bytes).first->second;
     Status status = stats.m_dropped_bytes > 0 ? Status::STILL_SUPPRESSED : Status::UNSUPPRESSED;
 
@@ -404,7 +404,7 @@ auto BCLog::LogRateLimiter::Consume(const std::source_location& source_loc, cons
 void BCLog::LogRateLimiter::Reset() {
     SourceLocationsMap source_locations;
     {
-        std::unique_lock g(m_mutex);
+        LOCK(m_mutex);
         source_locations.swap(m_source_locations);
         m_suppression_active = false;
     }

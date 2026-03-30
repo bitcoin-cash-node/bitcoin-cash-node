@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 
 #include <crypto/siphash.h>
 #include <fs.h>
+#include <sync.h>
 #include <tinyformat.h>
 
 #include <atomic>
@@ -16,7 +17,6 @@
 #include <cstring>
 #include <list>
 #include <memory>
-#include <mutex>
 #include <source_location>
 #include <string>
 #include <string_view>
@@ -59,7 +59,7 @@ public:
     };
 
 private:
-    mutable std::mutex m_mutex;
+    mutable Mutex m_mutex;
 
     struct SourceLocationEqual {
         bool operator()(const std::source_location& lhs, const std::source_location& rhs) const noexcept {
@@ -79,9 +79,9 @@ private:
 
     using SourceLocationsMap = std::unordered_map<std::source_location, Stats, SourceLocationHasher, SourceLocationEqual>;
     //! Stats for each source location that has attempted to log something.
-    SourceLocationsMap m_source_locations; // GUARDED_BY(m_mutex)
+    SourceLocationsMap m_source_locations GUARDED_BY(m_mutex);
     //! Whether any log locations are suppressed. Cached view on m_source_locations for performance reasons.
-    std::atomic<bool> m_suppression_active = false;
+    std::atomic_bool m_suppression_active = false;
 
 public:
     //! Maximum number of bytes logged per location per window.
@@ -104,9 +104,9 @@ public:
     };
     //! Consumes `source_loc`'s available bytes corresponding to the size of the (formatted)
     //! `str` and returns its status.
-    [[nodiscard]] Status Consume(const std::source_location& source_loc, const std::string& str); // EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+    [[nodiscard]] Status Consume(const std::source_location& source_loc, const std::string& str) LOCKS_EXCLUDED(m_mutex);
     //! Resets all usage to zero. Called periodically by the scheduler.
-    void Reset(); // EXCLUSIVE_LOCKS_REQUIRED(!m_mutex)
+    void Reset() LOCKS_EXCLUDED(m_mutex);
     //! Returns true if any log locations are currently being suppressed.
     bool SuppressionsActive() const { return m_suppression_active; }
 };
@@ -151,12 +151,11 @@ enum LogFlags : uint32_t {
 };
 
 class Logger {
-private:
-    FILE *m_fileout = nullptr;
-    std::mutex m_cs;
-    std::list<std::string> m_msgs_before_open;
+    Mutex m_cs;
+    FILE *m_fileout GUARDED_BY(m_cs) = nullptr;
+    std::list<std::string> m_msgs_before_open GUARDED_BY(m_cs);
 
-    std::shared_ptr<LogRateLimiter> m_limiter; // GUARDED_BY(m_cs)
+    std::shared_ptr<LogRateLimiter> m_limiter GUARDED_BY(m_cs);
 
     /**
      * m_started_new_line is a state variable that will suppress printing of the
@@ -167,11 +166,12 @@ private:
     /**
      * Log categories bitfield.
      */
-    std::atomic<uint32_t> m_categories{0};
+    std::atomic_uint32_t m_categories{0};
 
     void PrependTimestampStr(std::string &str);
 
 public:
+    // Note: The below members are not guarded by any mutex and should only be written-to before threads are started
     bool m_print_to_console = false;
     bool m_print_to_file = false;
 
@@ -180,7 +180,7 @@ public:
     bool m_log_threadnames = DEFAULT_LOGTHREADNAMES;
 
     fs::path m_file_path;
-    std::atomic<bool> m_reopen_file{false};
+    std::atomic_bool m_reopen_file{false};
 
     ~Logger();
 
@@ -209,13 +209,13 @@ public:
     /** Default for whether ShrinkDebugFile should be run */
     bool DefaultShrinkDebugFile() const;
 
-    std::weak_ptr<LogRateLimiter> SetRateLimiting(uint64_t max_bytes, std::chrono::seconds reset_window) /* EXCLUSIVE_LOCKS_REQUIRED(!m_cs) */ {
-        std::unique_lock scoped_lock(m_cs);
+    std::weak_ptr<LogRateLimiter> SetRateLimiting(uint64_t max_bytes, std::chrono::seconds reset_window) LOCKS_EXCLUDED(m_cs) {
+        LOCK(m_cs);
         return m_limiter = std::make_shared<LogRateLimiter>(max_bytes, reset_window);
     }
 
-    void DisableRateLimiting() /* EXCLUSIVE_LOCKS_REQUIRED(!m_cs) */ {
-        std::unique_lock scoped_lock(m_cs);
+    void DisableRateLimiting() LOCKS_EXCLUDED(m_cs) {
+        LOCK(m_cs);
         m_limiter.reset();
     }
 };
