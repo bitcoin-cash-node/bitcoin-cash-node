@@ -598,6 +598,7 @@ add_library(server
   net.cpp
   net_processing.cpp
   node/blockstorage.cpp
+  node/context.cpp
   node/transaction.cpp
   noui.cpp
   outputtype.cpp
