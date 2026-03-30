@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2025 The Bitcoin developers
+// Copyright (c) 2021-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -1378,8 +1378,7 @@ Result:
 }
 
 UniValue gettxout(const Config &config, const JSONRPCRequest &request) {
-    if (request.fHelp || request.params.size() < 2 ||
-        request.params.size() > 3) {
+    if (request.fHelp || request.params.size() < 2 || request.params.size() > 4) {
         throw std::runtime_error(
             RPCHelpMan{"gettxout",
                 "\nReturns details about an unspent transaction output.\n",
@@ -1387,44 +1386,47 @@ UniValue gettxout(const Config &config, const JSONRPCRequest &request) {
                     {"txid", RPCArg::Type::STR, /* opt */ false, /* default_val */ "", "The transaction id"},
                     {"n", RPCArg::Type::NUM, /* opt */ false, /* default_val */ "", "vout number"},
                     {"include_mempool", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "true", "Whether to include the mempool. Note that an unspent output that is spent in the mempool won't appear."},
-                }}
-                .ToString() +
+                    {"patterns", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "If true then the byteCodePattern object will be added"},
+                }}.ToString() +
             "\nResult:\n"
             "{\n"
-            "  \"bestblock\" : \"hash\",    (string) the block hash\n"
-            "  \"confirmations\" : n,       (numeric) The number of "
-            "confirmations\n"
-            "  \"value\" : x.xxx,           (numeric) The transaction value "
-            "in " +
-            CURRENCY_UNIT +
-            "\n"
-            "  \"scriptPubKey\" : {         (json object)\n"
-            "     \"asm\" : \"code\",       (string)\n"
-            "     \"hex\" : \"hex\",        (string)\n"
-            "     \"reqSigs\" : n,          (numeric) Number of required "
-            "signatures\n"
-            "     \"type\" : \"pubkeyhash\", (string) The type, eg pubkeyhash\n"
+            "  \"bestblock\" : \"hash\",       (string) the block hash\n"
+            "  \"confirmations\" : n,        (numeric) The number of confirmations\n"
+            "  \"value\" : x.xxx,            (numeric) The transaction value in " + CURRENCY_UNIT + "\n"
+            "  \"scriptPubKey\" : {          (json object)\n"
+            "     \"asm\" : \"code\",          (string)\n"
+            "     \"hex\" : \"hex\",           (string)\n"
+            "     \"reqSigs\" : n,           (numeric) Number of required signatures\n"
+            "     \"type\" : \"pubkeyhash\",   (string) The type, eg pubkeyhash\n"
             "     \"addresses\" : [          (array of string) array of Bitcoin Cash addresses\n"
-            "        \"address\"     (string) Bitcoin Cash address\n"
+            "        \"address\"             (string) Bitcoin Cash address\n"
             "        ,...\n"
-            "     ]\n"
+            "     ],\n"
+            "     \"byteCodePattern\" : {    (json object, optional) Only for patterns == true\n"
+            "       \"fingerprint\" : \"str\", (string) Single SHA-256 hash of script pattern\n"
+            "       \"pattern\" : \"str\",     (string) Hex-encoded script pattern\n"
+            "       \"patternAsm\" : \"str\",  (string) Script pattern asm\n"
+            "       \"data\" : [             (json array) Script data pushes\n"
+            "         \"hex\", ...           (string) Hex-encoded data push\n"
+            "       ],\n"
+            "       \"error\": true          (boolean, optional) Only if there was an error parsing the script (e.g. ending with an incomplete push)\n"
+            "     }\n"
             "  },\n"
-            "  \"tokenData\" : {           (json object optional)\n"
-            "    \"category\" : \"hex\",     (string) token id\n"
-            "    \"amount\" : \"xxx\",       (string) fungible amount (is a string to support >53-bit amounts)\n"
-            "    \"nft\" : {               (json object optional)\n"
-            "      \"capability\" : \"xxx\", (string) one of \"none\", \"mutable\", \"minting\"\n"
-            "      \"commitment\" : \"hex\"  (string) NFT commitment\n"
+            "  \"tokenData\" : {             (json object optional)\n"
+            "    \"category\" : \"hex\",       (string) token id\n"
+            "    \"amount\" : \"xxx\",         (string) fungible amount (is a string to support >53-bit amounts)\n"
+            "    \"nft\" : {                 (json object optional)\n"
+            "      \"capability\" : \"xxx\",   (string) one of \"none\", \"mutable\", \"minting\"\n"
+            "      \"commitment\" : \"hex\"    (string) NFT commitment\n"
             "    }\n"
             "  },\n"
-            "  \"coinbase\" : true|false   (boolean) Coinbase or not\n"
+            "  \"coinbase\" : true|false     (boolean) Coinbase or not\n"
             "}\n"
 
             "\nExamples:\n"
             "\nGet unspent transactions\n" +
             HelpExampleCli("listunspent", "") + "\nView the details\n" +
-            HelpExampleCli("gettxout", "\"txid\" 1") +
-            "\nAs a JSON-RPC call\n" +
+            HelpExampleCli("gettxout", "\"txid\" 1") + "\nAs a JSON-RPC call\n" +
             HelpExampleRpc("gettxout", "\"txid\", 1"));
     }
 
@@ -1437,6 +1439,7 @@ UniValue gettxout(const Config &config, const JSONRPCRequest &request) {
     if (!request.params[2].isNull()) {
         fMempool = request.params[2].get_bool();
     }
+    const bool fPatterns = !request.params[3].isNull() && request.params[3].get_bool();
 
     Coin coin;
     if (fMempool) {
@@ -1458,7 +1461,7 @@ UniValue gettxout(const Config &config, const JSONRPCRequest &request) {
     ret.emplace_back("bestblock", pindex->GetBlockHash().GetHex());
     ret.emplace_back("confirmations", coin.GetHeight() == MEMPOOL_HEIGHT ? 0 : pindex->nHeight - coin.GetHeight() + 1);
     ret.emplace_back("value", ValueFromAmount(txout.nValue));
-    ret.emplace_back("scriptPubKey", ScriptPubKeyToUniv(config, txout.scriptPubKey, true));
+    ret.emplace_back("scriptPubKey", ScriptPubKeyToUniv(config, txout.scriptPubKey, true, false, fPatterns));
     if (txout.tokenDataPtr) {
         ret.emplace_back("tokenData", TokenDataToUniv(*txout.tokenDataPtr));
     }
@@ -3075,7 +3078,7 @@ static const ContextFreeRPCCommand commands[] = {
     { "blockchain",         "getmempoolentry",        getmempoolentry,        {"txid"} },
     { "blockchain",         "getmempoolinfo",         getmempoolinfo,         {} },
     { "blockchain",         "getrawmempool",          getrawmempool,          {"verbose"} },
-    { "blockchain",         "gettxout",               gettxout,               {"txid","n","include_mempool"} },
+    { "blockchain",         "gettxout",               gettxout,               {"txid","n","include_mempool", "patterns"} },
     { "blockchain",         "gettxoutsetinfo",        gettxoutsetinfo,        {"hash_type", "hash_or_height", "use_index"} },
     { "blockchain",         "invalidateblock",        invalidateblock,        {"blockhash"} },
     { "blockchain",         "parkblock",              parkblock,              {"blockhash"} },

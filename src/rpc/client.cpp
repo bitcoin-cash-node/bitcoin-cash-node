@@ -117,6 +117,7 @@ static const CRPCConvertParam vRPCConvertParams[] = {
     {"converttopsbt", 1, "permitsigdata"},
     {"gettxout", 1, "n"},
     {"gettxout", 2, "include_mempool"},
+    {"gettxout", 3, "patterns"},
     {"gettxoutsetinfo", 1, "hash_or_height"},
     {"gettxoutsetinfo", 2, "use_index"},
     {"gettxoutproof", 0, "txids"},

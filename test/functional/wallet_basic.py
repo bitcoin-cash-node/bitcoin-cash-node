@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2014-2016 The Bitcoin Core developers
+# Copyright (c) 2017-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet."""
@@ -103,12 +104,20 @@ class WalletTest(BitcoinTestFramework):
         confirmed_txid, confirmed_index = utxos[0]["txid"], utxos[0]["vout"]
         # First, outputs that are unspent both in the chain and in the
         # mempool should appear with or without include_mempool
-        txout = self.nodes[0].gettxout(
-            txid=confirmed_txid, n=confirmed_index, include_mempool=False)
+        txout = self.nodes[0].gettxout(txid=confirmed_txid, n=confirmed_index, include_mempool=False, patterns=True)
+        payload = txout['scriptPubKey']['asm'].split()[-2]  # Grab pubkey payload
         assert_equal(txout['value'], 50)
-        txout = self.nodes[0].gettxout(
-            txid=confirmed_txid, n=confirmed_index, include_mempool=True)
+        # Ensure pattern info is there
+        assert_equal(txout['scriptPubKey']['byteCodePattern']['pattern'], '51ac')
+        assert_equal(txout['scriptPubKey']['byteCodePattern']['data'][0], payload)
+        txout = self.nodes[0].gettxout(txid=confirmed_txid, n=confirmed_index, include_mempool=True, patterns=True)
         assert_equal(txout['value'], 50)
+        # Ensure pattern info is there
+        assert_equal(txout['scriptPubKey']['byteCodePattern']['pattern'], '51ac')
+        assert_equal(txout['scriptPubKey']['byteCodePattern']['data'][0], payload)
+        txout_no_patterns = self.nodes[0].gettxout(txid=confirmed_txid, n=confirmed_index, patterns=False)
+        assert_equal(txout_no_patterns['value'], 50)
+        assert 'byteCodePattern' not in txout_no_patterns['scriptPubKey']  # Ensure pattern info is not there
 
         # Send 21 BCH from 0 to 2 using sendtoaddress call.
         self.nodes[0].sendtoaddress(self.nodes[2].getnewaddress(), 11)
