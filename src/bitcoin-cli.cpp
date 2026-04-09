@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2022 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,6 +16,7 @@
 #include <support/events.h>
 #include <util/strencodings.h>
 #include <util/system.h>
+#include <util/time.h>
 
 #include <event2/buffer.h>
 #include <event2/keyvalq_struct.h>
@@ -24,12 +25,14 @@
 
 #include <cstdio>
 #include <memory>
+#include <optional>
 #include <tuple>
 
 const std::function<std::string(const char *)> G_TRANSLATION_FUN = nullptr;
 
 static const char DEFAULT_RPCCONNECT[] = "127.0.0.1";
 static const int DEFAULT_HTTP_CLIENT_TIMEOUT = 900;
+static constexpr int DEFAULT_WAIT_CLIENT_TIMEOUT = 0;
 static const bool DEFAULT_NAMED = false;
 static const int CONTINUE_EXECUTION = -1;
 
@@ -87,6 +90,10 @@ static void SetupCliArgs() {
                  ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::OPTIONS);
     gArgs.AddArg("-rpcwait", "Wait for RPC server to start", ArgsManager::ALLOW_ANY,
                  OptionsCategory::OPTIONS);
+    gArgs.AddArg("-rpcwaittimeout=<n>",
+                 strprintf("Timeout in seconds to wait for the RPC server to start, or 0 for no timeout. (default: %d)",
+                           DEFAULT_WAIT_CLIENT_TIMEOUT),
+                 ArgsManager::ALLOW_INT, OptionsCategory::OPTIONS);
     gArgs.AddArg("-rpcuser=<user>", "Username for JSON-RPC connections", ArgsManager::ALLOW_ANY,
                  OptionsCategory::OPTIONS);
     gArgs.AddArg("-rpcpassword=<pw>", "Password for JSON-RPC connections",
@@ -530,6 +537,11 @@ static int CommandLineRPC(int argc, char *argv[]) {
 
         // Execute and handle connection failures with -rpcwait
         const bool fWait = gArgs.GetBoolArg("-rpcwait", false);
+        std::optional<int64_t> optDeadline;
+        if (const auto timeout = gArgs.GetArg("-rpcwaittimeout", DEFAULT_WAIT_CLIENT_TIMEOUT); timeout > 0) {
+            optDeadline = GetTime<std::chrono::seconds>().count() + timeout;
+        }
+
         do {
             try {
                 const UniValue reply = CallRPC(rh.get(), method, args);
@@ -578,7 +590,7 @@ static int CommandLineRPC(int argc, char *argv[]) {
                 // Connection succeeded, no need to retry.
                 break;
             } catch (const CConnectionFailed &) {
-                if (fWait) {
+                if (fWait && (!optDeadline || GetTime<std::chrono::seconds>().count() < *optDeadline)) {
                     MilliSleep(1000);
                 } else {
                     throw;

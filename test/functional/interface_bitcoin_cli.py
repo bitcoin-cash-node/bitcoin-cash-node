@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
 # Copyright (c) 2017-2019 The Bitcoin Core developers
+# Copyright (c) 2019-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test bitcoin-cli"""
+import time
+
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
+    assert_greater_than_or_equal,
     assert_raises_process_error,
     get_auth_cookie,
 )
@@ -93,6 +97,12 @@ class TestBitcoinCli(BitcoinTestFramework):
         assert_equal(cli_get_info['relayfee'], network_info['relayfee'])
         # unlocked_until is not tested because the wallet is not encrypted
 
+        self.log.info("Test -rpcwait option waits at most -rpcwaittimeout seconds for startup")
+        self.stop_node(0)  # stop the node so we time out
+        start_time = time.time()
+        assert_raises_process_error(1, "Could not connect to the server",
+                                    self.nodes[0].cli('-rpcwait', '-rpcwaittimeout=5').echo)
+        assert_greater_than_or_equal(time.time(), start_time + 5)
 
 if __name__ == '__main__':
     TestBitcoinCli().main()

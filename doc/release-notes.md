@@ -18,7 +18,8 @@ None
 
 ## Added functionality
 
-None
+- A new `-rpcwaittimeout` argument to `bitcoin-cli` sets the timeout in seconds to use with `-rpcwait`. If the timeout
+  expires, `bitcoin-cli` will report a failure.
 
 ## Deprecated functionality
 
