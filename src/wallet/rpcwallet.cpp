@@ -127,6 +127,7 @@ static void WalletTxToJSON(interfaces::Chain &chain,
     }
     if (confirms > 0) {
         entry.emplace_back("blockhash", wtx.hashBlock.GetHex());
+        entry.emplace_back("blockheight", locked_chain.getHeight().value_or(-1) - (confirms - 1));
         entry.emplace_back("blockindex", wtx.nIndex);
         int64_t block_time;
         bool found_block =
@@ -1650,6 +1651,7 @@ UniValue listtransactions(const Config &config, const JSONRPCRequest &request) {
             "outputs of this unconfirmed transaction safe to spend.\n"
             "    \"blockhash\": \"hashvalue\", (string) The block hash "
             "containing the transaction.\n"
+            "    \"blockheight\": n,         (numeric) The block height containing the transaction.\n"
             "    \"blockindex\": n,          (numeric) The index of the "
             "transaction in the block that includes it.\n"
             "    \"blocktime\": xxx,         (numeric) The block time in "
@@ -1806,6 +1808,7 @@ static UniValue listsinceblock(const Config &config,
             "    \"blockhash\": \"hashvalue\",     (string) The block hash "
             "containing the transaction. Available for 'send' and 'receive' "
             "category of transactions.\n"
+            "    \"blockheight\": n,         (numeric) The block height containing the transaction.\n"
             "    \"blockindex\": n,          (numeric) The index of the "
             "transaction in the block that includes it. Available for 'send' "
             "and 'receive' category of transactions.\n"
@@ -1976,6 +1979,7 @@ static UniValue gettransaction(const Config &config,
             "  \"confirmations\" : n,     (numeric) The number of "
             "confirmations\n"
             "  \"blockhash\" : \"hash\",  (string) The block hash\n"
+            "  \"blockheight\": n,        (numeric) The block height containing the transaction.\n"
             "  \"blockindex\" : xx,       (numeric) The index of the "
             "transaction in the block that includes it\n"
             "  \"blocktime\" : ttt,       (numeric) The time in seconds since "
