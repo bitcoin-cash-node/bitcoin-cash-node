@@ -2084,6 +2084,7 @@ static UniValue getchaintxstats(const Config &config,
             "  \"time\": xxxxx,                         (numeric) The timestamp for the final block in the window in UNIX format.\n"
             "  \"txcount\": xxxxx,                      (numeric) The total number of transactions in the chain up to that point.\n"
             "  \"window_final_block_hash\": \"...\",      (string) The hash of the final block in the window.\n"
+            "  \"window_final_block_height\": xxxxx,    (numeric) The height of the final block in the window.\n"
             "  \"window_block_count\": xxxxx,           (numeric) Size of the window in number of blocks.\n"
             "  \"window_tx_count\": xxxxx,              (numeric) The number of transactions in the window. Only returned if \"window_block_count\" is > 0.\n"
             "  \"window_interval\": xxxxx,              (numeric) The elapsed time in the window in seconds. Only returned if \"window_block_count\" is > 0.\n"
@@ -2139,10 +2140,11 @@ static UniValue getchaintxstats(const Config &config,
                             - static_cast<int64_t>(pindexPast->GetChainTxCount());
 
     UniValue::Object ret;
-    ret.reserve(blockcount > 0 ? nTimeDiff > 0 ? 7 : 6 : 4);
+    ret.reserve(blockcount > 0 ? nTimeDiff > 0 ? 8 : 7 : 5);
     ret.emplace_back("time", pindex->GetBlockTime());
     ret.emplace_back("txcount", pindex->GetChainTxCount());
     ret.emplace_back("window_final_block_hash", pindex->GetBlockHash().GetHex());
+    ret.emplace_back("window_final_block_height", pindex->nHeight);
     ret.emplace_back("window_block_count", blockcount);
     if (blockcount > 0) {
         ret.emplace_back("window_tx_count", nTxDiff);
