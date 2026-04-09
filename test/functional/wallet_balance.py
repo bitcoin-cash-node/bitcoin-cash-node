@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 # Copyright (c) 2018 The Bitcoin Core developers
+# Copyright (c) 2018-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet balance RPC methods."""
+from test_framework.cdefs import COINBASE_MATURITY
 from test_framework.util import (
     assert_equal,
     assert_raises_rpc_error,
@@ -51,6 +53,9 @@ class WalletTest(BitcoinTestFramework):
         self.skip_if_no_wallet()
 
     def run_test(self):
+        # Tests watchonly behavior
+        self.nodes[0].importaddress(RANDOM_COINBASE_ADDRESS)
+
         # Check that nodes don't own any UTXOs
         assert_equal(len(self.nodes[0].listunspent()), 0)
         assert_equal(len(self.nodes[1].listunspent()), 0)
@@ -60,8 +65,22 @@ class WalletTest(BitcoinTestFramework):
         self.generate(self.nodes[0], 1)
         self.sync_all()
         self.generate(self.nodes[1], 1)
-        self.generatetoaddress(self.nodes[1], 100, RANDOM_COINBASE_ADDRESS)
         self.sync_all()
+
+        # Verify listunspent returns immature coinbase if 'include_immature_coinbase' is set
+        assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': True})), 1)
+        assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': False})), 0)
+        assert_equal(len(self.nodes[1].listunspent(query_options={'include_immature_coinbase': True})), 1)
+        assert_equal(len(self.nodes[1].listunspent(query_options={'include_immature_coinbase': False})), 0)
+
+        self.generatetoaddress(self.nodes[1], COINBASE_MATURITY, RANDOM_COINBASE_ADDRESS)
+        self.sync_all()
+
+        # Verify listunspent returns all immature coinbases if 'include_immature_coinbase' is set
+        # Wallet will see the coinbases going to the imported 'RANDOM_COINBASE_ADDRESS'
+        assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': False})), 1)
+        assert_equal(len(self.nodes[0].listunspent(query_options={'include_immature_coinbase': True})),
+                     COINBASE_MATURITY + 1)
 
         assert_equal(self.nodes[0].getbalance(), 50)
         assert_equal(self.nodes[1].getbalance(), 50)

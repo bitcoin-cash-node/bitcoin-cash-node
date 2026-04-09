@@ -930,7 +930,8 @@ public:
                         const uint64_t nMaximumCount = 0,
                         const int nMinDepth = 0,
                         const int nMaxDepth = 9999999,
-                        const CFeeRate = CFeeRate(Amount::zero())) const
+                        const CFeeRate = CFeeRate(Amount::zero()),
+                        const bool fIncludeImmatureCoinbase = false) const
         EXCLUSIVE_LOCKS_REQUIRED(cs_wallet);
 
     /**

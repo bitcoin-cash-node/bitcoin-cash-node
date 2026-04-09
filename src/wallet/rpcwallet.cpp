@@ -3194,6 +3194,7 @@ static UniValue listunspent(const Config &config,
                             {"minimumSumAmount", RPCArg::Type::AMOUNT, /* opt */ true, /* default_val */ "unlimited", "Minimum sum value of all UTXOs in " + CURRENCY_UNIT + ""},
                             {"includeTokens", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Whether to show UTXOs with CashTokens on them"},
                             {"tokensOnly", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Whether to only show UTXOs with CashTokens on them (implies includeTokens=true)"},
+                            {"include_immature_coinbase", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Include immature coinbase UTXOs"},
                         },
                         "query_options"},
                 }}
@@ -3291,6 +3292,7 @@ static UniValue listunspent(const Config &config,
     Amount nMinimumSumAmount = MAX_MONEY;
     uint64_t nMaximumCount = 0;
     std::unique_ptr<CCoinControl> coinControl;
+    bool fIncludeImmatureCoinbase = false;
 
     if (!request.params[4].isNull()) {
         const UniValue::Object &options = request.params[4].get_obj();
@@ -3322,6 +3324,9 @@ static UniValue listunspent(const Config &config,
                 coinControl->m_tokens_only = coinControl->m_allow_tokens = true;
             }
         }
+        if (auto includeImmatureCoinbaseUV = options.locate("include_immature_coinbase")) {
+            fIncludeImmatureCoinbase = includeImmatureCoinbaseUV->get_bool();
+        }
     }
 
     // Make sure the results are valid at least up to the most recent block
@@ -3341,7 +3346,7 @@ static UniValue listunspent(const Config &config,
         pwallet->AvailableCoins(*locked_chain, vecOutputs, !include_unsafe,
                                 coinControl.get(), nMinimumAmount, nMaximumAmount,
                                 nMinimumSumAmount, nMaximumCount, nMinDepth,
-                                nMaxDepth);
+                                nMaxDepth, CFeeRate{Amount::zero()}, fIncludeImmatureCoinbase);
     }
 
     LOCK(pwallet->cs_wallet);
