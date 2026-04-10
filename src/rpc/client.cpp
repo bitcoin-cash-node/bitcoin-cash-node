@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -97,6 +97,8 @@ static const CRPCConvertParam vRPCConvertParams[] = {
     {"signrawtransactionwithkey", 1, "privkeys"},
     {"signrawtransactionwithkey", 2, "prevtxs"},
     {"signrawtransactionwithwallet", 1, "prevtxs"},
+    {"simulaterawtransaction", 0, "rawtxs"},
+    {"simulaterawtransaction", 1, "options"},
     {"sendrawtransaction", 1, "allowhighfees"},
     {"testmempoolaccept", 0, "rawtxs"},
     {"testmempoolaccept", 1, "allowhighfees"},
