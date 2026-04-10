@@ -148,7 +148,10 @@ void RPCTypeCheckArgument(const UniValue &value, int expectedTypeMask) {
     }
 }
 
-void RPCTypeCheckObj(const UniValue::Object &o, std::initializer_list<std::pair<const char *, int>> expectedTypeMasks) {
+void RPCTypeCheckObj(const UniValue::Object &o, std::initializer_list<std::pair<const char *, int>> expectedTypeMasks,
+                     const bool disallowUnknownKeys) {
+    std::set<std::string> allowedKeys; // only populated if disallowUnknownKeys == true
+
     for (auto & [expectedKey, expectedTypeMask] : expectedTypeMasks) {
         const UniValue *value = o.locate(expectedKey);
         if (value) {
@@ -162,7 +165,21 @@ void RPCTypeCheckObj(const UniValue::Object &o, std::initializer_list<std::pair<
             // Key not found, but it is required (null not accepted).
             throw JSONRPCError(RPC_TYPE_ERROR, strprintf("Missing %s", expectedKey));
         }
+
+        if (disallowUnknownKeys) {
+            // build up set of allowed keys
+            allowedKeys.insert(expectedKey);
+        }
     }
+
+    if (disallowUnknownKeys) {
+        for (const auto & [k, v] : o) {
+            if (!allowedKeys.contains(k)) {
+                throw JSONRPCError(RPC_TYPE_ERROR, strprintf("Unexpected key %s", k));
+            }
+        }
+    }
+
 }
 
 void RPCTypeCheckObjStrict(const UniValue::Object &o, std::initializer_list<std::pair<const char *, int>> expectedTypeMasks) {
