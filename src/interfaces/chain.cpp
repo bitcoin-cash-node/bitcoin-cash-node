@@ -1,5 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
-// Copyright (c) 2020-2023 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,6 +11,7 @@
 #include <primitives/block.h>
 #include <primitives/blockhash.h>
 #include <sync.h>
+#include <txmempool.h>
 #include <util/system.h>
 #include <validation.h>
 
@@ -130,6 +131,16 @@ namespace {
                 return fork->nHeight;
             }
             return std::nullopt;
+        }
+        void findCoins(std::map<COutPoint, Coin> &coins) override {
+            AssertLockHeld(cs_main);
+            LOCK(g_mempool.cs);
+            CCoinsViewMemPool mempool_view(pcoinsTip.get(), g_mempool);
+            for (auto & [outpoint, coin] : coins) {
+                if (!mempool_view.GetCoin(outpoint, coin)) {
+                    coin.Clear(); // Either the coin is not in the CCoinsViewCache or is spent
+                }
+            }
         }
     };
 
