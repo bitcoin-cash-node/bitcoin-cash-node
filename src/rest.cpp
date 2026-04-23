@@ -182,7 +182,8 @@ static bool rest_headers(const std::any& context, Config &config, HTTPRequest *r
                 ssHeader << pindex->GetBlockHeader();
             }
 
-            std::string strHex = HexStr(ssHeader) + "\n";
+            std::string strHex = HexStr(ssHeader, false, 1);
+            strHex.append("\n");
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
             return true;
@@ -193,7 +194,8 @@ static bool rest_headers(const std::any& context, Config &config, HTTPRequest *r
             for (const CBlockIndex *pindex : headers) {
                 jsonHeaders.emplace_back(blockheaderToJSON(config, tip, pindex));
             }
-            std::string strJSON = UniValue::stringify(jsonHeaders) + "\n";
+            std::string strJSON = UniValue::stringify(jsonHeaders);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -284,7 +286,7 @@ static bool rest_spent_txouts(const Config &config, HTTPRequest *req, const std:
         case RetFormat::HEX: {
             CDataStream ssSpentResponse(SER_NETWORK, PROTOCOL_VERSION);
             SerializeBlockUndo(ssSpentResponse, block_undo);
-            std::string strHex = HexStr(ssSpentResponse);
+            std::string strHex = HexStr(ssSpentResponse, false, 1);
             strHex.append("\n");
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
@@ -361,7 +363,8 @@ static bool rest_block(const Config &config, HTTPRequest *req,
         }
 
         case RetFormat::HEX: {
-            std::string strHex = HexStr(rawBlock) + "\n";
+            std::string strHex = HexStr(rawBlock, false, 1);
+            strHex.append("\n");
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
             return true;
@@ -371,7 +374,8 @@ static bool rest_block(const Config &config, HTTPRequest *req,
             CBlock block;
             VectorReader(SER_NETWORK, PROTOCOL_VERSION, rawBlock, 0) >> block;
             UniValue::Object objBlock = blockToJSON(config, block, tip, pblockindex, txOptions);
-            std::string strJSON = UniValue::stringify(objBlock) + "\n";
+            std::string strJSON = UniValue::stringify(objBlock);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -415,7 +419,8 @@ static bool rest_chaininfo(const std::any& context, Config &config, HTTPRequest 
             jsonRequest.context = context;
             jsonRequest.params.setArray();
             UniValue chainInfoObject = getblockchaininfo(config, jsonRequest);
-            std::string strJSON = UniValue::stringify(chainInfoObject) + "\n";
+            std::string strJSON = UniValue::stringify(chainInfoObject);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -440,7 +445,8 @@ static bool rest_mempool_info(const std::any& context, Config &config, HTTPReque
         case RetFormat::JSON: {
             UniValue::Object mempoolInfoObject = MempoolInfoToJSON(config, ::g_mempool);
 
-            std::string strJSON = UniValue::stringify(mempoolInfoObject) + "\n";
+            std::string strJSON = UniValue::stringify(mempoolInfoObject);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -465,7 +471,8 @@ static bool rest_mempool_contents(const std::any& context, Config &config, HTTPR
         case RetFormat::JSON: {
             UniValue mempoolObject = MempoolToJSON(::g_mempool, true);
 
-            std::string strJSON = UniValue::stringify(mempoolObject) + "\n";
+            std::string strJSON = UniValue::stringify(mempoolObject);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -520,7 +527,8 @@ static bool rest_tx(const std::any& context, Config &config, HTTPRequest *req,
                              PROTOCOL_VERSION);
             ssTx << tx;
 
-            std::string strHex = HexStr(ssTx) + "\n";
+            std::string strHex = HexStr(ssTx, false, 1);
+            strHex.append("\n");
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
             return true;
@@ -532,7 +540,8 @@ static bool rest_tx(const std::any& context, Config &config, HTTPRequest *req,
             if (hasHash) {
                 objTx.emplace_back("blockhash", hashBlock.GetHex());
             }
-            std::string strJSON = UniValue::stringify(objTx) + "\n";
+            std::string strJSON = UniValue::stringify(objTx);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -724,7 +733,8 @@ static bool rest_getutxos(const std::any& context, Config &config, HTTPRequest *
                                   << ::ChainActive().Tip()->GetBlockHash() << bitmap
                                   << outs;
             }
-            std::string strHex = HexStr(ssGetUTXOResponse) + "\n";
+            std::string strHex = HexStr(ssGetUTXOResponse, false, 1);
+            strHex.append("\n");
 
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
@@ -758,7 +768,8 @@ static bool rest_getutxos(const std::any& context, Config &config, HTTPRequest *
             objGetUTXOResponse.emplace_back("utxos", std::move(utxos));
 
             // return json string
-            std::string strJSON = UniValue::stringify(objGetUTXOResponse) + "\n";
+            std::string strJSON = UniValue::stringify(objGetUTXOResponse);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;

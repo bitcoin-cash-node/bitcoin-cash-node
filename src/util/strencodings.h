@@ -156,7 +156,7 @@ extern const char hexmap[513];
 }
 
 template <typename T>
-std::string HexStr(const T itbegin, const T itend, bool fSpaces = false) {
+std::string HexStr(const T itbegin, const T itend, bool fSpaces = false, size_t extraReserve = 0) {
     std::string rv;
     using strencodings::hexmap;
     using diff_t = typename std::iterator_traits<T>::difference_type;
@@ -165,6 +165,7 @@ std::string HexStr(const T itbegin, const T itend, bool fSpaces = false) {
     if (size <= 0) // short-circuit return and/or guard against invalid usage
         return rv;
     size -= iSpaces;  // fSpaces only: deduct 1 space for first item
+    rv.reserve(size_t(size) + extraReserve);
     rv.resize(size_t(size)); // pre-allocate the entire array to avoid using the slower push_back
     size_t pos = 0;
     if (!fSpaces) {
@@ -200,12 +201,12 @@ std::string HexStr(const T itbegin, const T itend, bool fSpaces = false) {
 /**
  * Convert a span of bytes to a lower-case hexadecimal string.
  */
-inline std::string HexStr(const Span<const uint8_t> input, bool fSpaces = false) {
-    return HexStr(input.begin(), input.end(), fSpaces);
+inline std::string HexStr(const Span<const uint8_t> input, bool fSpaces = false, size_t extraReserve = 0) {
+    return HexStr(input.begin(), input.end(), fSpaces, extraReserve);
 }
 
-inline std::string HexStr(const Span<const char> input, bool fSpaces = false) {
-    return HexStr(MakeUInt8Span(input), fSpaces);
+inline std::string HexStr(const Span<const char> input, bool fSpaces = false, size_t extraReserve = 0) {
+    return HexStr(MakeUInt8Span(input), fSpaces, extraReserve);
 }
 
 /**
