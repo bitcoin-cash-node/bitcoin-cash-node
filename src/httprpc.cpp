@@ -1,5 +1,5 @@
 // Copyright (c) 2015-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2022 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,8 +20,12 @@
 #include <util/system.h>
 #include <walletinitinterface.h>
 
+#include <algorithm>
 #include <cstdio>
+#include <map>
 #include <memory>
+#include <set>
+#include <utility>
 
 /** WWW-Authenticate to present with 401 Unauthorized response */
 static const char *WWW_AUTH_HEADER_DATA = "Basic realm=\"jsonrpc\"";
@@ -69,6 +73,9 @@ static std::string strRPCUserColonPass;
 static std::string strRPCCORSDomain;
 /* Stored RPC timer interface (for unregistration) */
 static std::unique_ptr<HTTPRPCTimerInterface> httpRPCTimerInterface;
+/* RPC Auth Whitelist */
+static std::map<std::string, std::set<std::string>> g_rpc_whitelist;
+static bool g_rpc_whitelist_default = false;
 
 static void JSONErrorReply(HTTPRequest* req, JSONRPCError&& error, UniValue&& id) {
     // Send error reply from json-rpc error object.
@@ -327,17 +334,56 @@ bool HTTPRPCRequestProcessor::ProcessHTTPRequest(const std::any& context, HTTPRe
         // Set the URI
         jreq.URI = req->GetURI();
 
+        // Lookup user in whitelist, if any
+        const std::set<std::string> *user_whitelist = nullptr;
+        if (auto it = g_rpc_whitelist.find(jreq.authUser); it != g_rpc_whitelist.end()) {
+            user_whitelist = &it->second;
+        }
+        if (!user_whitelist && g_rpc_whitelist_default) {
+            // If default is deny all, and user has no whitelist, deny access early.
+            LogPrintf("RPC User %s not allowed to call any methods\n", jreq.authUser);
+            req->WriteReply(HTTP_FORBIDDEN);
+            return false;
+        }
+
         std::string strReply;
         // singleton request
         if (valRequest.isObject()) {
             jreq.parse(std::move(valRequest));
+
+            // If this username has a whitelist, ensure this method is listed, otherwise deny access.
+            if (user_whitelist && !user_whitelist->contains(jreq.strMethod)) {
+                LogPrintf("RPC User %s not allowed to call method \"%s\"\n", jreq.authUser, jreq.strMethod);
+                req->WriteReply(HTTP_FORBIDDEN);
+                return false;
+            }
 
             // Send reply
             // (id is copied rather than moved, so it's still there for exception handlers below)
             strReply = JSONRPCReply(rpcServer.ExecuteCommand(config, jreq), UniValue(), UniValue(jreq.id));
         } else if (valRequest.isArray()) {
             // array of requests
-            strReply = JSONRPCExecBatch(config, rpcServer, jreq, std::move(valRequest.get_array()));
+            UniValue::Array &reqArray = valRequest.get_array();
+
+            if (user_whitelist) {
+                // If this username has a whitelist, go through each request in the batch and ensure all the methods in
+                // the batch are in the whitelist.
+                for (UniValue &item : reqArray) {
+                    if (!item.isObject()) {
+                        throw JSONRPCError(RPC_INVALID_REQUEST, "Invalid Request object");
+                    } else {
+                        // Parse method
+                        const std::string &strMethod = JSONRPCRequest::parseMethod(item.get_obj());
+                        if (!user_whitelist->contains(strMethod)) {
+                            LogPrintf("RPC User %s not allowed to call method \"%s\"\n", jreq.authUser, strMethod);
+                            req->WriteReply(HTTP_FORBIDDEN);
+                            return false;
+                        }
+                    }
+                }
+            }
+
+            strReply = JSONRPCExecBatch(config, rpcServer, jreq, std::move(reqArray));
         } else {
             throw JSONRPCError(RPC_PARSE_ERROR, "Top-level object parse error");
         }
@@ -379,6 +425,29 @@ static bool InitRPCAuthentication() {
     if (gArgs.GetArg("-rpcauth", "") != "") {
         LogPrintf("Using rpcauth authentication.\n");
     }
+
+    g_rpc_whitelist_default = gArgs.GetBoolArg("-rpcwhitelistdefault", gArgs.IsArgSet("-rpcwhitelist"));
+    for (const std::string &strRPCWhitelist : gArgs.GetArgs("-rpcwhitelist")) {
+        const auto pos = strRPCWhitelist.find(':');
+        const std::string strUser = strRPCWhitelist.substr(0, pos);
+        const bool intersect = g_rpc_whitelist.contains(strUser);
+        std::set<std::string> &whitelist = g_rpc_whitelist[strUser];
+        if (pos != std::string::npos) {
+            const std::string strWhitelist = strRPCWhitelist.substr(pos + 1);
+            std::set<std::string> new_whitelist;
+            Split(new_whitelist, strWhitelist, ", ", true);
+            if (intersect) {
+                std::set<std::string> whitelist_intersection;
+                std::set_intersection(new_whitelist.begin(), new_whitelist.end(),
+                                      whitelist.begin(), whitelist.end(),
+                                      std::inserter(whitelist_intersection, whitelist_intersection.end()));
+                whitelist = std::move(whitelist_intersection);
+            } else {
+                whitelist = std::move(new_whitelist);
+            }
+        }
+    }
+
     return true;
 }
 

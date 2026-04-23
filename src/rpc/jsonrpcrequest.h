@@ -21,4 +21,8 @@ public:
     std::any context;
 
     void parse(UniValue&& valRequest);
+
+    // Internal helper (used in multiple places); Returns the "method" key's string, or throws JSONRPCError if not found
+    // and/or the value under "method" is not a JSON string.
+    static std::string &parseMethod(UniValue::Object &request);
 };
