@@ -41,6 +41,19 @@ instead of the complete transaction details. The option only affects the JSON re
 
 Given a block hash: returns `<COUNT>` amount of blockheaders in upward direction.
 
+#### Spent transaction outputs
+
+`GET /rest/spenttxouts/<BLOCK-HASH>.<bin|hex|json>`
+`GET /rest/spenttxouts/withpatterns/<BLOCK-HASH>.<bin|hex|json>`
+
+Given a block hash: returns a collection of spent transaction output lists,
+one per transaction in the block.
+
+With the /withpatterns/ option JSON response will also contain additional "byteCodePattern"
+objects in various JSON objects related to scripts. The option only affects the JSON response.
+
+Responds with 404 if the block doesn't exist or its undo data is not available.
+
 ### Chaininfos
 
 `GET /rest/chaininfo.json`
