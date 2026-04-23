@@ -205,6 +205,11 @@ def ser_string_vector(v):
     return r
 
 
+def deser_block_spent_outputs(f):
+    nit = deser_compact_size(f)
+    return [deser_vector(f, CTxOut) for _ in range(nit)]
+
+
 class CompactSize(int):
     def serialize(self):
         assert self >= 0
