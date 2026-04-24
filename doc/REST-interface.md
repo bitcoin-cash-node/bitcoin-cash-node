@@ -15,9 +15,13 @@ The interface runs on the same port as the JSON-RPC interface, by default:
 ### Transactions
 
 `GET /rest/tx/<TX-HASH>.<bin|hex|json>`
+`GET /rest/tx/withpatterns/<TX-HASH>.<bin|hex|json>`
 
 Given a transaction hash: returns a transaction in binary, hex-encoded binary,
 or JSON formats.
+
+With the /withpatterns/ option JSON response will also contain additional "byteCodePattern"
+objects in various JSON objects related to scripts. The option only affects the JSON response.
 
 For full TX query capability, one must enable the transaction index via "txindex=1"
 command line / configuration option.
@@ -26,6 +30,7 @@ command line / configuration option.
 
 `GET /rest/block/<BLOCK-HASH>.<bin|hex|json>`
 `GET /rest/block/notxdetails/<BLOCK-HASH>.<bin|hex|json>`
+`GET /rest/block/withpatterns/<BLOCK-HASH>.<json|hex|json>`
 
 Given a block hash: returns a block, in binary, hex-encoded binary or JSON formats.
 
@@ -34,6 +39,9 @@ maximum memory usage at least 2.66MB (1 MB max block, plus hex encoding) per req
 
 With the /notxdetails/ option JSON response will only contain the transaction hash
 instead of the complete transaction details. The option only affects the JSON response.
+
+With the /withpatterns/ option JSON response will also contain additional "byteCodePattern"
+objects in various JSON objects related to scripts. The option only affects the JSON response.
 
 ### Blockheaders
 
