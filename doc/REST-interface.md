@@ -44,6 +44,13 @@ instead of the complete transaction details. The option only affects the JSON re
 With the /withpatterns/ option JSON response will also contain additional "byteCodePattern"
 objects in various JSON objects related to scripts. The option only affects the JSON response.
 
+#### Blockhash by height
+
+`GET /rest/blockhashbyheight/<HEIGHT>.<bin|hex|json>`
+
+Given a height: returns hash of block in the active chain at height provided.
+
+
 ### Blockheaders
 
 `GET /rest/headers/<COUNT>/<BLOCK-HASH>.<bin|hex|json>`

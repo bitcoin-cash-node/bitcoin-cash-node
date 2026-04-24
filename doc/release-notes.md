@@ -34,7 +34,8 @@ None
 
 ## New RPC methods
 
-None
+- A new REST endpoint has been introduced: `/rest/blockhashbyheight/<HEIGHT>.<bin|hex|json>`, which can be used to
+  retrieve the block hash of a block in the active chain, given a block height.
 
 ## User interface changes
 
