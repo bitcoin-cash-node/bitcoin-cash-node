@@ -27,6 +27,7 @@ class ListSinceBlockTest (BitcoinTestFramework):
         self.test_double_spend()
         self.test_double_send()
         self.test_send_to_self()
+        self.test_label()
 
     def test_no_blockhash(self):
         txid = self.nodes[2].sendtoaddress(self.nodes[0].getnewaddress(), 1)
@@ -312,6 +313,23 @@ class ListSinceBlockTest (BitcoinTestFramework):
         assert_equal(len(coins), 2)
         assert any(c["address"] == addr for c in coins)
         assert all(self.nodes[2].getaddressinfo(c["address"])["ischange"] for c in coins)
+
+    def test_label(self):
+        self.log.info('Test passing "label" argument fetches incoming transactions having the specified label')
+        new_addr = self.nodes[1].getnewaddress(label="new_addr")
+
+        self.nodes[2].sendtoaddress(address=new_addr, amount="0.001")
+        self.generate(self.nodes[2], 1)
+        self.sync_all()
+
+        for label in ["new_addr", ""]:
+            transactions = self.nodes[1].listsinceblock(label=label)["transactions"]
+            if label == "new_addr":
+                assert_equal(len(transactions), 1)
+            for txn in transactions:
+                assert_equal(txn.get("label", ""), label)
+                if label == "new_addr":
+                    assert_equal(txn["address"], new_addr)
 
 
 if __name__ == '__main__':

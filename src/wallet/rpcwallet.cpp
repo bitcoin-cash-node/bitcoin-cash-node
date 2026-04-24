@@ -1526,7 +1526,7 @@ static void ListTransactions(interfaces::Chain::Lock &locked_chain,
                              CWallet *const pwallet, const CWalletTx &wtx,
                              int nMinDepth, bool fLong, UniValue::Array &ret,
                              const isminefilter &filter_ismine,
-                             const std::string *filter_label,
+                             const std::optional<std::string> &filter_label,
                              const bool include_change = false) {
     Amount nFee;
     std::list<COutputEntry> listReceived;
@@ -1685,9 +1685,9 @@ UniValue listtransactions(const Config &config, const JSONRPCRequest &request) {
     // the user could have gotten from another RPC command prior to now
     pwallet->BlockUntilSyncedToCurrentChain();
 
-    const std::string *filter_label = nullptr;
+    std::optional<std::string> filter_label;
     if (!request.params[0].isNull() && request.params[0].get_str() != "*") {
-        filter_label = &request.params[0].get_str();
+        filter_label = request.params[0].get_str();
         if (filter_label->empty()) {
             throw JSONRPCError(
                 RPC_INVALID_PARAMETER,
@@ -1727,8 +1727,9 @@ UniValue listtransactions(const Config &config, const JSONRPCRequest &request) {
         for (CWallet::TxItems::const_reverse_iterator it = txOrdered.rbegin();
              it != txOrdered.rend(); ++it) {
             CWalletTx *const pwtx = (*it).second;
-            ListTransactions(*locked_chain, pwallet, *pwtx, 0, true, ret,
-                             filter, filter_label);
+
+            ListTransactions(*locked_chain, pwallet, *pwtx, 0, true, ret,filter, filter_label);
+
             if (int(ret.size()) >= (nCount + nFrom)) {
                 break;
             }
@@ -1765,7 +1766,7 @@ static UniValue listsinceblock(const Config &config,
         return UniValue();
     }
 
-    if (request.fHelp || request.params.size() > 5) {
+    if (request.fHelp || request.params.size() > 6) {
         throw std::runtime_error(
             RPCHelpMan{"listsinceblock",
                 "\nGet all transactions in blocks since block [blockhash], or all transactions if omitted.\n"
@@ -1778,6 +1779,7 @@ static UniValue listsinceblock(const Config &config,
                     {"include_removed", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "true", "Show transactions that were removed due to a reorg in the \"removed\" array\n"
             "                                                           (not guaranteed to work on pruned nodes)"},
                     {"include_change", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Also add entries for change outputs."},
+                    {"label", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Return only incoming transactions paying to addresses with the specified label."},
                 }}
                 .ToString() +
             "\nResult:\n"
@@ -1892,10 +1894,14 @@ static UniValue listsinceblock(const Config &config,
         filter = filter | ISMINE_WATCH_ONLY;
     }
 
-    bool include_removed =
-        (request.params[3].isNull() || request.params[3].get_bool());
+    const bool include_removed = (request.params[3].isNull() || request.params[3].get_bool());
 
     const bool include_change = request.params[4].isNull() ? false : request.params[4].get_bool();
+
+    std::optional<std::string> filter_label;
+    if (!request.params[5].isNull()) {
+        filter_label = request.params[5].get_str();
+    }
 
     const std::optional<int> tip_height = locked_chain->getHeight();
     int depth = tip_height && height ? (1 + *tip_height - *height) : -1;
@@ -1907,7 +1913,7 @@ static UniValue listsinceblock(const Config &config,
 
         if (depth == -1 || tx.GetDepthInMainChain(*locked_chain) < depth) {
             ListTransactions(*locked_chain, pwallet, tx, 0, true, transactions,
-                             filter, nullptr /* filter_label */, include_change);
+                             filter, filter_label, include_change);
         }
     }
 
@@ -1927,7 +1933,7 @@ static UniValue listsinceblock(const Config &config,
                 // appear here, even negative confirmation ones, hence the big
                 // negative.
                 ListTransactions(*locked_chain, pwallet, it->second, -100000000,
-                                 true, removed, filter, nullptr /* filter_label */, include_change);
+                                 true, removed, filter, filter_label, include_change);
             }
         }
         blockId = block.hashPrevBlock;
@@ -2078,7 +2084,7 @@ static UniValue gettransaction(const Config &config,
 
     UniValue::Array details;
     ListTransactions(*locked_chain, pwallet, wtx, 0, false, details, filter,
-                     nullptr /* filter_label */);
+                     std::nullopt /* filter_label */);
     entry.emplace_back("details", std::move(details));
 
     entry.emplace_back("hex", EncodeHexTx(*wtx.tx));
@@ -4536,7 +4542,7 @@ static const ContextFreeRPCCommand commands[] = {
     { "wallet",             "listlockunspent",              listlockunspent,              {} },
     { "wallet",             "listreceivedbyaddress",        listreceivedbyaddress,        {"minconf","include_empty","include_watchonly","address_filter"} },
     { "wallet",             "listreceivedbylabel",          listreceivedbylabel,          {"minconf","include_empty","include_watchonly"} },
-    { "wallet",             "listsinceblock",               listsinceblock,               {"blockhash","target_confirmations","include_watchonly","include_removed","include_change"} },
+    { "wallet",             "listsinceblock",               listsinceblock,               {"blockhash","target_confirmations","include_watchonly","include_removed","include_change","label"} },
     { "wallet",             "listtransactions",             listtransactions,             {"label","count","skip","include_watchonly"} },
     { "wallet",             "listunspent",                  listunspent,                  {"minconf","maxconf","addresses","include_unsafe","query_options"} },
     { "wallet",             "listwalletdir",                listwalletdir,                {} },
