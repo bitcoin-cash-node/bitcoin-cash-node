@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2017 The Bitcoin Core developers
+# Copyright (c) 2017-2025 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the listsincelast RPC."""
@@ -25,6 +26,7 @@ class ListSinceBlockTest (BitcoinTestFramework):
         self.test_reorg()
         self.test_double_spend()
         self.test_double_send()
+        self.test_send_to_self()
 
     def test_no_blockhash(self):
         txid = self.nodes[2].sendtoaddress(self.nodes[0].getnewaddress(), 1)
@@ -289,6 +291,27 @@ class ListSinceBlockTest (BitcoinTestFramework):
         for tx in lsbres['removed']:
             if tx['txid'] == txid1:
                 assert_equal(tx['confirmations'], 2)
+
+    def test_send_to_self(self):
+        """We can make listsinceblock output our change outputs."""
+        self.log.info("Test the inclusion of change outputs in the output.")
+
+        # Create a UTxO paying to one of our change addresses.
+        block_hash = self.nodes[2].getbestblockhash()
+        addr = self.nodes[2].getrawchangeaddress()
+        self.nodes[2].sendtoaddress(addr, 1)
+
+        # If we don't list change, we won't have an entry for it.
+        coins = self.nodes[2].listsinceblock(blockhash=block_hash)["transactions"]
+        assert not any(c["address"] == addr for c in coins)
+
+        # Now if we list change, we'll get both the send (to a change address) and
+        # the actual change.
+        res = self.nodes[2].listsinceblock(blockhash=block_hash, include_change=True)
+        coins = [entry for entry in res["transactions"] if entry["category"] == "receive"]
+        assert_equal(len(coins), 2)
+        assert any(c["address"] == addr for c in coins)
+        assert all(self.nodes[2].getaddressinfo(c["address"])["ischange"] for c in coins)
 
 
 if __name__ == '__main__':

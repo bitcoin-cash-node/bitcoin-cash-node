@@ -62,6 +62,7 @@ None
     either all signing with Schnorr (`-signschnorr=1`) or with ECDSA (`-signschnorr=0`).
 - The `getpeerinfo` RPC now returns a `connection_type` field. This indicates the type of connection established with
   the peer. It will return one of five options. For more information, see the JSON-RPC help for `getpeerinfo`.
+- A new optional 5th argument `include_change` was added to the `listsinceblock` RPC method.
 
 ## Removed functionality
 

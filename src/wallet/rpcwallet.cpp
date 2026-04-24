@@ -1516,22 +1516,23 @@ static void MaybePushAddress(UniValue::Object &entry, const CTxDestination &dest
  * @param  pwallet        The wallet.
  * @param  wtx            The wallet transaction.
  * @param  nMinDepth      The minimum confirmation depth.
- * @param  fLong          Whether to include the JSON version of the
- * transaction.
+ * @param  fLong          Whether to include the JSON version of the transaction.
  * @param  ret            The UniValue::Array into which the result is stored.
  * @param  filter_ismine  The "is mine" filter flags.
  * @param  filter_label   Optional label string to filter incoming transactions.
+ * @param  include_change Whether to include transactions and outputs involving change addresses.
  */
 static void ListTransactions(interfaces::Chain::Lock &locked_chain,
                              CWallet *const pwallet, const CWalletTx &wtx,
                              int nMinDepth, bool fLong, UniValue::Array &ret,
                              const isminefilter &filter_ismine,
-                             const std::string *filter_label) {
+                             const std::string *filter_label,
+                             const bool include_change = false) {
     Amount nFee;
     std::list<COutputEntry> listReceived;
     std::list<COutputEntry> listSent;
 
-    wtx.GetAmounts(listReceived, listSent, nFee, filter_ismine);
+    wtx.GetAmounts(listReceived, listSent, nFee, filter_ismine, include_change);
 
     bool involvesWatchonly = wtx.IsFromMe(ISMINE_WATCH_ONLY);
 
@@ -1764,7 +1765,7 @@ static UniValue listsinceblock(const Config &config,
         return UniValue();
     }
 
-    if (request.fHelp || request.params.size() > 4) {
+    if (request.fHelp || request.params.size() > 5) {
         throw std::runtime_error(
             RPCHelpMan{"listsinceblock",
                 "\nGet all transactions in blocks since block [blockhash], or all transactions if omitted.\n"
@@ -1776,6 +1777,7 @@ static UniValue listsinceblock(const Config &config,
                     {"include_watchonly", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Include transactions to watch-only addresses (see 'importaddress')"},
                     {"include_removed", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "true", "Show transactions that were removed due to a reorg in the \"removed\" array\n"
             "                                                           (not guaranteed to work on pruned nodes)"},
+                    {"include_change", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Also add entries for change outputs."},
                 }}
                 .ToString() +
             "\nResult:\n"
@@ -1893,6 +1895,8 @@ static UniValue listsinceblock(const Config &config,
     bool include_removed =
         (request.params[3].isNull() || request.params[3].get_bool());
 
+    const bool include_change = request.params[4].isNull() ? false : request.params[4].get_bool();
+
     const std::optional<int> tip_height = locked_chain->getHeight();
     int depth = tip_height && height ? (1 + *tip_height - *height) : -1;
 
@@ -1903,7 +1907,7 @@ static UniValue listsinceblock(const Config &config,
 
         if (depth == -1 || tx.GetDepthInMainChain(*locked_chain) < depth) {
             ListTransactions(*locked_chain, pwallet, tx, 0, true, transactions,
-                             filter, nullptr /* filter_label */);
+                             filter, nullptr /* filter_label */, include_change);
         }
     }
 
@@ -1923,8 +1927,7 @@ static UniValue listsinceblock(const Config &config,
                 // appear here, even negative confirmation ones, hence the big
                 // negative.
                 ListTransactions(*locked_chain, pwallet, it->second, -100000000,
-                                 true, removed, filter,
-                                 nullptr /* filter_label */);
+                                 true, removed, filter, nullptr /* filter_label */, include_change);
             }
         }
         blockId = block.hashPrevBlock;
@@ -4533,7 +4536,7 @@ static const ContextFreeRPCCommand commands[] = {
     { "wallet",             "listlockunspent",              listlockunspent,              {} },
     { "wallet",             "listreceivedbyaddress",        listreceivedbyaddress,        {"minconf","include_empty","include_watchonly","address_filter"} },
     { "wallet",             "listreceivedbylabel",          listreceivedbylabel,          {"minconf","include_empty","include_watchonly"} },
-    { "wallet",             "listsinceblock",               listsinceblock,               {"blockhash","target_confirmations","include_watchonly","include_removed"} },
+    { "wallet",             "listsinceblock",               listsinceblock,               {"blockhash","target_confirmations","include_watchonly","include_removed","include_change"} },
     { "wallet",             "listtransactions",             listtransactions,             {"label","count","skip","include_watchonly"} },
     { "wallet",             "listunspent",                  listunspent,                  {"minconf","maxconf","addresses","include_unsafe","query_options"} },
     { "wallet",             "listwalletdir",                listwalletdir,                {} },

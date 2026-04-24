@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -66,6 +66,7 @@ static const CRPCConvertParam vRPCConvertParams[] = {
     {"listsinceblock", 1, "target_confirmations"},
     {"listsinceblock", 2, "include_watchonly"},
     {"listsinceblock", 3, "include_removed"},
+    {"listsinceblock", 4, "include_change"},
     {"sendmany", 1, "amounts"},
     {"sendmany", 2, "minconf"},
     {"sendmany", 4, "subtractfeefrom"},

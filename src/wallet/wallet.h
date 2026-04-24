@@ -564,7 +564,7 @@ public:
 
     void GetAmounts(std::list<COutputEntry> &listReceived,
                     std::list<COutputEntry> &listSent, Amount &nFee,
-                    const isminefilter &filter) const;
+                    const isminefilter &filter, bool include_change = false) const;
 
     bool IsFromMe(const isminefilter &filter) const {
         return GetDebit(filter) > Amount::zero();
