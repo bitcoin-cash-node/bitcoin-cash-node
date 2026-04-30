@@ -1789,17 +1789,13 @@ bool PeerLogicValidation::ProcessHeadersMessage(const Config &config, const Node
             }
         }
 
-        if (!pfrom->fDisconnect && pfrom->IsOutboundOrBlockRelayConn() && nodestate->pindexBestKnownBlock != nullptr) {
+        if (!pfrom->fDisconnect && pfrom->IsFullOutboundConn() && nodestate->pindexBestKnownBlock != nullptr) {
             // If this is an outbound peer, check to see if we should protect it
             // from the bad/lagging chain logic.
-            if (g_outbound_peers_with_protect_from_disconnect <
-                    MAX_OUTBOUND_PEERS_TO_PROTECT_FROM_DISCONNECT &&
-                nodestate->pindexBestKnownBlock->nChainWork >=
-                    ::ChainActive().Tip()->nChainWork &&
-                !nodestate->m_chain_sync.m_protect) {
-                LogPrint(BCLog::NET,
-                         "Protecting outbound peer=%d from eviction\n",
-                         pfrom->GetId());
+            if (!nodestate->m_chain_sync.m_protect
+                && g_outbound_peers_with_protect_from_disconnect < MAX_OUTBOUND_PEERS_TO_PROTECT_FROM_DISCONNECT
+                && nodestate->pindexBestKnownBlock->nChainWork >= ::ChainActive().Tip()->nChainWork) {
+                LogPrint(BCLog::NET, "Protecting outbound peer=%d from eviction\n", pfrom->GetId());
                 nodestate->m_chain_sync.m_protect = true;
                 ++g_outbound_peers_with_protect_from_disconnect;
             }
@@ -2175,22 +2171,34 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
             UpdatePreferredDownload(pfrom, State(pfrom->GetId()));
         }
 
-        if (!pfrom->IsInboundConn()) {
-            // Advertise our address
+        if (!pfrom->IsInboundConn() && !pfrom->IsBlockOnlyConn()) {
+            // For outbound peers, we try to relay our address (so that other
+            // nodes can try to find us more quickly, as we have no guarantee
+            // that an outbound peer is even aware of how to reach us) and do a
+            // one-time address fetch (to help populate/update our addrman). If
+            // we're starting up for the first time, our addrman may be pretty
+            // empty and no one will know who we are, so these mechanisms are
+            // important to help us connect to the network.
+            //
+            // We also update the addrman to record connection success for
+            // these peers (which include OUTBOUND_FULL_RELAY and FEELER
+            // connections) so that addrman will have an up-to-date notion of
+            // which peers are online and available.
+            //
+            // We skip these operations for BLOCK_RELAY peers to avoid
+            // potentially leaking information about our BLOCK_RELAY
+            // connections via the addrman or address relay.
+            //
+            // ** Note -- BLOCK_RELAY is not yet implemented in BCHN **
             if (fListen && !IsInitialBlockDownload()) {
-                CAddress addr =
-                    GetLocalAddress(&pfrom->addr, pfrom->GetLocalServices());
+                CAddress addr = GetLocalAddress(&pfrom->addr, pfrom->GetLocalServices());
                 FastRandomContext insecure_rand;
                 if (addr.IsRoutable()) {
-                    LogPrint(BCLog::NET,
-                             "ProcessMessages: advertising address %s\n",
-                             addr.ToString());
+                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
                     pfrom->PushAddress(addr, insecure_rand);
                 } else if (IsPeerAddrLocalGood(pfrom)) {
                     addr.SetIP(addrMe);
-                    LogPrint(BCLog::NET,
-                             "ProcessMessages: advertising address %s\n",
-                             addr.ToString());
+                    LogPrint(BCLog::NET, "ProcessMessages: advertising address %s\n", addr.ToString());
                     pfrom->PushAddress(addr, insecure_rand);
                 }
             }
@@ -2198,6 +2206,9 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
             // Get recent addresses - unless we're doing the extversion handshake in which case we
             // do this after sending our VERACK
             PushGetAddrOnceIfAfterVerAck(pfrom);
+
+            // Moves address from New to Tried table in Addrman, resolves
+            // tried-table collisions, etc.
             connman->MarkAddressGood(pfrom->addr);
         }
 
@@ -3398,9 +3409,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         // only make outgoing connections ignore the getaddr message mitigates
         // the attack.
         if (!pfrom->IsInboundConn()) {
-            LogPrint(BCLog::NET,
-                     "Ignoring \"getaddr\" from outbound connection. peer=%d\n",
-                     pfrom->GetId());
+            LogPrint(BCLog::NET, "Ignoring \"getaddr\" from outbound connection. peer=%d\n", pfrom->GetId());
             return true;
         }
 

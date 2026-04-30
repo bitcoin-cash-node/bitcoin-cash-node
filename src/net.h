@@ -178,6 +178,8 @@ enum class ConnectionType : uint8_t {
     ADDR_FETCH,
 };
 
+std::string ConnectionTypeAsString(ConnectionType conn_type);
+
 using NodeRef = std::shared_ptr<CNode>;
 using NodeCRef = std::shared_ptr<const CNode>; //! unused; maybe should be used in some places for const-correctness
 

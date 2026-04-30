@@ -362,11 +362,10 @@ NodeRef CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fC
     }
 
     /// debug print
-    LogPrint(BCLog::NET, "trying connection %s lastseen=%.1fhrs\n",
+    LogPrint(BCLog::NET, "trying connection (%s) to %s, lastseen=%.1fhrs\n",
+             ConnectionTypeAsString(conn_type),
              pszDest ? pszDest : addrConnect.ToString(),
-             pszDest
-                 ? 0.0
-                 : (double)(GetAdjustedTime() - addrConnect.nTime) / 3600.0);
+             pszDest ? 0.0 : (double)(GetAdjustedTime() - addrConnect.nTime) / 3600.0);
 
     // Resolve
     const int default_port = Params().GetDefaultPort();
@@ -1796,30 +1795,33 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect) {
             }
         }
 
-        // Feeler Connections
-        //
-        // Design goals:
-        //  * Increase the number of connectable addresses in the tried table.
-        //
-        // Method:
-        //  * Choose a random address from new and attempt to connect to it if
-        //    we can connect successfully it is added to tried.
-        //  * Start attempting feeler connections only after node finishes
-        //    making outbound connections.
-        //  * Only make a feeler connection once every few minutes.
-        //
+        ConnectionType conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
+        const int64_t nTime = GetTimeMicros();
         bool fFeeler = false;
 
-        if (nOutboundFullRelay >= nMaxOutboundFullRelay && nOutboundBlockRelay >= nMaxOutboundBlockRelay
-            && !GetTryNewOutboundPeer()) {
-            // The current time right now (in microseconds).
-            int64_t nTime = GetTimeMicros();
-            if (nTime > nNextFeeler) {
-                nNextFeeler = PoissonNextSend(nTime, FEELER_INTERVAL);
-                fFeeler = true;
-            } else {
-                continue;
-            }
+        // Determine what type of connection to open. Opening
+        // OUTBOUND_FULL_RELAY connections gets the highest priority until we
+        // meet our full-relay capacity. Then we open BLOCK_RELAY connection
+        // until we hit our block-relay-only peer limit.
+        // GetTryNewOutboundPeer() gets set when a stale tip is detected, so we
+        // try opening an additional OUTBOUND_FULL_RELAY connection. If none of
+        // these conditions are met, check the nNextFeeler timer to decide if
+        // we should open a FEELER.
+
+        if (nOutboundFullRelay < nMaxOutboundFullRelay) {
+            // OUTBOUND_FULL_RELAY
+        } else if (/* Disable branch: */ false && nOutboundBlockRelay < nMaxOutboundBlockRelay) {
+            /* Note: This branch is currently not taken on BCHN since we have not implemented BLOCKS_RELAY mode yet. */
+            conn_type = ConnectionType::BLOCK_RELAY;
+        } else if (GetTryNewOutboundPeer()) {
+            // OUTBOUND_FULL_RELAY
+        } else if (nTime > nNextFeeler) {
+            nNextFeeler = PoissonNextSend(nTime, FEELER_INTERVAL);
+            conn_type = ConnectionType::FEELER;
+            fFeeler = true;
+        } else {
+            // skip to next iteration of while loop
+            continue;
         }
 
         addrman.ResolveCollisions();
@@ -1877,8 +1879,7 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect) {
 
             // do not allow non-default ports, unless after 50 invalid addresses
             // selected already.
-            if (addr.GetPort() != config->GetChainParams().GetDefaultPort() &&
-                nTries < 50) {
+            if (addr.GetPort() != config->GetChainParams().GetDefaultPort() && nTries < 50) {
                 continue;
             }
 
@@ -1888,36 +1889,15 @@ void CConnman::ThreadOpenConnections(const std::vector<std::string> connect) {
 
         if (addrConnect.IsValid()) {
             if (fFeeler) {
-                // Add small amount of random noise before connection to avoid
-                // synchronization.
+                // Add small amount of random noise before connection to avoid synchronization.
                 int randsleep = GetRandInt(FEELER_SLEEP_WINDOW * 1000);
-                if (!interruptNet.sleep_for(
-                        std::chrono::milliseconds(randsleep))) {
+                if (!interruptNet.sleep_for(std::chrono::milliseconds(randsleep))) {
                     return;
                 }
-                LogPrint(BCLog::NET, "Making feeler connection to %s\n",
-                         addrConnect.ToString());
+                LogPrint(BCLog::NET, "Making feeler connection to %s\n", addrConnect.ToString());
             }
 
-            ConnectionType conn_type;
-            // Determine what type of connection to open. If fFeeler is not
-            // set, open OUTBOUND connections until we meet our full-relay
-            // capacity. Then open BLOCK_RELAY connections until we hit our
-            // block-relay peer limit. Otherwise, default to opening an
-            // OUTBOUND connection.
-            if (fFeeler) {
-                conn_type = ConnectionType::FEELER;
-            } else if (nOutboundFullRelay < nMaxOutboundFullRelay) {
-                conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
-            } else if (/* branch disabled: */ false && nOutboundBlockRelay < nMaxOutboundBlockRelay) {
-                // Note: This branch is disabled in BCHN until we finish porting over the BLOCK_RELAY code
-                conn_type = ConnectionType::BLOCK_RELAY;
-            } else {
-                // GetTryNewOutboundPeer() is true
-                conn_type = ConnectionType::OUTBOUND_FULL_RELAY;
-            }
-            OpenNetworkConnection(addrConnect,
-                                  int(setConnected.size()) >= std::min(nMaxConnections - 1, 2),
+            OpenNetworkConnection(addrConnect, int(setConnected.size()) >= std::min(nMaxConnections - 1, 2),
                                   &grant, nullptr, conn_type);
         }
     }
@@ -3017,4 +2997,23 @@ uint64_t CNode::GetBytesSentForMsgType(const std::string &msg_type) const
     LOCK(cs_vSend);
     const auto it = mapSendBytesPerMsgType.find(msg_type);
     return it != mapSendBytesPerMsgType.end() ? it->second : 0;
+}
+
+std::string ConnectionTypeAsString(ConnectionType conn_type) {
+    switch (conn_type) {
+        case ConnectionType::INBOUND:
+            return "inbound";
+        case ConnectionType::MANUAL:
+            return "manual";
+        case ConnectionType::FEELER:
+            return "feeler";
+        case ConnectionType::OUTBOUND_FULL_RELAY:
+            return "outbound-full-relay";
+        case ConnectionType::BLOCK_RELAY:
+            return "block-relay-only";
+        case ConnectionType::ADDR_FETCH:
+            return "addr-fetch";
+    } // no default case, so the compiler can warn about missing cases
+
+    assert(false);
 }
