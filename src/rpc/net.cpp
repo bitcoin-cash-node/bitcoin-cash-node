@@ -21,6 +21,7 @@
 #include <timedata.h>
 #include <ui_interface.h>
 #include <util/strencodings.h>
+#include <util/string.h>
 #include <util/system.h>
 #include <util/time.h>
 #include <validation.h>
@@ -28,6 +29,15 @@
 #include <warnings.h>
 
 #include <univalue.h>
+
+static const std::vector<std::string> CONNECTION_TYPE_DOC{
+    "outbound-full-relay (default automatic connections)",
+    /* "block-relay-only (does not relay transactions or addresses)", */ // BLOCK_RELAY unimplemented in BCHN
+    "inbound (initiated by the peer)",
+    "manual (added via addnode RPC or -addnode/-connect configuration options)",
+    "addr-fetch (short-lived automatic connection for soliciting addresses)",
+    "feeler (short-lived automatic connection for testing addresses)",
+};
 
 static UniValue getconnectioncount(const Config &config,
                                    const JSONRPCRequest &request) {
@@ -78,6 +88,7 @@ static UniValue ping(const Config &config, const JSONRPCRequest &request) {
 
 static UniValue getpeerinfo(const Config &, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() != 0) {
+        const std::string connTypeIndent = std::string(45, ' ') + "- ";
         throw std::runtime_error(RPCHelpMan{
             "getpeerinfo",
             "\nReturns data about each connected network node as a json array "
@@ -116,6 +127,7 @@ static UniValue getpeerinfo(const Config &, const JSONRPCRequest &request) {
                 "    \"bip152_hb_from\": true|false,   (boolean) Whether peer selected us as (compact blocks) high-bandwidth peer\n"
                 "    \"addnode\": true|false,          (boolean) "
                 "Whether connection was due to addnode/-connect or if it was an automatic/inbound connection\n"
+                "    \"connection_type\": \"xxx\",       (string) Type of connection: \n" + connTypeIndent + Join(CONNECTION_TYPE_DOC, "\n" + connTypeIndent) + "\n"
                 "    \"startingheight\": n,            (numeric) The starting height (block) of the peer\n"
                 "    \"banscore\": n,                  (numeric) The ban score\n"
                 "    \"synced_headers\": n,            (numeric) The last header we have in common with this peer\n"
@@ -204,6 +216,7 @@ static UniValue getpeerinfo(const Config &, const JSONRPCRequest &request) {
         obj.emplace_back("bip152_hb_to", stats.m_bip152_highbandwidth_to);
         obj.emplace_back("bip152_hb_from", stats.m_bip152_highbandwidth_from);
         obj.emplace_back("addnode", stats.m_manual_connection);
+        obj.emplace_back("connection_type", std::move(stats.m_conn_type_string));
         obj.emplace_back("startingheight", stats.nStartingHeight);
         if (fStateStats) {
             obj.emplace_back("banscore", statestats.nMisbehavior);

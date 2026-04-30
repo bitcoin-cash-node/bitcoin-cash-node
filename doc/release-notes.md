@@ -59,6 +59,8 @@ None
     signatures. Mixing Schnorr and ECDSA signatures when spending a multisig input is forbidden by consensus. If you use
     the node wallet to sign or prepare multisig transactions from external signers, always be sure that all cosigners are
     either all signing with Schnorr (`-signschnorr=1`) or with ECDSA (`-signschnorr=0`).
+- The `getpeerinfo` RPC now returns a `connection_type` field. This indicates the type of connection established with
+  the peer. It will return one of five options. For more information, see the JSON-RPC help for `getpeerinfo`.
 
 ## Removed functionality
 
