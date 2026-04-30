@@ -1,4 +1,4 @@
-// Copyright (c) 2023 The Bitcoin developers
+// Copyright (c) 2023-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -50,7 +50,7 @@ static void CNodeReceiveMsgBytes(benchmark::State &state) {
     constexpr size_t chunkSize = 0x4000; // read 16KiB at a time
     std::vector<NodeRef> precreatedNodes(state.m_num_iters);
     for (auto & pnode : precreatedNodes) {
-        pnode = CNode::Make({}, {}, {}, {}, {}, {}, {}, {}, {});
+        pnode = CNode::Make({}, {}, {}, {}, {}, {}, {}, {}, {}, "", ConnectionType::OUTBOUND_FULL_RELAY);
     }
     assert(!precreatedNodes.empty());
 

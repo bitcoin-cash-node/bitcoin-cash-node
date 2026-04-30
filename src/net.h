@@ -127,6 +127,57 @@ struct CSerializedNetMsg {
     std::string m_type;
 };
 
+/** Different types of connections to a peer. This enum encapsulates the
+ * information we have available at the time of opening or accepting the
+ * connection. Aside from INBOUND, all types are initiated by us.
+ */
+enum class ConnectionType : uint8_t {
+    /**
+     * Inbound connections are those initiated by a peer. This is the only
+     * property we know at the time of connection, until P2P messages are
+     * exchanged.
+     */
+    INBOUND,
+    /**
+     * These are the default connections that we use to connect with the
+     * network. There is no restriction on what is relayed- by default we relay
+     * blocks, addresses & transactions. We automatically attempt to open
+     * MAX_OUTBOUND_FULL_RELAY_CONNECTIONS using addresses from our AddrMan.
+     */
+    OUTBOUND_FULL_RELAY,
+    /**
+     * We open manual connections to addresses that users explicitly inputted
+     * via the addnode RPC, or the -connect command line argument. Even if a
+     * manual connection is misbehaving, we do not automatically disconnect or
+     * add it to our discouragement filter.
+     */
+    MANUAL,
+    /**
+     * Feeler connections are short lived connections used to increase the
+     * number of connectable addresses in our AddrMan. Approximately every
+     * FEELER_INTERVAL, we attempt to connect to a random address from the new
+     * table. If successful, we add it to the tried table.
+     */
+    FEELER,
+    /**
+     * NOTE: This mode is as-yet unimplemened in BCHN.
+     *
+     * We use block-relay-only connections to help prevent against partition
+     * attacks. By not relaying transactions or addresses, these connections
+     * are harder to detect by a third party, thus helping obfuscate the
+     * network topology. We automatically attempt to open
+     * MAX_BLOCK_RELAY_ONLY_CONNECTIONS using addresses from our AddrMan.
+     */
+    BLOCK_RELAY,
+    /**
+     * AddrFetch connections are short lived connections used to solicit
+     * addresses from peers. These are initiated to addresses submitted via the
+     * -seednode command line argument, or under certain conditions when the
+     * AddrMan is empty.
+     */
+    ADDR_FETCH,
+};
+
 using NodeRef = std::shared_ptr<CNode>;
 using NodeCRef = std::shared_ptr<const CNode>; //! unused; maybe should be used in some places for const-correctness
 
@@ -143,7 +194,8 @@ public:
     struct Options {
         ServiceFlags nLocalServices = NODE_NONE;
         int nMaxConnections = 0;
-        int nMaxOutbound = 0;
+        int nMaxOutboundFullRelay = 0;
+        static constexpr int nMaxOutboundBlockRelay = 0; /* Always 0 for now; This mechanism is as yet unimplemented in BCHN. */
         int nMaxAddnode = 0;
         int nMaxFeeler = 0;
         int nBestHeight = 0;
@@ -169,11 +221,11 @@ public:
     void Init(const Options &connOptions) {
         nLocalServices = connOptions.nLocalServices;
         nMaxConnections = connOptions.nMaxConnections;
-        nMaxOutbound =
-            std::min(connOptions.nMaxOutbound, connOptions.nMaxConnections);
+        nMaxOutboundFullRelay = std::min(connOptions.nMaxOutboundFullRelay, connOptions.nMaxConnections);
         m_use_addrman_outgoing = connOptions.m_use_addrman_outgoing;
         nMaxAddnode = connOptions.nMaxAddnode;
         nMaxFeeler = connOptions.nMaxFeeler;
+        m_max_outbound = nMaxOutboundFullRelay + nMaxOutboundBlockRelay + nMaxFeeler;
         nBestHeight = connOptions.nBestHeight;
         clientInterface = connOptions.uiInterface;
         m_banman = connOptions.m_banman;
@@ -217,10 +269,8 @@ public:
     bool GetUseAddrmanOutgoing() const { return m_use_addrman_outgoing; };
     void SetNetworkActive(bool active);
     void OpenNetworkConnection(const CAddress &addrConnect, bool fCountFailure,
-                               CSemaphoreGrant *grantOutbound = nullptr,
-                               const char *strDest = nullptr,
-                               bool fOneShot = false, bool fFeeler = false,
-                               bool manual_connection = false);
+                               CSemaphoreGrant *grantOutbound, const char *strDest,
+                               ConnectionType conn_type /* may not be INBOUND */);
     bool CheckIncomingNonce(uint64_t nonce) const;
 
     bool ForNode(NodeId id, std::function<bool(NodeRef pnode)> func, bool fullyConnectedOnly = true) const;
@@ -281,10 +331,15 @@ public:
      * Attempts to open a connection. Currently only used from tests.
      *
      * @param[in]   address     Address of node to try connecting to
+     * @param[in]   conn_type   OUTBOUND_FULL_RELAY, BLOCK_RELAY, ADDR_FETCH, or
+     *                          FEELER
      * @return      bool        Returns false if there are no available
-     *                          outbound slots for this connection.
+     *                          slots for this connection:
+     *                          - conn_type not a supported ConnectionType
+     *                          - Max total outbound connection capacity filled
+     *                          - Max connection capacity for type is filled
      */
-    bool AddConnection(const std::string& address);
+    bool AddConnection(const std::string& address, ConnectionType conn_type);
 
     size_t GetNodeCount(NumConnections num) const;
     void GetNodeStats(std::vector<CNodeStats> &vstats) const;
@@ -359,8 +414,8 @@ private:
     bool InitBinds(const std::vector<CService> &binds, const std::vector<NetWhitebindPermissions> &whiteBinds,
                    const std::vector<CService> &onion_binds);
     void ThreadOpenAddedConnections();
-    void AddOneShot(const std::string &strDest);
-    void ProcessOneShot();
+    void AddAddrFetch(const std::string &strDest);
+    void ProcessAddrFetch();
     void ThreadOpenConnections(std::vector<std::string> connect);
     void ThreadMessageHandler();
     void AcceptConnection(const ListenSocket &hListenSocket);
@@ -384,7 +439,7 @@ private:
     NodeRef FindNode(const CService &addr) const;
 
     bool AttemptToEvictConnection();
-    NodeRef ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure, bool manual_connection);
+    NodeRef ConnectNode(CAddress addrConnect, const char *pszDest, bool fCountFailure, ConnectionType conn_type);
     void AddWhitelistPermissionFlags(NetPermissionFlags &flags,
                                      const CNetAddr &addr) const;
 
@@ -434,8 +489,8 @@ private:
     std::atomic<bool> fNetworkActive{true};
     bool fAddressesInitialized{false};
     CAddrMan addrman;
-    std::deque<std::string> vOneShots GUARDED_BY(cs_vOneShots);
-    RecursiveMutex cs_vOneShots;
+    std::deque<std::string> m_addr_fetches GUARDED_BY(m_addr_fetches_mutex);
+    RecursiveMutex m_addr_fetches_mutex;
     std::vector<std::string> vAddedNodes GUARDED_BY(cs_vAddedNodes);
     RecursiveMutex cs_vAddedNodes;
     using NodeMap = std::map<NodeId, NodeRef>;
@@ -479,9 +534,11 @@ private:
     std::unique_ptr<CSemaphore> semOutbound;
     std::unique_ptr<CSemaphore> semAddnode;
     int nMaxConnections;
-    int nMaxOutbound;
+    int nMaxOutboundFullRelay;
+    static constexpr int nMaxOutboundBlockRelay = 0; /* This is always 0 for now; "block relay only" mode is not yet implemented in BCHN. */
     int nMaxAddnode;
     int nMaxFeeler;
+    int m_max_outbound = 0; /* Sum of: nMaxOutboundFullRelay + nMaxOutboundBlockRelay + nMaxFeeler */
     bool m_use_addrman_outgoing;
     std::atomic<int> nBestHeight;
     CClientUIInterface *clientInterface;
@@ -745,10 +802,6 @@ public:
     // This boolean is unusued in actual processing, only present for backward
     // compatibility at RPC/QT level
     bool m_legacyWhitelisted{false};
-    // If true this node is being used as a short lived feeler.
-    bool fFeeler{false};
-    bool fOneShot{false};
-    bool m_manual_connection{false};
     // set by version message
     bool fClient{false};
     // after BIP159, set by version message
@@ -771,7 +824,6 @@ public:
     /** Total number of addresses that were processed (excludes rate-limited ones). */
     std::atomic<uint64_t> m_addr_processed{0};
 
-    const bool fInbound;
     std::atomic_bool fSuccessfullyConnected{false};
     std::atomic_bool fDisconnect{false};
     // We use fRelayTxes for two purposes -
@@ -866,15 +918,15 @@ private:
     CNode(NodeId id, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn,
           SOCKET hSocketIn, const CAddress &addrIn, uint64_t nKeyedNetGroupIn,
           uint64_t nLocalHostNonceIn, const CAddress &addrBindIn,
-          const std::string &addrNameIn = "", bool fInboundIn = false);
+          const std::string &addrNameIn, ConnectionType conn_type_in);
 
 public:
     [[nodiscard]]
     static NodeRef Make(std::function<void(CNode *)> deleter /* may be null to use default delete */,
                         NodeId id, ServiceFlags nLocalServicesIn, int nMyStartingHeightIn,
                         SOCKET hSocketIn, const CAddress &addrIn, uint64_t nKeyedNetGroupIn,
-                        uint64_t nLocalHostNonceIn, const CAddress &addrBindIn,
-                        const std::string &addrNameIn = "", bool fInboundIn = false);
+                        uint64_t nLocalHostNonceIn, const CAddress &addrBindIn, const std::string &addrNameIn,
+                        ConnectionType conn_type_in);
 
     ~CNode();
     CNode(const CNode &) = delete;
@@ -888,6 +940,7 @@ private:
     const int nMyStartingHeight;
     int nSendVersion{0};
     NetPermissionFlags m_permissionFlags{PF_NONE};
+    const ConnectionType m_conn_type;
     // Used only by SocketHandler thread
     std::list<CNetMessage> vRecvMsg;
 
@@ -984,6 +1037,41 @@ public:
 
     //! Returns the number of bytes enqeueud (and eventually sent) for a particular command
     uint64_t GetBytesSentForMsgType(const std::string &msg_type) const;
+
+    bool IsOutboundOrBlockRelayConn() const {
+        switch (m_conn_type) {
+            case ConnectionType::OUTBOUND_FULL_RELAY:
+            case ConnectionType::BLOCK_RELAY:
+                return true;
+            case ConnectionType::INBOUND:
+            case ConnectionType::MANUAL:
+            case ConnectionType::ADDR_FETCH:
+            case ConnectionType::FEELER:
+                return false;
+        } // no default case, so the compiler can warn about missing cases
+        assert(false);
+    }
+
+    bool IsFullOutboundConn() const { return m_conn_type == ConnectionType::OUTBOUND_FULL_RELAY; }
+    bool IsManualConn() const { return m_conn_type == ConnectionType::MANUAL; }
+    bool IsBlockOnlyConn() const { return m_conn_type == ConnectionType::BLOCK_RELAY; }
+    bool IsFeelerConn() const { return m_conn_type == ConnectionType::FEELER; }
+    bool IsAddrFetchConn() const { return m_conn_type == ConnectionType::ADDR_FETCH; }
+    bool IsInboundConn() const { return m_conn_type == ConnectionType::INBOUND; }
+
+    bool ExpectServicesFromConn() const {
+        switch (m_conn_type) {
+            case ConnectionType::INBOUND:
+            case ConnectionType::MANUAL:
+            case ConnectionType::FEELER:
+                return false;
+            case ConnectionType::OUTBOUND_FULL_RELAY:
+            case ConnectionType::BLOCK_RELAY:
+            case ConnectionType::ADDR_FETCH:
+                return true;
+        } // no default case, so the compiler can warn about missing cases
+        assert(false);
+    }
 };
 
 /**

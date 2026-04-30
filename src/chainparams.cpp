@@ -209,7 +209,7 @@ public:
         vSeeds.emplace_back("seed.flowee.cash");
         // Note that of those which support the service bits prefix, most only
         // support a subset of possible options. This is fine at runtime as
-        // we'll fall back to using them as a oneshot if they don't support the
+        // we'll fall back to using them as an addfetch if they don't support the
         // service bits we want, but we should get them updated to support all
         // service bits wanted by any release ASAP to avoid it where possible.
         // bitcoinforks seeders

@@ -177,17 +177,25 @@ BOOST_AUTO_TEST_CASE(cnode_simple_test) {
 
     CAddress addr = CAddress(CService(ipv4Addr, 7777), NODE_NETWORK);
     std::string pszDest;
-    bool fInboundIn = false;
 
-    // Test that fFeeler is false by default.
-    auto pnode1 = CNode::Make({}, id++, NODE_NETWORK, height, hSocket, addr, 0, 0, CAddress(), pszDest, fInboundIn);
-    BOOST_CHECK(pnode1->fInbound == false);
-    BOOST_CHECK(pnode1->fFeeler == false);
+    // Test that the Is*Conn() functions behave as expected
+    auto pnode1 = CNode::Make({}, id++, NODE_NETWORK, height, hSocket, addr, 0, 0, CAddress(), pszDest, ConnectionType::OUTBOUND_FULL_RELAY);
+    BOOST_CHECK(pnode1->IsOutboundOrBlockRelayConn());
+    BOOST_CHECK(pnode1->IsFullOutboundConn());
+    BOOST_CHECK(not pnode1->IsInboundConn());
+    BOOST_CHECK(not pnode1->IsManualConn());
+    BOOST_CHECK(not pnode1->IsFeelerConn());
+    BOOST_CHECK(not pnode1->IsAddrFetchConn());
+    BOOST_CHECK(pnode1->ExpectServicesFromConn());
 
-    fInboundIn = true;
-    auto pnode2 = CNode::Make({}, id++, NODE_NETWORK, height, hSocket, addr, 1, 1, CAddress(), pszDest, fInboundIn);
-    BOOST_CHECK(pnode2->fInbound == true);
-    BOOST_CHECK(pnode2->fFeeler == false);
+    auto pnode2 = CNode::Make({}, id++, NODE_NETWORK, height, hSocket, addr, 1, 1, CAddress(), pszDest, ConnectionType::INBOUND);
+    BOOST_CHECK(not pnode2->IsOutboundOrBlockRelayConn());
+    BOOST_CHECK(not pnode2->IsFullOutboundConn());
+    BOOST_CHECK(pnode2->IsInboundConn());
+    BOOST_CHECK(not pnode2->IsManualConn());
+    BOOST_CHECK(not pnode2->IsFeelerConn());
+    BOOST_CHECK(not pnode2->IsAddrFetchConn());
+    BOOST_CHECK(not pnode2->ExpectServicesFromConn());
 }
 
 BOOST_AUTO_TEST_CASE(cnetaddr_basic) {
@@ -699,7 +707,7 @@ BOOST_AUTO_TEST_CASE(ipv4_peer_with_ipv6_addrMe_test) {
     in_addr ipv4AddrPeer;
     ipv4AddrPeer.s_addr = 0xa0b0c001;
     CAddress addr = CAddress(CService(ipv4AddrPeer, 7777), NODE_NETWORK);
-    NodeRef pnode = CNode::Make({}, 0, NODE_NETWORK, 0, INVALID_SOCKET, addr, 0, 0, CAddress{}, std::string{}, false);
+    NodeRef pnode = CNode::Make({}, 0, NODE_NETWORK, 0, INVALID_SOCKET, addr, 0, 0, CAddress{}, std::string{}, ConnectionType::OUTBOUND_FULL_RELAY);
     pnode->fSuccessfullyConnected.store(true);
 
     // the peer claims to be reaching us via IPv6

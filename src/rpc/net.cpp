@@ -287,8 +287,7 @@ static UniValue addnode(const Config &config, const JSONRPCRequest &request) {
 
     if (strCommand == "onetry") {
         CAddress addr;
-        g_connman->OpenNetworkConnection(addr, false, nullptr, strNode.c_str(),
-                                         false, false, true);
+        g_connman->OpenNetworkConnection(addr, false, nullptr, strNode.c_str(), ConnectionType::MANUAL);
         return UniValue();
     }
 
@@ -910,7 +909,9 @@ static UniValue addconnection(const Config &config, const JSONRPCRequest &reques
     if (!g_connman) {
         throw JSONRPCError(RPC_CLIENT_P2P_DISABLED, "Error: Peer-to-peer functionality missing or disabled.");
     }
-    const bool success = g_connman->AddConnection(address);
+    const bool success = g_connman->AddConnection(address,
+                                                  // TODO: This should eventually come from the 2nd RPC arg
+                                                  ConnectionType::OUTBOUND_FULL_RELAY);
     if (!success) {
         throw JSONRPCError(RPC_CLIENT_NODE_CAPACITY_REACHED, "Error: Already at capacity for specified connection type.");
     }

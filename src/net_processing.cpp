@@ -209,7 +209,7 @@ bool IsBlockRequestedFromOutbound(CConnman *connman, const uint256& hash) EXCLUS
         const auto & [nodeid, block_it] = range.first->second;
         NodeRef peer;
         connman->ForNode(nodeid, [&peer](const NodeRef &n){ peer = n; return true; });
-        if (peer && !peer->fInbound) {
+        if (peer && !peer->IsInboundConn()) {
             return true;
         }
     }
@@ -393,8 +393,7 @@ static void UpdatePreferredDownload(const NodeRef &node, CNodeState *state)
 
     // Whether this node should be marked as a preferred download node.
     state->fPreferredDownload =
-        (!node->fInbound || node->HasPermission(PF_NOBAN)) && !node->fOneShot &&
-        !node->fClient;
+        (!node->IsInboundConn() || node->HasPermission(PF_NOBAN)) && !node->IsAddrFetchConn() && !node->fClient;
 
     nPreferredDownload += state->fPreferredDownload;
 }
@@ -750,13 +749,6 @@ void internal::UpdateLastBlockAnnounceTime(NodeId node, int64_t time_in_seconds)
     }
 }
 
-// Returns true for outbound peers, excluding manual connections, feelers, and
-// one-shots.
-static bool IsOutboundDisconnectionCandidate(const NodeRef &node) {
-    return !(node->fInbound || node->m_manual_connection || node->fFeeler ||
-             node->fOneShot);
-}
-
 void PeerLogicValidation::PushNodeVersion(const Config &config, const NodeRef &pnode, const int64_t nTime) const {
     const ServiceFlags nLocalNodeServices = pnode->GetLocalServices();
     const uint64_t nonce = pnode->GetLocalNonce();
@@ -795,13 +787,13 @@ void PeerLogicValidation::InitializeNode(const Config &config, NodeRef pnode) {
             std::forward_as_tuple(addr, std::move(addrName)));
         assert(m_txrequest.Count(nodeid) == 0);
     }
-    if (!pnode->fInbound) {
+    if (!pnode->IsInboundConn()) {
         PushNodeVersion(config, pnode, GetTime());
     }
     // We only track data usage to enforce peer rate limit rules for the specified node if:
     // (1) rules exist, and (2) we are regtest *or* the node is not whiltelisted and not maunally added and not local
     if (!m_peerRateLimitRules.empty() &&
-        (m_is_regtest || (!pnode->HasPermission(PF_NOBAN) && !pnode->m_manual_connection && !pnode->addr.IsLocal()))) {
+        (m_is_regtest || (!pnode->HasPermission(PF_NOBAN) && !pnode->IsManualConn() && !pnode->addr.IsLocal()))) {
         pnode->m_rateTracker = std::make_unique<ClientUsageTracker>(m_peerRateLimitRules);
     }
 }
@@ -1788,7 +1780,7 @@ bool PeerLogicValidation::ProcessHeadersMessage(const Config &config, const Node
                 // until we have a headers chain that has at least
                 // nMinimumChainWork, even if a peer has a chain past our tip,
                 // as an anti-DoS measure.
-                if (IsOutboundDisconnectionCandidate(pfrom)) {
+                if (pfrom->IsOutboundOrBlockRelayConn()) {
                     LogPrintf("Disconnecting outbound peer %d -- headers "
                               "chain has insufficient work\n",
                               pfrom->GetId());
@@ -1797,8 +1789,7 @@ bool PeerLogicValidation::ProcessHeadersMessage(const Config &config, const Node
             }
         }
 
-        if (!pfrom->fDisconnect && IsOutboundDisconnectionCandidate(pfrom) &&
-            nodestate->pindexBestKnownBlock != nullptr) {
+        if (!pfrom->fDisconnect && pfrom->IsOutboundOrBlockRelayConn() && nodestate->pindexBestKnownBlock != nullptr) {
             // If this is an outbound peer, check to see if we should protect it
             // from the bad/lagging chain logic.
             if (g_outbound_peers_with_protect_from_disconnect <
@@ -1822,7 +1813,7 @@ bool PeerLogicValidation::ProcessHeadersMessage(const Config &config, const Node
 //! - GETADDR is not sent if !fInbound as well as some other criteria are not met
 //! - GETADDR is sent precisely once after VERACK
 void PeerLogicValidation::PushGetAddrOnceIfAfterVerAck(const NodeRef &pfrom) const {
-    if ( !pfrom->fInbound
+    if ( !pfrom->IsInboundConn()
          && pfrom->GetBytesSentForMsgType(NetMsgType::VERACK) > 0
          && pfrom->GetBytesSentForMsgType(NetMsgType::GETADDR) == 0)
     {
@@ -2037,12 +2028,10 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         }
         nSendVersion = std::min(nVersion, PROTOCOL_VERSION);
         nServices = ServiceFlags(nServiceInt);
-        if (!pfrom->fInbound) {
+        if (!pfrom->IsInboundConn()) {
             connman->SetServices(pfrom->addr, nServices);
         }
-        if (!pfrom->fInbound && !pfrom->fFeeler &&
-            !pfrom->m_manual_connection &&
-            !HasAllDesirableServiceFlags(nServices)) {
+        if (pfrom->ExpectServicesFromConn() && !HasAllDesirableServiceFlags(nServices)) {
             LogPrint(BCLog::NET,
                      "peer=%d does not offer the expected services "
                      "(%08x offered, %08x expected); disconnecting\n",
@@ -2091,7 +2080,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
                 const auto beforeOpenParen = cleanSubVer.substr(0, cleanSubVer.find('('));
                 for (const auto &reject : config.GetRejectSubVersions()) {
                     if (!reject.empty() && beforeOpenParen.find(reject) != beforeOpenParen.npos) {
-                        if (pfrom->m_manual_connection) {
+                        if (pfrom->IsManualConn()) {
                             LogPrintf("not rejecting manually-added peer=%d with subversion containing \"%s\""
                                       " (-rejectsubversion)\n", pfrom->GetId(), reject);
                         } else if (pfrom->HasPermission(PF_NOBAN)) {
@@ -2115,19 +2104,19 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
             vRecv >> fRelay;
         }
         // Disconnect if we connected to ourself
-        if (pfrom->fInbound && !connman->CheckIncomingNonce(nNonce)) {
+        if (pfrom->IsInboundConn() && !connman->CheckIncomingNonce(nNonce)) {
             LogPrintf("connected to self at %s, disconnecting\n",
                       pfrom->addr.ToString());
             pfrom->fDisconnect = true;
             return true;
         }
 
-        if (pfrom->fInbound && addrMe.IsRoutable()) {
+        if (pfrom->IsInboundConn() && addrMe.IsRoutable()) {
             SeenLocal(addrMe);
         }
 
         // Be shy and don't send version until we hear
-        if (pfrom->fInbound) {
+        if (pfrom->IsInboundConn()) {
             PushNodeVersion(config, pfrom, GetAdjustedTime());
         }
 
@@ -2186,7 +2175,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
             UpdatePreferredDownload(pfrom, State(pfrom->GetId()));
         }
 
-        if (!pfrom->fInbound) {
+        if (!pfrom->IsInboundConn()) {
             // Advertise our address
             if (fListen && !IsInitialBlockDownload()) {
                 CAddress addr =
@@ -2233,15 +2222,14 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
             LOCK(cs_main);
             Misbehaving(pfrom, 20,
                         "Ignoring invalid timestamp in version message");
-        } else if (!pfrom->fInbound) {
+        } else if (!pfrom->IsInboundConn()) {
             // Don't use timedata samples from inbound peers to make it
             // harder for others to tamper with our adjusted time.
             AddTimeData(pfrom->addr, nTimeOffset);
         }
 
         // Feeler connections exist only to verify if address is online.
-        if (pfrom->fFeeler) {
-            assert(pfrom->fInbound == false);
+        if (pfrom->IsFeelerConn()) {
             pfrom->fDisconnect = true;
         }
         return true;
@@ -2289,9 +2277,8 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         pfrom->SetRecvVersion(
             std::min(pfrom->nVersion.load(), PROTOCOL_VERSION));
 
-        if (!pfrom->fInbound) {
-            // Mark this node as currently connected, so we update its timestamp
-            // later.
+        if (!pfrom->IsInboundConn()) {
+            // Mark this node as currently connected, so we update its timestamp later.
             LOCK(cs_main);
             State(pfrom->GetId())->fCurrentlyConnected = true;
             LogPrintf(
@@ -2447,7 +2434,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         if (vAddr.size() < 1000) {
             pfrom->fGetAddr = false;
         }
-        if (pfrom->fOneShot) {
+        if (pfrom->IsAddrFetchConn()) {
             pfrom->fDisconnect = true;
         }
         return true;
@@ -3142,7 +3129,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
                         fProcessBLOCKTXN = true;
                     } else if (nbrs.first_in_flight
                                || (pfrom->m_bip152_highbandwidth_to
-                                   && (!pfrom->fInbound
+                                   && (!pfrom->IsInboundConn()
                                        || IsBlockRequestedFromOutbound(connman, cmpctblock.header.GetHash())
                                        || nbrs.already_in_flight < MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK - 1))) {
                         // We will try to round-trip any compact blocks we get on failure,
@@ -3363,7 +3350,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         // the chain the peer is on. If we receive a known-invalid header,
         // disconnect the peer if it is using one of our outbound connection
         // slots.
-        bool should_punish = !pfrom->fInbound && !pfrom->m_manual_connection;
+        bool should_punish = !pfrom->IsInboundConn() && !pfrom->IsManualConn();
         return ProcessHeadersMessage(config, pfrom, headers, should_punish);
     }
 
@@ -3410,7 +3397,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         // sending getaddr messages. Making nodes which are behind NAT and can
         // only make outgoing connections ignore the getaddr message mitigates
         // the attack.
-        if (!pfrom->fInbound) {
+        if (!pfrom->IsInboundConn()) {
             LogPrint(BCLog::NET,
                      "Ignoring \"getaddr\" from outbound connection. peer=%d\n",
                      pfrom->GetId());
@@ -3720,7 +3707,7 @@ bool PeerLogicValidation::SendRejectsAndCheckIfShouldDiscourage(const NodeRef &p
         if (pnode->HasPermission(PF_NOBAN)) {
             LogPrintf("Warning: not punishing whitelisted peer %s!\n",
                       pnode->addr.ToString());
-        } else if (pnode->m_manual_connection) {
+        } else if (pnode->IsManualConn()) {
             LogPrintf("Warning: not punishing manually-connected peer %s!\n",
                       pnode->addr.ToString());
         } else if (pnode->addr.IsLocal()) {
@@ -3892,8 +3879,7 @@ void PeerLogicValidation::ConsiderEviction(const NodeRef &pto, int64_t time_in_s
     CNodeState &state = *pstate;
     const CNetMsgMaker msgMaker(pto->GetSendVersion());
 
-    if (!state.m_chain_sync.m_protect &&
-        IsOutboundDisconnectionCandidate(pto) && state.fSyncStarted) {
+    if (!state.m_chain_sync.m_protect && pto->IsOutboundOrBlockRelayConn() && state.fSyncStarted) {
         // This is an outbound peer subject to disconnection if they don't
         // announce a block with as much work as the current tip within
         // CHAIN_SYNC_TIMEOUT + HEADERS_RESPONSE_TIME seconds (note: if their
@@ -3988,7 +3974,7 @@ void PeerLogicValidation::EvictExtraOutboundPeers(int64_t time_in_seconds) {
         AssertLockHeld(cs_main);
 
         // Ignore non-outbound peers, or nodes marked for disconnect already
-        if (!IsOutboundDisconnectionCandidate(pnode) || pnode->fDisconnect) {
+        if (!pnode->IsOutboundOrBlockRelayConn() || pnode->fDisconnect) {
             return;
         }
         CNodeState *state = State(pnode->GetId());
@@ -4191,7 +4177,7 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
     // Download if this is a nice peer, or we have no nice peers and this one
     // might do.
     bool fFetch = state.fPreferredDownload ||
-                  (nPreferredDownload == 0 && !pto->fClient && !pto->fOneShot);
+                  (nPreferredDownload == 0 && !pto->fClient && !pto->IsAddrFetchConn());
 
     if (!state.fSyncStarted && !pto->fClient && !fImporting && !fReindex) {
         // Only actively request headers from a single peer, unless we're close
@@ -4446,7 +4432,7 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
         bool fSendTrickle = pto->HasPermission(PF_NOBAN);
         if (!invBroadcastInterval || pto->nNextInvSend < current_time) {
             fSendTrickle = true;
-            if (pto->fInbound) {
+            if (pto->IsInboundConn()) {
                 pto->nNextInvSend = std::chrono::microseconds{connman->PoissonNextSendInbound(nNow, invBroadcastInterval)};
             } else {
                 // Use half the delay for outbound peers, as there is less
