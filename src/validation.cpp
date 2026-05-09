@@ -4476,15 +4476,15 @@ CBlockIndex *CChainState::InsertBlockIndex(const BlockHash &hash) {
         return nullptr;
     }
 
-    // Return existing
-    BlockMap::iterator mi = mapBlockIndex.find(hash);
-    if (mi != mapBlockIndex.end()) {
-        return &mi->second;
+    // Create new or return existing
+    const auto & [it, inserted] = mapBlockIndex.try_emplace(hash);
+
+    if (!inserted) {
+        // Return existing
+        return &it->second;
     }
 
-    // Create new
-    const auto & [it, inserted] = mapBlockIndex.try_emplace(hash);
-    assert(inserted);
+    // Newly created
     CBlockIndex *pindexNew = &it->second;
     pindexNew->phashBlock = &it->first;
 
