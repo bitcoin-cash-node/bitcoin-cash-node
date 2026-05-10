@@ -149,3 +149,4 @@ Further references
 
 1. <https://bitcoincashresearch.org/t/testnet4-and-scalenet/148>
 2. <https://bitcoincashresearch.org/t/staging-chips-on-testnet/573>
+3. <https://gitlab.com/bitcoin-cash-node/bitcoin-cash-node/-/blob/master/src/chainparams.cpp>
