@@ -8,6 +8,7 @@ The interface runs on the same port as the JSON-RPC interface, by default:
 - port 18332 for testnet,
 - port 28332 for testnet4,
 - port 38332 for scalenet,
+- port 48332 for chipnet,
 - port 18443 for regtest.
 
 ## Supported API
