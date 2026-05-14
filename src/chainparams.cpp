@@ -221,8 +221,6 @@ public:
         vSeeds.emplace_back("seed.bchd.cash");
         // Loping.net
         vSeeds.emplace_back("seed.bch.loping.net");
-        // Electroncash.de
-        vSeeds.emplace_back("dnsseed.electroncash.de");
         // C3 Soft (NilacTheGrim)
         vSeeds.emplace_back("bchseed.c3-soft.com");
         // Jason Dreyzehner
