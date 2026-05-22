@@ -1132,27 +1132,20 @@ static Defer<std::function<void()>> SetUpgrade9Active(bool active) {
     });
 }
 
-/// Activates or deactivates upgrade 12 by setting the activation time via the gArgs mechanism to past or future
+/// Activates or deactivates upgrade 12 by setting the activation height for a past or future block
 [[nodiscard]]
-static Defer<std::function<void()>> SetUpgrade12Active(bool active) {
-    constexpr auto argName = "-upgrade12activationtime";
-    std::optional<int64_t> prevVal;
-    if (gArgs.IsArgSet(argName)) {
-        prevVal = gArgs.GetArg(argName, ::GetConfig().GetChainParams().GetConsensus().upgrade12ActivationTime);
-    }
-    const int64_t currentMTP = []{
+static Defer<std::function<void()>> SetUpgrade12Active(bool active, const int32_t offset = 1) {
+    const auto prevVal = g_Upgrade12HeightOverride;
+    const auto currentHeight = []{
         LOCK(cs_main);
-        return CHECK_NONFATAL(::ChainActive().Tip())->GetMedianTimePast();
+        return CHECK_NONFATAL(::ChainActive().Tip())->nHeight;
     }();
-    const auto activationTime = active ? currentMTP - 1 : currentMTP + 1;
-    gArgs.ForceSetArg(argName, strprintf("%i", activationTime));
+    assert(!active || currentHeight - offset >= 0);
+    const auto activationHeight = active ? currentHeight - offset : currentHeight + offset;
+    g_Upgrade12HeightOverride = activationHeight;
     return Defer(std::function<void()>{
         [prevVal] {
-            if (prevVal) {
-                gArgs.ForceSetArg(argName, strprintf("%i", *prevVal));
-            } else {
-                gArgs.ClearArg(argName);
-            }
+            g_Upgrade12HeightOverride = prevVal;
         }
     });
 }
@@ -1672,7 +1665,7 @@ BOOST_FIXTURE_TEST_CASE(with_mempool_check_oversized_token_commitment, TestChain
                                    true /* hasNFT */, false /* isMutableNFT */,
                                    true /* isMintingNFT */, false /* uncheckedNFT */ );
     auto u9_on = SetUpgrade9Active(true);
-    auto u12_off = SetUpgrade12Active(false);
+    auto u12_off = SetUpgrade12Active(false, /* offset = */ 2);
     CMutableTransaction tx_oversized_upgrade9_only = CreateAndSignTx(coinbaseKey, m_coinbase_txns[0], vout);
     CreateAndProcessBlock({}, {}); // Ensures we can spend m_coinbase_txs[1]
     CMutableTransaction tx_always_oversized = CreateAndSignTx(coinbaseKey, m_coinbase_txns[1], vout2);

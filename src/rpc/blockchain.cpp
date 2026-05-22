@@ -1601,11 +1601,11 @@ UniValue getblockchaininfo(const Config &config,
             const char *cliArg{};
             const int64_t &cliArgDefault;
         } const info = {
-            /* Note: Update the below variables whenever we bump the "next" upgrade to be Upgrade2027, etc */
-            .name = strprintf("May 2026 Upgrade (%snet)", config.GetChainParams().NetworkIDString()),
-            .tracker = g_upgrade12_block_tracker,
-            .cliArg = "-upgrade12activationtime",
-            .cliArgDefault = consensus.upgrade12ActivationTime
+            /* Note: Update the below variables whenever we bump the "next" upgrade to be Upgrade2028, etc */
+            .name = strprintf("May 2027 Upgrade (%snet)", config.GetChainParams().NetworkIDString()),
+            .tracker = g_upgrade2027_block_tracker,
+            .cliArg = "-upgrade2027activationtime",
+            .cliArgDefault = consensus.upgrade2027ActivationTime
         };
         const auto &isUpgradeActivatedFunc = info.tracker.GetPredicate();
         CHECK_NONFATAL(isUpgradeActivatedFunc != nullptr);

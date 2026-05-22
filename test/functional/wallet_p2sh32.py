@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2022-2023 The Bitcoin developers
+# Copyright (c) 2022-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the wallet sending to p2sh32 addresses.  This should fail as non-standard pre-activation, and work ok
@@ -23,7 +23,7 @@ class WalletP2SH32Test(BitcoinTestFramework):
     def set_test_params(self):
         self.num_nodes = 2
         # Need to force-disable upgrade12 as it interferes with the pre-activation portion of this test
-        no_upgrade12 = '-upgrade12activationtime=9999999999'
+        no_upgrade12 = '-upgrade12activationheight=999999999'
         # node 0 does not accept non-std txns, node 1 does accept non-std txns
         self.extra_args = [['-upgrade9activationheight=999999999', '-acceptnonstdtxn=0', '-expire=0',
                             '-whitelist=127.0.0.1', '-txbroadcastinterval=1', no_upgrade12],

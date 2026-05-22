@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2019-2021 The Bitcoin developers
+# Copyright (c) 2019-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the response of wallet to a variety of weird / nonstandard coins
@@ -40,8 +40,8 @@ class WalletStandardnessTest(BitcoinTestFramework):
         # We must ensure upgrade11 is not activated because it affects standardness and error messaging and this test
         # has not been yet updated to test pre and post upgrade11.
         no_upgrade11 = "-upgrade11activationheight=2000000000"
-        # Need to force-disable upgrade12 as it interferes with the pre-activation portion of this test
-        no_upgrade12 = '-upgrade12activationtime=9999999999'
+        # Need to force-disable upgrade12 as it interferes with this test
+        no_upgrade12 = '-upgrade12activationheight=2000000000'
         self.extra_args = [[no_upgrade11, no_upgrade12, '-acceptnonstdtxn=0'],
                            [no_upgrade11, no_upgrade12, '-acceptnonstdtxn=1']]
 

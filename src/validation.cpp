@@ -5085,7 +5085,6 @@ void UnloadBlockIndex(const Config &config) {
     pindexBestForkTip = nullptr;
     pindexBestForkBase = nullptr;
     ResetASERTAnchorBlockCache();
-    g_upgrade12_block_tracker.ResetActivationBlockCache();
     g_upgrade2027_block_tracker.ResetActivationBlockCache();
     g_mempool.clear();
     mapBlocksUnlinked.clear();
@@ -5914,8 +5913,6 @@ double GuessVerificationProgress(const ChainTxData &data,
 
     return pindex->GetChainTxCount() / fTxTotal;
 }
-
-ActivationBlockTracker g_upgrade12_block_tracker(&IsUpgrade12Enabled);
 
 ActivationBlockTracker g_upgrade2027_block_tracker(&IsUpgrade2027Enabled);
 

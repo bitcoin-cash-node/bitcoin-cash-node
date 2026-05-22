@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2025 The Bitcoin developers
+# Copyright (c) 2025-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -21,7 +21,7 @@ import time
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import assert_equal
 
-UPGRADE_ACTIVATION_ARG = 'upgrade12activationtime'
+UPGRADE_ACTIVATION_ARG = 'upgrade2027activationtime'
 
 class GetBlockchainInfoUpgradeStatusTest(BitcoinTestFramework):
     def set_test_params(self):
@@ -37,7 +37,7 @@ class GetBlockchainInfoUpgradeStatusTest(BitcoinTestFramework):
         # Pre-activation: far-future activation time => mempool_activated = false
         info = node.getblockchaininfo()
         us = info['upgrade_status']
-        assert_equal(us['name'], "May 2026 Upgrade (regtestnet)")
+        assert_equal(us['name'], "May 2027 Upgrade (regtestnet)")
         assert_equal(us['mempool_activation_mtp'], self.future_time)
         assert_equal(us['mempool_activated'], False)
         # Not yet known, but expected to always be present as `null`

@@ -49,7 +49,7 @@ class WarnOnOutdatedTest(BitcoinTestFramework):
         self.num_nodes = 4
 
     def run_test(self):
-        if self.options.upgrade2027activation or self.options.upgrade12activation:
+        if self.options.upgrade2027activation:
             # Running this test from ninja check-upgrade-activated will fail, so skip.
             raise SkipTest("This test cannot be run with the next upgrade unconditionally enabled")
 

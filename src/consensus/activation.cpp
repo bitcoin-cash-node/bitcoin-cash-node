@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2023 The Bitcoin developers
+// Copyright (c) 2018-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -157,8 +157,14 @@ bool IsUpgrade11Enabled(const Consensus::Params &params, const CBlockIndex *pind
 }
 
 // Upgrade 12
-static bool IsUpgrade12Enabled(const Consensus::Params &params, const int64_t nMedianTimePast) {
-    return nMedianTimePast >= gArgs.GetArg("-upgrade12activationtime", params.upgrade12ActivationTime);
+std::optional<int32_t> g_Upgrade12HeightOverride;
+
+int32_t GetUpgrade12ActivationHeight(const Consensus::Params &params) {
+    return g_Upgrade12HeightOverride.value_or(params.upgrade12Height);
+}
+
+static bool IsUpgrade12EnabledForHeightPrev(const Consensus::Params &params, const int32_t nHeightPrev) {
+    return nHeightPrev >= GetUpgrade12ActivationHeight(params);
 }
 
 bool IsUpgrade12Enabled(const Consensus::Params &params, const CBlockIndex *pindexPrev) {
@@ -166,7 +172,7 @@ bool IsUpgrade12Enabled(const Consensus::Params &params, const CBlockIndex *pind
         return false;
     }
 
-    return IsUpgrade12Enabled(params, pindexPrev->GetMedianTimePast());
+    return IsUpgrade12EnabledForHeightPrev(params, pindexPrev->nHeight);
 }
 
 // Upgrade 2027
