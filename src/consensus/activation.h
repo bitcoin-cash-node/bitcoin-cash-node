@@ -42,9 +42,6 @@ bool IsAxionEnabled(const Consensus::Params &params,
 /** Note: May 15th, 2021 protocol upgrade was relay-only, and has no on-chain rules.
  *  The function "IsTachyonEnabled" that used to live here has been removed. */
 
-/** Check if May 15th, 2022 protocol upgrade has activated. */
-bool IsUpgrade8Enabled(const Consensus::Params &params, const CBlockIndex *pindexPrev);
-
 /**
  *  Global: If set, the user overrode the -upgrade9activationheight from the command-line or config file. Unit tests
  *  also may temporarily set this value. If this is not set, the *Upgrade9*() functions use hard-coded chain params for

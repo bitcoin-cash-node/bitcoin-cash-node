@@ -60,7 +60,7 @@ std::enable_if_t<std::is_same_v<ScriptNumType, CScriptNum>
 
 static
 void CheckCreateVchOldRules(int64_t x) {
-    size_t const maxIntegerSize = CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT;
+    size_t const maxIntegerSize = 4; // Legacy 32-bit ints (no longer used in consensus)
 
     CScriptNum10 bigx(x);
     auto const scriptx = CScriptNum::fromIntUnchecked(x);
@@ -1011,7 +1011,7 @@ void CheckShift(const int64_t v) {
 
 static
 void RunCreateOldRules(CScriptNum const& scriptx) {
-    size_t const maxIntegerSize = CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT;
+    size_t const maxIntegerSize = 4u; // legacy 32-bit limit (no longer used in consensus)
     int64_t const x = scriptx.getint64();
     CheckCreateIntOldRules(x);
     if (scriptx.getvch().size() <= maxIntegerSize) {

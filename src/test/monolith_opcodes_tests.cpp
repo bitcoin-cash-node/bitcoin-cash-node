@@ -593,10 +593,9 @@ BOOST_AUTO_TEST_CASE(type_conversion_test) {
     // NUM2BIN require 2 elements on the stack.
     CheckNum2BinError({{0x00}}, ScriptError::INVALID_STACK_OPERATION);
 
-    // Values that do not fit in 4 bytes are considered out of range for
-    // BIN2NUM.
-    CheckBin2NumError({{0xab, 0xcd, 0xef, 0xc2, 0x80}}, ScriptError::INVALID_NUMBER_RANGE);
-    CheckBin2NumError({{0x00, 0x00, 0x00, 0x80, 0x80}}, ScriptError::INVALID_NUMBER_RANGE);
+    // Values that do not fit in 8 bytes are considered out of range for BIN2NUM.
+    CheckBin2NumError({{0xab, 0xcd, 0xef, 0xc2, 0xab, 0xcd, 0xef, 0xc2, 0x80}}, ScriptError::INVALID_NUMBER_RANGE_64_BIT);
+    CheckBin2NumError({{0x00, 0x00, 0x00, 0x80, 0x00, 0x00, 0x00, 0x80, 0x80}}, ScriptError::INVALID_NUMBER_RANGE_64_BIT);
 
     // NUM2BIN must not generate oversized push.
     valtype largezero(MAX_SCRIPT_ELEMENT_SIZE_LEGACY, 0);
@@ -685,9 +684,10 @@ BOOST_AUTO_TEST_CASE(div_and_mod_opcode_error_tests) {
     CheckDivModError({{}}, ScriptError::INVALID_STACK_OPERATION);
 
     // CheckOps not valid numbers
-    CheckDivModError({{0x01, 0x02, 0x03, 0x04, 0x05}, {0x01, 0x02, 0x03, 0x04, 0x05}}, ScriptError::INVALID_NUMBER_RANGE);
-    CheckDivModError({{0x01, 0x02, 0x03, 0x04, 0x05}, {0x01}}, ScriptError::INVALID_NUMBER_RANGE);
-    CheckDivModError({{0x01, 0x05}, {0x01, 0x02, 0x03, 0x04, 0x05}}, ScriptError::INVALID_NUMBER_RANGE);
+    CheckDivModError({{0x01, 0x02, 0x03, 0x04, 0x01, 0x02, 0x03, 0x04, 0x05}, {0x01, 0x02, 0x03, 0x04, 0x05}},
+                     ScriptError::INVALID_NUMBER_RANGE_64_BIT);
+    CheckDivModError({{0x01, 0x02, 0x03, 0x04, 0x05, 0x01, 0x02, 0x03, 0x04}, {0x01}}, ScriptError::INVALID_NUMBER_RANGE_64_BIT);
+    CheckDivModError({{0x01, 0x05}, {0x01, 0x02, 0x03, 0x04, 0x05, 0x01, 0x02, 0x03, 0x04}}, ScriptError::INVALID_NUMBER_RANGE_64_BIT);
 }
 
 static void div_and_mod_opcode_helper(size_t maxIntegerSize) {
@@ -719,10 +719,6 @@ static void div_and_mod_opcode_helper(size_t maxIntegerSize) {
     CheckDivMod({0xbb, 0xf0, 0x5d, 0x03}, {0x03}, {0x3e, 0x50, 0x1f, 0x01}, {0x01}, maxIntegerSize);
     // 56488123 % 564881230 = 56488123 (and negative operands)
     CheckDivMod({0xbb, 0xf0, 0x5d, 0x03}, {0x4e, 0x67, 0xab, 0x21}, {}, {0xbb, 0xf0, 0x5d, 0x03}, maxIntegerSize);
-}
-
-BOOST_AUTO_TEST_CASE(div_and_mod_opcode_tests) {
-    div_and_mod_opcode_helper(CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT);
 }
 
 BOOST_AUTO_TEST_CASE(div_and_mod_opcode_tests_64_bit_integers) {

@@ -1562,11 +1562,6 @@ static uint32_t GetNextBlockScriptFlags(const Consensus::Params &params, const C
         flags |= SCRIPT_ENFORCE_SIGCHECKS;
     }
 
-    if (IsUpgrade8Enabled(params, pindex)) {
-        flags |= SCRIPT_64_BIT_INTEGERS;
-        flags |= SCRIPT_NATIVE_INTROSPECTION;
-    }
-
     // Activation for native tokens: PREFIX_TOKEN, token consensus, plus
     // token introspection and SIGHASH_UTXOS (0x20) hash type flag.
     // Activation for p2sh_32

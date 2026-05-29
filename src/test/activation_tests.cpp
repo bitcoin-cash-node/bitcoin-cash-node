@@ -108,23 +108,6 @@ BOOST_AUTO_TEST_CASE(isaxionenabled) {
     }
 }
 
-BOOST_AUTO_TEST_CASE(isupgrade8enabled) {
-    const Consensus::Params &consensus = Params().GetConsensus();
-    BOOST_CHECK(!IsUpgrade8Enabled(consensus, nullptr));
-
-    std::array<CBlockIndex, 4> blocks;
-    blocks[0].nHeight = consensus.upgrade8Height - 2;
-
-    for (size_t i = 1; i < blocks.size(); ++i) {
-        blocks[i].pprev = &blocks[i - 1];
-        blocks[i].nHeight = blocks[i - 1].nHeight + 1;
-    }
-    BOOST_CHECK(!IsUpgrade8Enabled(consensus, &blocks[0]));
-    BOOST_CHECK(!IsUpgrade8Enabled(consensus, &blocks[1]));
-    BOOST_CHECK(IsUpgrade8Enabled(consensus, &blocks[2]));
-    BOOST_CHECK(IsUpgrade8Enabled(consensus, &blocks[3]));
-}
-
 BOOST_AUTO_TEST_CASE(isupgrade9enabled) {
     // test with hard-coded activation height, also test the upgrade height override mechanism
     Defer d([orig_override = g_Upgrade9HeightOverride] { g_Upgrade9HeightOverride = orig_override; });

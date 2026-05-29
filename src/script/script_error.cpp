@@ -41,7 +41,7 @@ const char *ScriptErrorString(const ScriptError serror) {
             return "Input SigChecks limit exceeded";
         case ScriptError::INVALID_OPERAND_SIZE:
             return "Invalid operand size";
-        case ScriptError::INVALID_NUMBER_RANGE:
+        case ScriptError::INVALID_NUMBER_RANGE_32_BIT:
             return "Given operand is not a number within the valid range [-2^31 + 1, 2^31 - 1]";
         case ScriptError::INVALID_NUMBER_RANGE_64_BIT:
             return "Given operand is not a number within the valid range [-2^63 + 1, 2^63 - 1]";

@@ -136,8 +136,6 @@ static bool IsOpcodeDisabled(opcodetype opcode, uint32_t flags) {
         case OP_RSHIFTBIN:
             // Disabled before May 2026
             return (flags & SCRIPT_ENABLE_MAY2026) == 0;
-        case OP_MUL:
-            return (flags & SCRIPT_64_BIT_INTEGERS) == 0;
         default:
             break;
     }
@@ -360,23 +358,14 @@ bool EvalScriptImpl(std::vector<valtype> &stack, const CScript &initialScript, u
     set_error(serror, ScriptError::UNKNOWN);
     int nOpCount = 0; /* Only used iff chipVmLimitsEnabled == false */
     bool const fRequireMinimal = (flags & SCRIPT_VERIFY_MINIMALDATA) != 0;
-    bool const nativeIntrospection = (flags & SCRIPT_NATIVE_INTROSPECTION) != 0;
-    bool const integers64Bit = (flags & SCRIPT_64_BIT_INTEGERS) != 0;
     bool const nativeTokens = (flags & SCRIPT_ENABLE_TOKENS) != 0;
     const ScriptExecutionContext * const context = checker.GetContext();
 
-    size_t const maxIntegerSizeLegacy =
-        integers64Bit ? CScriptNum::MAXIMUM_ELEMENT_SIZE_64_BIT
-                      : CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT;
-
+    size_t const maxIntegerSizeLegacy = CScriptNum::MAXIMUM_ELEMENT_SIZE_64_BIT;
     size_t const maxIntegerSize = UsesBigInt ? ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT : maxIntegerSizeLegacy;
 
-    ScriptError const invalidNumberRangeErrorLegacy =
-        integers64Bit ? ScriptError::INVALID_NUMBER_RANGE_64_BIT
-                      : ScriptError::INVALID_NUMBER_RANGE;
-
     ScriptError const invalidNumberRangeError = UsesBigInt ? ScriptError::INVALID_NUMBER_RANGE_BIG_INT
-                                                           : invalidNumberRangeErrorLegacy;
+                                                           : ScriptError::INVALID_NUMBER_RANGE_64_BIT;
 
     bool const chipVmLimitsEnabled = (flags & SCRIPT_ENABLE_MAY2025) != 0;
     size_t const maxScriptElementSize = chipVmLimitsEnabled ? may2025::MAX_SCRIPT_ELEMENT_SIZE
@@ -1903,9 +1892,6 @@ bool EvalScriptImpl(std::vector<valtype> &stack, const CScript &initialScript, u
                         case OP_TXINPUTCOUNT:
                         case OP_TXOUTPUTCOUNT:
                         case OP_TXLOCKTIME: {
-                            if ( ! nativeIntrospection) {
-                                return set_error(serror, ScriptError::BAD_OPCODE);
-                            }
                             if ( ! context) {
                                 return set_error(serror, ScriptError::CONTEXT_NOT_PRESENT);
                             }
@@ -1969,10 +1955,6 @@ bool EvalScriptImpl(std::vector<valtype> &stack, const CScript &initialScript, u
                         case OP_INPUTSEQUENCENUMBER:
                         case OP_OUTPUTVALUE:
                         case OP_OUTPUTBYTECODE: {
-
-                            if ( ! nativeIntrospection) {
-                                return set_error(serror, ScriptError::BAD_OPCODE);
-                            }
                             if ( ! context) {
                                 return set_error(serror, ScriptError::CONTEXT_NOT_PRESENT);
                             }

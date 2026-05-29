@@ -137,8 +137,7 @@ public:
         // May 15, 2021 12:00:00 UTC protocol upgrade was 1621080000, but since this upgrade was for relay rules only,
         // we do not track this time (since it does not apply at all to the blockchain itself).
 
-        // May 15, 2022 12:00:00 UTC protocol upgrade
-        consensus.upgrade8Height = 740237;
+        // May 15, 2022 12:00:00 UTC protocol upgrade (upgrade8) height was 740237
 
         // May 15, 2023 12:00:00 UTC protocol upgrade (this is one less than the upgrade block itself)
         consensus.upgrade9Height = 792772;
@@ -393,8 +392,7 @@ public:
         // Nov 15, 2020 12:00:00 UTC protocol upgrade
         consensus.axionActivationTime = 1605441600;
 
-        // May 15, 2022 12:00:00 UTC protocol upgrade
-        consensus.upgrade8Height = 1500205;
+        // May 15, 2022 12:00:00 UTC protocol upgrade (upgrade8) height was 1500205
 
         // May 15, 2023 12:00:00 UTC protocol upgrade (this is one less than the upgrade block itself)
         consensus.upgrade9Height = 1552787;
@@ -614,8 +612,7 @@ public:
         // Nov 15, 2020 12:00:00 UTC protocol upgrade
         consensus.axionActivationTime = 1605441600;
 
-        // May 15, 2022 12:00:00 UTC protocol upgrade
-        consensus.upgrade8Height = 95464;
+        // May 15, 2022 12:00:00 UTC protocol upgrade (upgrade8) height was 95464
 
         // May 15, 2023 12:00:00 UTC protocol upgrade (this is one less than the upgrade block itself)
         consensus.upgrade9Height = 148043;
@@ -805,8 +802,7 @@ public:
         // Nov 15, 2020 12:00:00 UTC protocol upgrade
         consensus.axionActivationTime = 1605441600;
 
-        // May 15, 2022 12:00:00 UTC protocol upgrade
-        consensus.upgrade8Height = 10'006;
+        // May 15, 2022 12:00:00 UTC protocol upgrade (upgrade8), retroactively always enabled
 
         // May 15, 2023 12:00:00 UTC protocol upgrade
         consensus.upgrade9Height = 10'006;
@@ -968,8 +964,7 @@ public:
         // Nov 15, 2020 12:00:00 UTC protocol upgrade
         consensus.axionActivationTime = 1605441600;
 
-        // May 15, 2022 12:00:00 UTC protocol upgrade
-        consensus.upgrade8Height = 95464;
+        // May 15, 2022 12:00:00 UTC protocol upgrade (upgrade8) height was 95464
 
         // November 15, 2022 12:00:00 UTC; protocol upgrade activates 6 months early
         consensus.upgrade9Height = 121956; // (one less than upgrade block)
@@ -1147,9 +1142,6 @@ public:
 
         // Nov 15, 2020 12:00:00 UTC protocol upgrade
         consensus.axionActivationTime = 1605441600;
-
-        // May 15, 2022 12:00:00 UTC protocol upgrade
-        consensus.upgrade8Height = 0;
 
         // May 15, 2023 12:00:00 UTC protocol upgrade
         consensus.upgrade9Height = 0;
