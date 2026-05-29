@@ -1,10 +1,11 @@
 // Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2020-2024 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #pragma once
 
+#include <protocol.h>
 #include <script/standard.h> // For CTxDestination
 #include <univalue.h> // For UniValue::Object, UniValue::stringify
 #include <util/check.h>
@@ -17,7 +18,6 @@ class CKeyStore;
 class CPubKey;
 class CScript;
 struct NodeContext;
-class UniValue;
 
 //! Pointers to interfaces that need to be accessible from RPC methods. Due to
 //! limitations of the RPC framework, there's currently no direct way to pass in
@@ -35,6 +35,9 @@ CScript CreateMultisigRedeemscript(const int required,
  * obj is the UniValue object to append to.
  */
 void DescribeAddress(const CTxDestination &dest, UniValue::Object& obj);
+
+/** Returns, given services flags, a univalue array of human-readable (known) network services */
+UniValue::Array GetServicesNames(ServiceFlags services);
 
 /**
  * Serializing JSON objects depends on the outer type. Only arrays and

@@ -37,6 +37,8 @@ None
 - The `gettxout` RPC has a new 4th argument, `patterns` (boolean, optional) which, if set to `true`, will cause the RPC
   results to also contain an additional `"byteCodePatterns"` JSON object. See the JSON-RPC help for `gettxout` for more
   information.
+- The `getnetworkinfo`, `getpeerinfo`, and `getnodeaddresses` RPC methods now return additional new keys which
+  contain human-readable network service flags.
 
 ## Removed functionality
 

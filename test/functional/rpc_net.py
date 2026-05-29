@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2017 The Bitcoin Core developers
+# Copyright (c) 2017-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test RPC calls related to net.
@@ -9,6 +10,7 @@ Tests correspond to code in rpc/net.cpp.
 
 from decimal import Decimal
 
+import test_framework
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.util import (
     assert_equal,
@@ -23,6 +25,19 @@ from test_framework.p2p import P2PInterface
 from test_framework.messages import NODE_NETWORK
 
 
+def assert_net_servicesnames(servicesflag, servicenames):
+    """Utility that checks if all flags are correctly decoded in
+    `getpeerinfo` and `getnetworkinfo`.
+
+    :param servicesflag: The services as an integer.
+    :param servicenames: The list of decoded services names, as strings.
+    """
+    servicesflag_generated = 0
+    for servicename in servicenames:
+        servicesflag_generated |= getattr(test_framework.messages, 'NODE_' + servicename)
+    assert_equal(servicesflag_generated, servicesflag)
+
+
 class NetTest(BitcoinTestFramework):
     def set_test_params(self):
         self.setup_clean_chain = True
@@ -33,7 +48,7 @@ class NetTest(BitcoinTestFramework):
     def run_test(self):
         self._test_connection_count()
         self._test_getnettotals()
-        self._test_getnetworkinginfo()
+        self._test_getnetworkinfo()
         self._test_getaddednodeinfo()
         self._test_getpeerinfo()
         self._test_getnodeaddresses()
@@ -84,7 +99,7 @@ class NetTest(BitcoinTestFramework):
                     'ping', 0), before['bytessent_per_msg'].get(
                     'ping', 0) + 32)
 
-    def _test_getnetworkinginfo(self):
+    def _test_getnetworkinfo(self):
         assert_equal(self.nodes[0].getnetworkinfo()['networkactive'], True)
         assert_equal(self.nodes[0].getnetworkinfo()['connections'], 2)
 
@@ -98,6 +113,11 @@ class NetTest(BitcoinTestFramework):
         connect_nodes_bi(self.nodes[0], self.nodes[1])
         assert_equal(self.nodes[0].getnetworkinfo()['networkactive'], True)
         assert_equal(self.nodes[0].getnetworkinfo()['connections'], 2)
+
+        # check the `servicesnames` field
+        network_info = [node.getnetworkinfo() for node in self.nodes]
+        for info in network_info:
+            assert_net_servicesnames(int(info["localservices"], 0x10), info["localservicesnames"])
 
     def _test_getaddednodeinfo(self):
         assert_equal(self.nodes[0].getaddednodeinfo(), [])
@@ -121,6 +141,9 @@ class NetTest(BitcoinTestFramework):
         assert_equal(peer_info[1][0]['addrbind'], peer_info[0][0]['addr'])
         assert_equal(peer_info[0][0]['minfeefilter'], Decimal("0.00000500"))
         assert_equal(peer_info[1][0]['minfeefilter'], Decimal("0.00001000"))
+        # check the `servicesnames` field
+        for info in peer_info:
+            assert_net_servicesnames(int(info[0]["services"], 0x10), info[0]["servicesnames"])
 
     def _test_getnodeaddresses(self):
         self.nodes[0].add_p2p_connection(P2PInterface())
@@ -147,6 +170,7 @@ class NetTest(BitcoinTestFramework):
         for a in node_addresses:
             assert_greater_than(a["time"], 1527811200)  # 1st June 2018
             assert_equal(a["services"], NODE_NETWORK)
+            assert_net_servicesnames(a["services"], a["servicesnames"])
             assert a["address"] in imported_addrs
             assert_equal(a["port"], 8333)
 
