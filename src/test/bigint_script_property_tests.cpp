@@ -50,8 +50,7 @@ std::string DumpStack(const StackT &stack) { // used for debugging
 
 [[nodiscard]]
 bool TestScript(const CScript &testScript, StackT &stack, ScriptError expectedError, bool suppressMsg = false) {
-    constexpr uint32_t flags = STANDARD_SCRIPT_VERIFY_FLAGS
-                               | SCRIPT_64_BIT_INTEGERS | SCRIPT_ENABLE_MAY2025 | SCRIPT_ENABLE_MAY2026;
+    constexpr uint32_t flags = STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_MAY2025 | SCRIPT_ENABLE_MAY2026;
     static const BaseSignatureChecker dummyChecker;
     ScriptError serror;
     //BOOST_TEST_MESSAGE("Before: " << DumpStack(stack));

@@ -91,14 +91,6 @@ bool IsAxionEnabled(const Consensus::Params &params,
            gArgs.GetArg("-axionactivationtime", params.axionActivationTime);
 }
 
-bool IsUpgrade8Enabled(const Consensus::Params &params, const CBlockIndex *pindexPrev) {
-    if (pindexPrev == nullptr) {
-        return false;
-    }
-
-    return pindexPrev->nHeight >= params.upgrade8Height;
-}
-
 // Upgrade 9
 std::optional<int32_t> g_Upgrade9HeightOverride;
 

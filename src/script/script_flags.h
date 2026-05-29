@@ -102,28 +102,20 @@ enum {
     // policy/consensus.h .
     SCRIPT_ENFORCE_SIGCHECKS = (1U << 23),
 
-    // Flag that allows us to determine if the script interpreter should allow
-    // 64-bit integer arithmetic and the return of OP_MUL or use the previous
-    // semantics.
-    SCRIPT_64_BIT_INTEGERS = (1U << 24),
-
-    // Native Introspection opcodes.
-    SCRIPT_NATIVE_INTROSPECTION = (1U << 25),
-
     // Enable p2sh32 (uses OP_HASH256 rather than OP_HASH160)
-    SCRIPT_ENABLE_P2SH_32 = (1U << 26),
+    SCRIPT_ENABLE_P2SH_32 = (1U << 24),
 
     // Enable native tokens support, including all consensus rules & native
     // introspection op-codes related to them.
-    SCRIPT_ENABLE_TOKENS = (1U << 27),
+    SCRIPT_ENABLE_TOKENS = (1U << 25),
 
     // Upgrade 11
     // - Enable CHIP-2021-05-vm-limits: Targeted Virtual Machine Limits
     // - Enable CHIP-2024-07-BigInt: High-Precision Arithmetic for Bitcoin Cash
-    SCRIPT_ENABLE_MAY2025 = (1U << 28),
+    SCRIPT_ENABLE_MAY2025 = (1U << 26),
     // Used only if SCRIPT_ENABLE_MAY2025 is set; Use "relay" costing rules: Hashing is costed 3x for standard txns.
-    SCRIPT_VM_LIMITS_STANDARD = (1U << 29),
+    SCRIPT_VM_LIMITS_STANDARD = (1U << 27),
 
     // Upgrade 12
-    SCRIPT_ENABLE_MAY2026 = (1U << 30),
+    SCRIPT_ENABLE_MAY2026 = (1U << 28),
 };

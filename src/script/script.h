@@ -268,6 +268,9 @@ struct ScriptIntBase {
 protected:
     IntType value_;
 
+    /* Legacy limit for CScriptNum, 8 bytes */
+    static constexpr size_t MAXIMUM_ELEMENT_SIZE_64_BIT = 8;
+
     /* 10KB limit or +/- 2^79999 - 1; If changing this also update script_error.cpp to denote the new valid range. */
     static constexpr size_t MAXIMUM_ELEMENT_SIZE_BIG_INT = may2025::MAX_SCRIPT_ELEMENT_SIZE;
     static constexpr size_t MAX_BIG_INT_BITS = MAXIMUM_ELEMENT_SIZE_BIG_INT * 8u - 1u;
@@ -754,10 +757,15 @@ struct ScriptNumCommon : ScriptIntBase<Derived, UsesBigInt>, ScriptNumEncoding {
     static
     void throwIfInvalidScriptNumEncoding(std::vector<uint8_t> const& vch, bool fRequireMinimal, size_t maxIntegerSize) {
         if (vch.size() > maxIntegerSize) {
-            throw scriptnum_error("script number overflow",
-                                  maxIntegerSize > 8u ? ScriptError::INVALID_NUMBER_RANGE_BIG_INT
-                                                      : maxIntegerSize == 8u ? ScriptError::INVALID_NUMBER_RANGE_64_BIT
-                                                                             : ScriptError::INVALID_NUMBER_RANGE);
+            ScriptError err;
+            if (maxIntegerSize > Base::MAXIMUM_ELEMENT_SIZE_64_BIT) {
+                err = ScriptError::INVALID_NUMBER_RANGE_BIG_INT;
+            } else if (maxIntegerSize == Base::MAXIMUM_ELEMENT_SIZE_64_BIT) {
+                err = ScriptError::INVALID_NUMBER_RANGE_64_BIT;
+            } else {
+                err = ScriptError::INVALID_NUMBER_RANGE_32_BIT;
+            }
+            throw scriptnum_error("script number overflow", err);
         }
         if (fRequireMinimal && ! IsMinimallyEncoded(vch, maxIntegerSize)) {
             throw scriptnum_error("non-minimally encoded script number", ScriptError::MINIMALNUM);
@@ -818,8 +826,7 @@ struct CScriptNum : ScriptNumCommon<CScriptNum, false> {
     friend ScriptIntBase;
     friend ScriptNumCommon;
 
-    static constexpr size_t MAXIMUM_ELEMENT_SIZE_32_BIT = 4;
-    static constexpr size_t MAXIMUM_ELEMENT_SIZE_64_BIT = 8;
+    using ScriptNumCommon::MAXIMUM_ELEMENT_SIZE_64_BIT;
 
 private:
     explicit

@@ -583,8 +583,8 @@ BOOST_AUTO_TEST_CASE(test_individual_opcode_counts) {
     };
 
     const uint32_t flags = (STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_TOKENS | SCRIPT_ENABLE_P2SH_32
-                            | SCRIPT_ENABLE_MAY2025 | SCRIPT_VM_LIMITS_STANDARD |SCRIPT_64_BIT_INTEGERS
-                            | SCRIPT_NATIVE_INTROSPECTION) & ~SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS;
+                            | SCRIPT_ENABLE_MAY2025 | SCRIPT_VM_LIMITS_STANDARD)
+                           & ~SCRIPT_VERIFY_DISCOURAGE_UPGRADABLE_NOPS;
 
     auto ScriptToStack = [](const CScript &script) -> StackT {
         StackT ret;

@@ -168,9 +168,8 @@ static void VerifyScripts_SigsChecks_Block556034(benchmark::State &state) {
 }
 
 static void VerifyLoopScript(benchmark::State &state, int which, bool tightLoop) {
-    constexpr uint32_t flags = STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_64_BIT_INTEGERS | SCRIPT_NATIVE_INTROSPECTION
-                               | SCRIPT_ENABLE_P2SH_32 | SCRIPT_ENABLE_TOKENS | SCRIPT_ENABLE_MAY2025
-                               | SCRIPT_VM_LIMITS_STANDARD | SCRIPT_ENABLE_MAY2026;
+    constexpr uint32_t flags = STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32 | SCRIPT_ENABLE_TOKENS
+                               | SCRIPT_ENABLE_MAY2025 | SCRIPT_VM_LIMITS_STANDARD | SCRIPT_ENABLE_MAY2026;
     constexpr size_t finalScriptSize = 1000; // modify this to test various sized busy-loop scripts.
     static_assert(finalScriptSize >= 20);
     CScript script;

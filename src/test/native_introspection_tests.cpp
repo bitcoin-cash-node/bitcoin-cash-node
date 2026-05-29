@@ -110,9 +110,8 @@ CScript MakeOversizedScript(bool pushOnly = false) {
 }
 
 BOOST_AUTO_TEST_CASE(opcodes_basic) {
-    uint32_t const flags = MANDATORY_SCRIPT_VERIFY_FLAGS | SCRIPT_NATIVE_INTROSPECTION;
+    uint32_t const flags = MANDATORY_SCRIPT_VERIFY_FLAGS;
     uint32_t const flags_tokens = flags | SCRIPT_ENABLE_TOKENS;
-    uint32_t const flags_inactive = flags & ~SCRIPT_NATIVE_INTROSPECTION;
 
     CCoinsView dummy;
     CCoinsViewCache coins(&dummy);
@@ -278,8 +277,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
 
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_INPUTINDEX, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_INPUTINDEX, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_ACTIVEBYTECODE (nullary)
@@ -329,8 +326,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         CheckErrorWithFlags(flags, {}, bytecode4, context[oversized_in], ScriptError::PUSH_SIZE);
         // failure (no context)
         CheckErrorWithFlags(flags, {}, bytecode1, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, bytecode1, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_TXVERSION (nullary)
@@ -342,8 +337,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
 
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_TXVERSION, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_TXVERSION, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_TXINPUTCOUNT (nullary)
@@ -355,8 +348,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
 
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_TXINPUTCOUNT, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_TXINPUTCOUNT, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_TXOUTPUTCOUNT (nullary)
@@ -368,8 +359,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
 
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_TXOUTPUTCOUNT, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_TXOUTPUTCOUNT, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_TXLOCKTIME (nullary)
@@ -381,8 +370,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
 
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_TXLOCKTIME, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_TXLOCKTIME, context[0], ScriptError::BAD_OPCODE);
     }
 
     BOOST_TEST_MESSAGE("Native Introspection (unary) tests ...");
@@ -414,8 +401,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
                             ScriptError::LIMITED_CONTEXT_NO_SIBLING_INFO);
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_UTXOVALUE, limited_context[1],
                             ScriptError::LIMITED_CONTEXT_NO_SIBLING_INFO);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_UTXOVALUE, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_UTXOBYTECODE (unary)
@@ -475,8 +460,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
                             ScriptError::LIMITED_CONTEXT_NO_SIBLING_INFO);
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_UTXOBYTECODE, limited_context[1],
                             ScriptError::LIMITED_CONTEXT_NO_SIBLING_INFO);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_UTXOBYTECODE, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_OUTPOINTTXHASH (unary)
@@ -499,8 +482,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
                             context[1], ScriptError::INVALID_TX_INPUT_INDEX);
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_OUTPOINTTXHASH, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_OUTPOINTTXHASH, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_OUTPOINTINDEX (unary)
@@ -523,8 +504,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
                             context[1], ScriptError::INVALID_TX_INPUT_INDEX);
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_OUTPOINTINDEX, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_OUTPOINTINDEX, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_INPUTBYTECODE (unary)
@@ -552,8 +531,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         }
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_INPUTBYTECODE, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_INPUTBYTECODE, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_INPUTSEQUENCENUMBER (unary)
@@ -576,8 +553,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
                             context[1], ScriptError::INVALID_TX_INPUT_INDEX);
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_INPUTSEQUENCENUMBER, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_INPUTSEQUENCENUMBER, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_OUTPUTVALUE (unary)
@@ -604,8 +579,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
                             context[1], ScriptError::INVALID_TX_OUTPUT_INDEX);
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_OUTPUTVALUE, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_OUTPUTVALUE, context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_OUTPUTBYTECODE (unary)
@@ -667,8 +640,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         }
         // failure (no context)
         CheckErrorWithFlags(flags, {}, CScript() << OP_0 << OP_OUTPUTBYTECODE, {}, ScriptError::CONTEXT_NOT_PRESENT);
-        // failure (not activated)
-        CheckErrorWithFlags(flags_inactive, {}, CScript() << OP_0 << OP_OUTPUTBYTECODE, context[0], ScriptError::BAD_OPCODE);
     }
 
     // --- Token Introspection ---
@@ -714,8 +685,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
                             ScriptError::LIMITED_CONTEXT_NO_SIBLING_INFO);
         // failure (not activated)
         CheckErrorWithFlags(flags /* no tokens */, {}, CScript() << OP_0 << OP_UTXOTOKENCATEGORY,
-                            context[0], ScriptError::BAD_OPCODE);
-        CheckErrorWithFlags(flags_inactive /* no introspection */, {}, CScript() << OP_0 << OP_UTXOTOKENCATEGORY,
                             context[0], ScriptError::BAD_OPCODE);
     }
 
@@ -764,8 +733,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         // failure (not activated)
         CheckErrorWithFlags(flags /* no tokens */, {}, CScript() << OP_0 << OP_UTXOTOKENCOMMITMENT,
                             context[0], ScriptError::BAD_OPCODE);
-        CheckErrorWithFlags(flags_inactive /* no introspection */, {}, CScript() << OP_0 << OP_UTXOTOKENCOMMITMENT,
-                            context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_UTXOTOKENAMOUNT (unary)
@@ -805,8 +772,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         // failure (not activated)
         CheckErrorWithFlags(flags /* no tokens */, {}, CScript() << OP_0 << OP_UTXOTOKENAMOUNT,
                             context[0], ScriptError::BAD_OPCODE);
-        CheckErrorWithFlags(flags_inactive /* no introspection */, {}, CScript() << OP_0 << OP_UTXOTOKENAMOUNT,
-                            context[0], ScriptError::BAD_OPCODE);
     }
 
     // OP_OUTPUTTOKENCATEGORY (unary)
@@ -841,8 +806,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         CheckErrorWithFlags(flags_tokens, {}, CScript() << OP_0 << OP_OUTPUTTOKENCATEGORY, {}, ScriptError::CONTEXT_NOT_PRESENT);
         // failure (not activated)
         CheckErrorWithFlags(flags /* no tokens */, {}, CScript() << OP_0 << OP_OUTPUTTOKENCATEGORY,
-                            context[0], ScriptError::BAD_OPCODE);
-        CheckErrorWithFlags(flags_inactive /* no introspection */, {}, CScript() << OP_0 << OP_OUTPUTTOKENCATEGORY,
                             context[0], ScriptError::BAD_OPCODE);
     }
 
@@ -879,8 +842,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         CheckErrorWithFlags(flags_tokens, {}, CScript() << OP_0 << OP_OUTPUTTOKENCOMMITMENT, {}, ScriptError::CONTEXT_NOT_PRESENT);
         // failure (not activated)
         CheckErrorWithFlags(flags /* no tokens */, {}, CScript() << OP_0 << OP_OUTPUTTOKENCOMMITMENT,
-                            context[0], ScriptError::BAD_OPCODE);
-        CheckErrorWithFlags(flags_inactive /* no introspection */, {}, CScript() << OP_0 << OP_OUTPUTTOKENCOMMITMENT,
                             context[0], ScriptError::BAD_OPCODE);
     }
 
@@ -923,8 +884,6 @@ BOOST_AUTO_TEST_CASE(opcodes_basic) {
         CheckErrorWithFlags(flags_tokens, {}, CScript() << OP_0 << OP_OUTPUTTOKENAMOUNT, {}, ScriptError::CONTEXT_NOT_PRESENT);
         // failure (not activated)
         CheckErrorWithFlags(flags /* no tokens */, {}, CScript() << OP_0 << OP_OUTPUTTOKENAMOUNT,
-                            context[0], ScriptError::BAD_OPCODE);
-        CheckErrorWithFlags(flags_inactive /* no introspection */, {}, CScript() << OP_0 << OP_OUTPUTTOKENAMOUNT,
                             context[0], ScriptError::BAD_OPCODE);
     }
 }

@@ -23,7 +23,7 @@ enum class ScriptError {
 
     /* Operands checks */
     INVALID_OPERAND_SIZE,
-    INVALID_NUMBER_RANGE,
+    INVALID_NUMBER_RANGE_32_BIT,
     IMPOSSIBLE_ENCODING,
     INVALID_SPLIT_RANGE,
     INVALID_BIT_COUNT,

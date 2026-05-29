@@ -1514,7 +1514,7 @@ BOOST_AUTO_TEST_CASE(scriptnum_checks) {
                 BOOST_CHECK(*res < std::numeric_limits<int64_t>::min() || *res > std::numeric_limits<int64_t>::max());
                 BOOST_CHECK_THROW(ScriptBigInt(res->getvch(), true, CScriptNum::MAXIMUM_ELEMENT_SIZE_64_BIT),
                                   scriptnum_error);
-                BOOST_CHECK_THROW(ScriptBigInt(res->getvch(), true, CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT),
+                BOOST_CHECK_THROW(ScriptBigInt(res->getvch(), true, 4u /* legacy limit, no longer used */),
                                   scriptnum_error);
             } else {
                 // Does fit in an int64_t -- the below must be true
@@ -1524,10 +1524,10 @@ BOOST_AUTO_TEST_CASE(scriptnum_checks) {
                 BOOST_CHECK(bi >= std::numeric_limits<int64_t>::min() && bi <= std::numeric_limits<int64_t>::max());
                 BOOST_CHECK(*res >= std::numeric_limits<int64_t>::min() && *res <= std::numeric_limits<int64_t>::max());
                 if (*res < (std::numeric_limits<int32_t>::min() + 1) || *res > std::numeric_limits<int32_t>::max()) {
-                    BOOST_CHECK_THROW(ScriptBigInt(res->getvch(), true, CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT),
+                    BOOST_CHECK_THROW(ScriptBigInt(res->getvch(), true, 4u /* legacy limit, no longer used */),
                                       scriptnum_error);
                 } else {
-                    BOOST_CHECK(ScriptBigInt(res->getvch(), true, CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT) == bi);
+                    BOOST_CHECK(ScriptBigInt(res->getvch(), true, 4u /* legacy limit, no longer used */) == bi);
                 }
                 // Check it serializes as we expect versus legacy CScriptNum implementations
                 BOOST_CHECK_EQUAL(res->getvch(), CScriptNum::fromIntUnchecked(*opti64).getvch());
@@ -1540,7 +1540,7 @@ BOOST_AUTO_TEST_CASE(scriptnum_checks) {
             }
             if (*res == std::numeric_limits<int32_t>::min()) { // serializes to 5 bytes so, must fail with this c'tor
                 ++seen_1_under_min_i32;
-                BOOST_CHECK_THROW(ScriptBigInt(res->getvch(), true, CScriptNum::MAXIMUM_ELEMENT_SIZE_32_BIT),
+                BOOST_CHECK_THROW(ScriptBigInt(res->getvch(), true, 4u /* legacy limit, no longer used */),
                                   scriptnum_error);
             }
             auto b2 = ScriptBigInt(res->getvch(), true, ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT);
