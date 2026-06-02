@@ -341,7 +341,16 @@ class MempoolAcceptanceTest(BitcoinTestFramework):
             rawtxs=[ToHex(tx)],
         )
         tx = FromHex(CTransaction(), raw_tx_reference)
-        tx.vout[0].scriptPubKey = CScript([OP_0])  # Some non-standard script
+        tx.vout[0].scriptPubKey = CScript([OP_0])  # A standard script, but evaluates to false
+        self.check_mempool_result(
+            result_expected=[
+                {'txid': tx.rehash(), 'allowed': False,
+                 'reject-reason': '16: mandatory-script-verify-flag-failed (Signature must be zero for failed CHECK(MULTI)SIG operation)',
+                 'reject-details': 'mandatory-script-verify-flag-failed (Signature must be zero for failed CHECK(MULTI)SIG operation)'}],
+            rawtxs=[ToHex(tx)],
+        )
+        tx = FromHex(CTransaction(), raw_tx_reference)
+        tx.vout[0].scriptPubKey = CScript([bytes(201 * (0x1,))])  # A non-standard script, because it exceeds 201 bytes
         self.check_mempool_result(
             result_expected=[
                 {'txid': tx.rehash(), 'allowed': False,

@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -55,8 +55,8 @@ struct Params {
     int upgrade10Height;
     /** Block height at which the May 15, 2025 rules became active (this is one less than the upgrade block itself) */
     int upgrade11Height;
-    /** Unix time used for MTP activation of 15 May 2026 12:00:00 UTC upgrade */
-    int64_t upgrade12ActivationTime;
+    /** Block height at which the May 15, 2026 rules became active (this is one less than the upgrade block itself) */
+    int upgrade12Height;
     /** (Tentative) Unix time used for MTP activation of 15 May 2027 12:00:00 UTC upgrade */
     int64_t upgrade2027ActivationTime;
 

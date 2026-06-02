@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2025 The Bitcoin developers
+# Copyright (c) 2025-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test support for new opcodes that activate with Upgrade 12 (May 2026): loops, functions, and bitwise ops."""
@@ -30,7 +30,7 @@ class LoopsFunctionsBitwiseTest(BitcoinTestFramework):
         self.num_nodes = 1
         self.setup_clean_chain = True
         self.base_extra_args = ['-acceptnonstdtxn=0', '-expire=0', '-whitelist=127.0.0.1']
-        self.extra_args = [['-upgrade12activationtime=9999999999'] + self.base_extra_args]
+        self.extra_args = [['-upgrade12activationheight=999999999'] + self.base_extra_args]
 
     @staticmethod
     def get_rand_bytes(n_bytes: int = 32) -> bytes:
@@ -125,10 +125,11 @@ class LoopsFunctionsBitwiseTest(BitcoinTestFramework):
 
         # Next, activate the upgrade
 
-        # Get the current mtp
-        mtp = node.getblockchaininfo()["mediantime"]
+        # Get the current tip height and hash
+        tip_hash = node.getblockchaininfo()["bestblockhash"]
+        tip_height = node.getblockheader(tip_hash)["height"]
         # Restart the node, enabling upgrade12 as of the tip
-        self.restart_node(0, extra_args=[f"-upgrade12activationtime={mtp}"] + self.base_extra_args)
+        self.restart_node(0, extra_args=[f"-upgrade12activationheight={tip_height}"] + self.base_extra_args)
         self.reconnect_p2p()
 
 

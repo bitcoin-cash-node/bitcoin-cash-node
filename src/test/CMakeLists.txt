@@ -1,4 +1,4 @@
-# Copyright (c) 2018-2025 The Bitcoin developers
+# Copyright (c) 2018-2026 The Bitcoin developers
 
 project(bitcoin-test)
 
@@ -377,7 +377,7 @@ function(add_boost_test_runners_with_upgrade_activated SUITE EXECUTABLE)
       ${SUITE_UPGRADE_ACTIVATED}
       "${_test_name}"
       ${EXECUTABLE} -t "${_test_name}"
-      -- -upgrade12activationtime=1747320000  # Thu May 15 14:40:00 2025
+      -- -upgrade2027activationtime=1778846400  # UTC: Fri May 15 2026 12:00:00
     )
   endforeach()
 endfunction()

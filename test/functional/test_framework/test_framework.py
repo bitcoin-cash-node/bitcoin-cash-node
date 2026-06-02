@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2014-2019 The Bitcoin Core developers
-# Copyright (c) 2022-2024 The Bitcoin Cash Node developers
+# Copyright (c) 2022-2026 The Bitcoin Cash Node developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Base class for RPC testing."""
@@ -131,9 +131,6 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                             help="Attach a python debugger if test fails")
         parser.add_argument("--usecli", dest="usecli", default=False, action="store_true",
                             help="use bitcoin-cli instead of RPC for all commands")
-        parser.add_argument("--with-upgrade12activation", dest="upgrade12activation", default=False,
-                            action="store_true",
-                            help="Activate May 2026 (upgrade 12) update on timestamp {}".format(TIMESTAMP_IN_THE_PAST))
         parser.add_argument("--with-upgrade2027activation", dest="upgrade2027activation", default=False,
                             action="store_true",
                             help="Activate May 2027 update on timestamp {}".format(TIMESTAMP_IN_THE_PAST))
@@ -353,9 +350,6 @@ class BitcoinTestFramework(metaclass=BitcoinTestMetaClass):
                 use_cli=self.options.usecli,
                 emulator=self.options.emulator,
             ))
-            if self.options.upgrade12activation:
-                self.nodes[i].extend_default_args(
-                    ["-upgrade12activationtime={}".format(TIMESTAMP_IN_THE_PAST)])
             if self.options.upgrade2027activation:
                 self.nodes[i].extend_default_args(
                     ["-upgrade2027activationtime={}".format(TIMESTAMP_IN_THE_PAST), "-expire=0"])

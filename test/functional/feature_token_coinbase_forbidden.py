@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2022-2023 The Bitcoin developers
+# Copyright (c) 2022-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test that ensures coinbase txns may create "fake" token data outputs pre-activation, as well as outputs that send to
@@ -61,7 +61,7 @@ class TokenCoinbaseForbiddenTest(BitcoinTestFramework):
         self.setup_clean_chain = True
         self.base_extra_args = ['-acceptnonstdtxn=0', '-expire=0', '-whitelist=127.0.0.1']
         # Need to force-disable upgrade12 as it interferes with the pre-activation portion of this test
-        self.base_extra_args += ['-upgrade12activationtime=9999999999']
+        self.base_extra_args += ['-upgrade12activationheight=999999999']
         self.extra_args = [['-upgrade9activationheight=999999999'] + self.base_extra_args]
 
     def run_test(self):

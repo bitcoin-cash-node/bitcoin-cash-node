@@ -817,9 +817,6 @@ private:
     const Predicate predicate;
 };
 
-/// Global object to track the exact height when Upgrade 12 activated (may be needed for some consensus rules).
-extern ActivationBlockTracker g_upgrade12_block_tracker;
-
 /// Global object to track the exact height when Upgrade 2027 activated (may be needed for some consensus rules).
 extern ActivationBlockTracker g_upgrade2027_block_tracker;
 

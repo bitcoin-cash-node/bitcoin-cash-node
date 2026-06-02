@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -148,8 +148,8 @@ public:
         // May 15, 2025 12:00:00 UTC protocol upgrade (this is one less than the first block mined under new rules)
         consensus.upgrade11Height = 898373;
 
-        // May 15, 2026 12:00:00 UTC protocol upgrade
-        consensus.upgrade12ActivationTime = 1778846400;
+        // May 15, 2026 12:00:00 UTC protocol upgrade (this is one less than the first block mined under new rules)
+        consensus.upgrade12Height = 951144; /* first block with pindex->GetMedianTimePast() >= 1778846400 */
 
         // May 15, 2027 12:00:00 UTC tentative protocol upgrade
         consensus.upgrade2027ActivationTime = 1810382400;
@@ -316,6 +316,9 @@ public:
                 {898374, BlockHash::fromHex("00000000000000000157a0a3dcdc80f1acd809648d238c1e893b26247091b3b4")},
                 {901000, BlockHash::fromHex("000000000000000001eda4b93cfe9bc790906f2358fc5643ff335da5e7bbae5d")},
                 {932228, BlockHash::fromHex("0000000000000000005a48a20e13f038be389952014373478b6a6a90d40e4680")},
+
+                // Upgrade 12; May 15, 2026 (MTP time >= 1778846400), first block mined with upgrade rules: 951145
+                {951145, BlockHash::fromHex("000000000000000000f64dbed68370486f945097ba90b17e30d7bf5c43df7a60")},
             }};
 
         // Data as of block
@@ -403,8 +406,8 @@ public:
         // May 15, 2025 12:00:00 UTC protocol upgrade (this is one less than the first block mined under new rules)
         consensus.upgrade11Height = 1658049;
 
-        // May 15, 2026 12:00:00 UTC protocol upgrade
-        consensus.upgrade12ActivationTime = 1778846400;
+        // May 15, 2026 12:00:00 UTC protocol upgrade (this is one less than the first block mined under new rules)
+        consensus.upgrade12Height = 1710482; /* first block with pindex->GetMedianTimePast() >= 1778846400 */
 
         // May 15, 2027 12:00:00 UTC tentative protocol upgrade
         consensus.upgrade2027ActivationTime = 1810382400;
@@ -534,6 +537,9 @@ public:
                 // Upgrade 11; May 15, 2025 (MTP time >= 1747310400), first block mined with upgrade rules: 1658050
                 {1658050, BlockHash::fromHex("0000000015d90bbd6deeb63cf86dc1f794d76c697d2ea86a42158c8003da8c5e")},
                 {1689348, BlockHash::fromHex("000000001935f758281aa60414a1218dcd09b4dc6b7ad0be2a3cddbcd38ff265")},
+
+                // Upgrade 12; May 15, 2026 (MTP time >= 1778846400), first block mined with upgrade rules: 1710483
+                {1710483, BlockHash::fromHex("00000000078fe0c74ffa0c5221081c34774aa7d17a3c14c36f952f829463f120")},
             }};
 
         // Data as of block
@@ -623,8 +629,8 @@ public:
         // May 15, 2025 12:00:00 UTC protocol upgrade (this is one less than the first block mined under new rules)
         consensus.upgrade11Height = 253318;
 
-        // May 15, 2026 12:00:00 UTC protocol upgrade
-        consensus.upgrade12ActivationTime = 1778846400;
+        // May 15, 2026 12:00:00 UTC protocol upgrade (this is one less than the first block mined under new rules)
+        consensus.upgrade12Height = 305847; /* first block with pindex->GetMedianTimePast() >= 1778846400 */
 
         // May 15, 2027 12:00:00 UTC tentative protocol upgrade
         consensus.upgrade2027ActivationTime = 1810382400;
@@ -724,6 +730,10 @@ public:
                 // Upgrade 11; May 15, 2025 (MTP time >= 1747310400), first block mined with upgrade rules: 253319
                 {253319, BlockHash::fromHex("00000000004605937a919cf6f636b68e8137b5cb0226ddbc9e00f386ef02999b")},
                 {277407, BlockHash::fromHex("00000000fd6af07e5c4618de0cc36796f9470620eb4610584d9011b9f41d3400")},
+
+                // Upgrade 12; May 15, 2026 (MTP time >= 1778846400), first block mined with upgrade rules: 305848
+                {305848, BlockHash::fromHex("00000000601bf68f9927154cf55557b1c08245b4d415658d1cbcd1eb4502dabc")},
+
             }};
 
         // Data as of block
@@ -814,7 +824,7 @@ public:
         consensus.upgrade11Height = 10'006;
 
         // May 15, 2026 12:00:00 UTC protocol upgrade
-        consensus.upgrade12ActivationTime = 1778846400;
+        consensus.upgrade12Height = 10'006;
 
         // May 15, 2027 12:00:00 UTC tentative protocol upgrade
         consensus.upgrade2027ActivationTime = 1810382400;
@@ -976,7 +986,8 @@ public:
         consensus.upgrade11Height = 227228; // (one less than upgrade block)
 
         // November 15, 2025 12:00:00 UTC; protocol upgrade activates 6 months early
-        consensus.upgrade12ActivationTime = 1763208000;
+        // This is the first block with pindex->GetMedianTimePast() >= 1763208000, which is one less than upgrade block.
+        consensus.upgrade12Height = 279791;
 
         // November 15, 2026 12:00:00 UTC; tentative protocol upgrade activates 6 months early
         consensus.upgrade2027ActivationTime = 1794744000;
@@ -1153,7 +1164,7 @@ public:
         consensus.upgrade11Height = 0;
 
         // May 15, 2026 12:00:00 UTC protocol upgrade
-        consensus.upgrade12ActivationTime = 1778846400;
+        consensus.upgrade12Height = 0;
 
         // May 15, 2027 12:00:00 UTC tentative protocol upgrade
         consensus.upgrade2027ActivationTime = 1810382400;

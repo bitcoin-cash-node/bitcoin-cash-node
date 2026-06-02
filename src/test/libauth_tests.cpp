@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2025 The Bitcoin developers
+// Copyright (c) 2022-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -76,31 +76,27 @@ struct Upgrade11OverrideTestingSetup : Upgrade9OverrideTestingSetup {
 
 /// Test fixture that can force-enable or disable upgrade 12 (may2026), as well as upgrade 9 & 11
 struct Upgrade12OverrideTestingSetup : Upgrade11OverrideTestingSetup {
-    std::optional<std::string> optOrigArg12;
+    std::optional<int32_t> upgrade12OriginalOverride;
     bool touchedUpgrade12 = false;
 
     Upgrade12OverrideTestingSetup() {
-        if (gArgs.IsArgSet("-upgrade12activationtime")) {
-            optOrigArg12 = gArgs.GetArg("-upgrade12activationtime", "");
-        }
+        upgrade12OriginalOverride = g_Upgrade12HeightOverride;
     }
 
     ~Upgrade12OverrideTestingSetup() override {
         if (touchedUpgrade12) {
-            gArgs.ClearArg("-upgrade12activationtime");
-            if (optOrigArg12) {
-                gArgs.ForceSetArg("-upgrade12activationtime", *optOrigArg12);
-            }
+            g_Upgrade12HeightOverride = upgrade12OriginalOverride;
         }
     }
 
-           /// Activates or deactivates upgrade 11 by setting the activation time in the past or future respectively
+    /// Activates or deactivates upgrade 12 by setting the activation time in the past or future respectively
     void SetUpgrade12Active(bool active) {
-        if (active) {
-            gArgs.ForceSetArg("-upgrade12activationtime", "1000000");
-        } else {
-            gArgs.ForceSetArg("-upgrade12activationtime", "9223372036854775807");
-        }
+        const auto currentHeight = []{
+            LOCK(cs_main);
+            return ::ChainActive().Tip()->nHeight;
+        }();
+        auto activationHeight = active ? currentHeight - 1 : currentHeight + 1;
+        g_Upgrade12HeightOverride = activationHeight;
         touchedUpgrade12 = true;
     }
 };

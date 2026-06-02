@@ -1022,11 +1022,15 @@ void SetupServerArgs() {
                   regtestChainParams->GetConsensus().upgrade11Height),
         true, OptionsCategory::DEBUG_TEST);
     gArgs.AddArg(
-        "-upgrade12activationtime=<n>",
-        strprintf("Activation time of the May 2026 Bitcoin Cash Network Upgrade (<n> seconds since epoch, "
-                  "default: %d, chipnet: %d)",
-                  defaultChainParams->GetConsensus().upgrade12ActivationTime,
-                  chipnetChainParams->GetConsensus().upgrade12ActivationTime),
+        "-upgrade12activationheight=<n>",
+        strprintf("Activation height of the May 2026 Bitcoin Cash Network Upgrade; first block using new rules will be"
+                  " after this height (default: %d, testnet: %d, testnet4: %d, scalenet: %d, chipnet: %d, regtest: %d)",
+                  defaultChainParams->GetConsensus().upgrade12Height,
+                  testnetChainParams->GetConsensus().upgrade12Height,
+                  testnet4ChainParams->GetConsensus().upgrade12Height,
+                  scalenetChainParams->GetConsensus().upgrade12Height,
+                  chipnetChainParams->GetConsensus().upgrade12Height,
+                  regtestChainParams->GetConsensus().upgrade12Height),
         true, OptionsCategory::DEBUG_TEST);
     gArgs.AddArg(
         "-upgrade2027activationtime=<n>",
@@ -2026,6 +2030,16 @@ bool AppInitParameterInteraction(Config &config) {
         }
         ::g_Upgrade11HeightOverride.emplace(static_cast<int32_t>(height));
         LogPrintf("Using upgrade 11 activation height override: %d\n", height);
+    }
+
+    // Process CLI/conf override for the upgrade12 activation height
+    if (gArgs.IsArgSet("-upgrade12activationheight")) {
+        const auto height = gArgs.GetArg("-upgrade12activationheight", 0);
+        if (height < 0 || height > static_cast<int64_t>(std::numeric_limits<int32_t>::max())) {
+            return InitError("Invalid -upgrade12activationheight, must be a positive integer in the 32-bit range");
+        }
+        ::g_Upgrade12HeightOverride.emplace(static_cast<int32_t>(height));
+        LogPrintf("Using upgrade 12 activation height override: %d\n", height);
     }
 
     return true;
