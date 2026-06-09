@@ -39,6 +39,8 @@ None
   information.
 - The `getnetworkinfo`, `getpeerinfo`, and `getnodeaddresses` RPC methods now return additional new keys which
   contain human-readable network service flags.
+- The `getnodeaddresses` RPC now returns a "network" field indicating the network type (ipv4, ipv6, or onion) for each
+  address.
 
 ## Removed functionality
 

@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2021 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -38,10 +38,10 @@ public:
     bool randomize_credentials;
 };
 
-enum Network ParseNetwork(const std::string& net);
-std::string GetNetworkName(enum Network net);
-bool SetProxy(enum Network net, const proxyType &addrProxy);
-bool GetProxy(enum Network net, proxyType &proxyInfoOut);
+Network ParseNetwork(const std::string& net);
+std::string GetNetworkName(Network net);
+bool SetProxy(Network net, const proxyType &addrProxy);
+bool GetProxy(Network net, proxyType &proxyInfoOut);
 bool IsProxy(const CNetAddr &addr);
 bool SetNameProxy(const proxyType &addrProxy);
 bool HaveNameProxy();

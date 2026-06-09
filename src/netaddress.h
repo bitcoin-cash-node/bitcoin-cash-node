@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -204,12 +204,12 @@ public:
      */
     bool IsAddrV1Compatible() const;
 
-    enum Network GetNetwork() const;
+    Network GetNetwork() const;
     std::string ToString() const;
     std::string ToStringIP() const;
     uint64_t GetHash() const;
     bool GetInAddr(struct in_addr *pipv4Addr) const;
-    uint8_t GetNetClass() const;
+    Network GetNetClass() const;
 
     //! For IPv4, mapped IPv4, SIIT translated IPv4, Teredo, 6to4 tunneled addresses, return the relevant IPv4 address
     //! as a uint32.
