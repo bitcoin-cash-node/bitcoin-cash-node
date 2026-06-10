@@ -43,6 +43,7 @@ None
   address.
 - The `getrpcinfo` RPC results now contains an additional key, `logpath`, which is the file system path to the debug.log
   file for the bitcoind instance.
+- The `getchaintxstats` RPC now returns the additional key of `window_final_block_height`.
 
 ## Removed functionality
 
