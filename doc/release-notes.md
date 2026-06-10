@@ -41,6 +41,8 @@ None
   contain human-readable network service flags.
 - The `getnodeaddresses` RPC now returns a "network" field indicating the network type (ipv4, ipv6, or onion) for each
   address.
+- The `getrpcinfo` RPC results now contains an additional key, `logpath`, which is the file system path to the debug.log
+  file for the bitcoind instance.
 
 ## Removed functionality
 

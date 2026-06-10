@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2018-2023 The Bitcoin developers
+// Copyright (c) 2018-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,7 @@
 #include <config.h>
 #include <fs.h>
 #include <key_io.h>
+#include <logging.h>
 #include <random.h>
 #include <rpc/util.h>
 #include <shutdown.h>
@@ -357,8 +358,7 @@ static UniValue uptime(const Config &config,
     return GetTime() - GetStartupTime();
 }
 
-static UniValue getrpcinfo(const Config &config,
-                           const JSONRPCRequest &request) {
+static UniValue getrpcinfo(const Config &, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() > 0) {
         throw std::runtime_error(RPCHelpMan{
             "getrpcinfo",
@@ -381,8 +381,9 @@ static UniValue getrpcinfo(const Config &config,
     }
 
     UniValue::Object result;
-    result.reserve(1);
+    result.reserve(2);
     result.emplace_back("active_commands", std::move(active_commands));
+    result.emplace_back("logpath", LogInstance().m_file_path.string());
 
     return result;
 }
