@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,13 +9,17 @@
 #include <consensus/params.h>
 #include <net.h>
 #include <peerratelimiter.h>
+#include <primitives/transaction.h>
 #include <sync.h>
 #include <txorphanage.h>
 #include <txrequest.h>
 #include <validationinterface.h>
 
 #include <atomic>
+#include <chrono>
 #include <memory>
+#include <utility>
+#include <vector>
 
 extern RecursiveMutex cs_main;
 
@@ -34,7 +38,9 @@ static constexpr unsigned int DEFAULT_INV_BROADCAST_INTERVAL = 500;
 static constexpr unsigned int DEFAULT_INV_BROADCAST_RATE = 7;
 
 
+class BlockTransactionsRequest;
 class Config;
+class CRollingBloomFilter;
 
 /**
  * Default for -maxorphantx, maximum number of orphan transactions kept in
@@ -53,17 +59,73 @@ static constexpr bool DEFAULT_ENABLE_BIP61 = true;
 /** Maximum number of outstanding CMPCTBLOCK requests for the same block. */
 static constexpr unsigned int MAX_CMPCTBLOCKS_INFLIGHT_PER_BLOCK = 3;
 
-class PeerLogicValidation final : public CValidationInterface,
-                                  public NetEventsInterface {
-private:
+class PeerLogicValidation final : public CValidationInterface, public NetEventsInterface {
     CConnman *const connman;
     BanMan *const m_banman;
     std::shared_ptr<std::atomic_bool> deleted; ///< Used to suppress further scheduler tasks if this instance is gone.
     TxRequestTracker m_txrequest GUARDED_BY(cs_main);
     TxOrphanage m_orphanage GUARDED_BY(cs_main);
+    size_t m_vExtraTxnForCompactIt GUARDED_BY(cs_main) = 0;
+    std::vector<std::pair<TxHash, CTransactionRef>> m_vExtraTxnForCompact GUARDED_BY(cs_main);
 
-    bool SendRejectsAndCheckIfShouldDiscourage(const NodeRef &pnode, bool enable_bip61)
+    /**
+     * Filter for transactions that were recently rejected by AcceptToMemoryPool.
+     * These are not rerequested until the chain tip changes, at which point the
+     * entire filter is reset.
+     *
+     * Without this filter we'd be re-requesting txs from each of our peers,
+     * increasing bandwidth consumption considerably. For instance, with 100 peers,
+     * half of which relay a tx we don't accept, that might be a 50x bandwidth
+     * increase. A flooding attacker attempting to roll-over the filter using
+     * minimum-sized, 60byte, transactions might manage to send 1000/sec if we have
+     * fast peers, so we pick 120,000 to give our peers a two minute window to send
+     * invs to us.
+     *
+     * Decreasing the false positive rate is fairly cheap, so we pick one in a
+     * million to make it highly unlikely for users to have issues with this filter.
+     *
+     * Memory used: 1.3 MB
+     */
+    std::unique_ptr<CRollingBloomFilter> m_recentRejects GUARDED_BY(cs_main);
+    uint256 m_hashRecentRejectsChainTip GUARDED_BY(cs_main);
+
+    /** Add `tx` to the `m_vExtraTxnForCompact` vector */
+    void AddToCompactExtraTransactions(const CTransactionRef &tx) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    void PushNodeVersion(const Config &config, const NodeRef &pnode, int64_t nTime) const;
+    bool AlreadyHave(const CInv &inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+    void RelayTransaction(const CTransaction &tx, uint64_t entryId = 0) const;
+    void RelayAddress(const CAddress &addr, bool fReachable) const;
+    void ProcessGetBlockData(const Config &config, const NodeRef &pfrom, const CInv &inv,
+                             const std::atomic<bool> &interruptMsgProc) const;
+    /**
+     * Service GETDATA requests from peers.
+     *
+     * Will process as many items of type TX and DSP in pfrom->vRecvGetData as
+     * possible and at most one item of type BLOCK/FILTERED_BLOCK/CMPCT_BLOCK.
+     * If an item is of an unknown type, it will be discarded.
+     *
+     * If the send buffer is not full, at least one item is erased from
+     * the peer's vRecvGetData per call to this function.
+     */
+    void ProcessGetData(const Config &config, const NodeRef &pfrom,
+                        const std::atomic<bool> &interruptMsgProc) const LOCKS_EXCLUDED(cs_main);
+
+    void SendBlockTransactions(const CBlock &block, const BlockTransactionsRequest &req, const NodeRef &pfrom) const;
+    bool ProcessHeadersMessage(const Config &config, const NodeRef &pfrom, const std::vector<CBlockHeader> &headers,
+                               bool punish_duplicate_invalid) const;
+    void PushGetAddrOnceIfAfterVerAck(const NodeRef &pfrom) const;
+    void PushVerACK(const NodeRef &pfrom, int nVersion = 0 /* 0 = read from pfrom */) const;
+    bool ProcessMessage(const Config &config, const NodeRef &pfrom, const std::string &msg_type, CDataStream &vRecv,
+                        int64_t nTimeReceived, const std::atomic<bool> &interruptMsgProc);
+    void ProcessOrphanTx(const Config &config, const NodeId fromPeer) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    /** Register with TxRequestTracker that an INV has been received from a peer. The announcement parameters are
+     *  decided here and then passed to TxRequestTracker. */
+    void AddTxAnnouncement(const CNode& node, const TxId &txid, std::chrono::microseconds current_time)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
+
+    bool SendRejectsAndCheckIfShouldDiscourage(const NodeRef &pnode) const EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
 public:
     PeerLogicValidation(CConnman *connman, BanMan *banman,
