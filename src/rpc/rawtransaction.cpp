@@ -347,12 +347,7 @@ static UniValue getrawtransaction(const Config &config,
     }
 
     // Accept either a bool (true) or a num (>=0) to indicate verbosity level.
-    int verbosityLevel = 0;
-    if (!request.params[1].isNull()) {
-        verbosityLevel = request.params[1].isNum()
-                         ? request.params[1].get_int()
-                         : int(request.params[1].get_bool());
-    }
+    const int verbosityLevel = ParseVerbosity(request.params[1], /* default_verbosity = */ 0, /* allow_bool = */ true);
 
     if (verbosityLevel < 0 || verbosityLevel > 2) {
         throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY,

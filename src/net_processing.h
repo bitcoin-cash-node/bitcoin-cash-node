@@ -159,6 +159,9 @@ public:
      */
     bool IsPerPeerRateLimitingTemporarilySuppressed() const override;
 
+    /// Retrieve all of the orphan transactions currently in the TxOrphanage (used by RPC interface)
+    std::vector<TxOrphanage::OrphanTxBase> GetOrphanTransactions() const;
+
 private:
     //! Next time to check for stale tip
     int64_t m_stale_tip_check_time;
