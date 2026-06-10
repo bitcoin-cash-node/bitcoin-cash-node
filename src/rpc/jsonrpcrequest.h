@@ -17,6 +17,7 @@ public:
     bool fHelp = false;
     std::string URI;
     std::string authUser;
+    std::string peerAddr;
     std::any context;
 
     void parse(UniValue&& valRequest);

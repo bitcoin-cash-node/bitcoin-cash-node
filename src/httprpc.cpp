@@ -300,10 +300,10 @@ bool HTTPRPCRequestProcessor::ProcessHTTPRequest(const std::any& context, HTTPRe
     const std::string &authHeader = *authHeaderOpt;
 
     JSONRPCRequest jreq;
+    jreq.peerAddr = req->GetPeer().ToString();
     jreq.context = context;
     if (!RPCAuthorized(authHeader, jreq.authUser)) {
-        LogPrintf("ThreadRPCServer incorrect password attempt from %s\n",
-                  req->GetPeer().ToString());
+        LogPrintf("ThreadRPCServer incorrect password attempt from %s\n", jreq.peerAddr);
 
         /**
          * Deter brute-forcing.
