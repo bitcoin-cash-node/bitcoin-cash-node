@@ -145,8 +145,6 @@ def build():
         output_dir_osx = '../' + base_output_dir + '/osx'
         os.makedirs(output_dir_osx, exist_ok=True)
         subprocess.check_call(
-            'mv build/out/bitcoin-*-osx-unsigned.tar.gz inputs/', shell=True)
-        subprocess.check_call(
             'mv build/out/bitcoin-*.tar.gz build/out/bitcoin-*.dmg ' + output_dir_osx, shell=True)
         subprocess.check_call(
             'mv build/out/src/bitcoin-*.tar.gz ' + output_dir_src, shell=True)
@@ -187,7 +185,7 @@ def sign():
     if args.macos:
         print('\nSigning ' + args.version + ' MacOS')
         subprocess.check_call('cp inputs/bitcoin-' + args.version +
-                              '-osx-unsigned.tar.gz inputs/bitcoin-osx-unsigned.tar.gz', shell=True)
+                              '-aarch64-apple-darwin-unsigned.tar.gz inputs/bitcoin-osx-unsigned.tar.gz', shell=True)
         subprocess.check_call(['bin/gbuild', '-i', '--commit', 'signature=' + args.commit,
                                DESCRIPTORS_DIR + 'gitian-osx-signer.yml'])
         subprocess.check_call(['bin/gsign', '-p', args.sign_prog, '--signer', args.signer, '--release', args.version + '-osx-signed',

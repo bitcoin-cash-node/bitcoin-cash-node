@@ -229,6 +229,8 @@ download-one: check-sources $(all_sources)
 
 download-osx:
 	@$(MAKE) -s HOST=x86_64-apple-darwin23 download-one
+download-osx-arm64:
+	@$(MAKE) -s HOST=aarch64-apple-darwin23 download-one
 download-linux:
 	@$(MAKE) -s HOST=x86_64-unknown-linux-gnu download-one
 download-win:
@@ -241,10 +243,12 @@ build-linux-aarch64: download-linux
 	@$(MAKE) -s HOST=aarch64-linux-gnu install
 build-osx: download-osx
 	@$(MAKE) -s HOST=x86_64-apple-darwin23 install
+build-osx-arm64: download-osx-arm64
+	@$(MAKE) -s HOST=aarch64-apple-darwin23 install
 build-win64: download-win
 	@$(MAKE) -s HOST=x86_64-w64-mingw32 install
 
-build-all: build-linux64 build-linux-aarch64 build-osx build-win64
+build-all: build-linux64 build-linux-aarch64 build-osx build-osx-arm64 build-win64
 
 $(foreach package,$(all_packages),$(eval $(call ext_add_stages,$(package))))
 
