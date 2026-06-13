@@ -88,11 +88,12 @@ script: |
   export PATH=$HOME/bin:${PATH}
 
   WRAP_DIR=$HOME/wrapped
-  HOSTS="x86_64-apple-darwin23"
+  HOSTS="x86_64-apple-darwin23 aarch64-apple-darwin23"
 
   # CMake toolchain file name differ from host name
   declare -A CMAKE_TOOLCHAIN_FILE
   CMAKE_TOOLCHAIN_FILE[x86_64-apple-darwin23]=OSX.cmake
+  CMAKE_TOOLCHAIN_FILE[aarch64-apple-darwin23]=OSX-arm64.cmake
 
   INSTALL_COMPONENTS="bitcoind bitcoin-qt bitcoin-seeder"
 
@@ -222,11 +223,11 @@ script: |
     cp ${BASEPREFIX}/${i}/native/bin/${i}-pagestuff unsigned-app-${i}/pagestuff
     mv dist unsigned-app-${i}
     pushd unsigned-app-${i}
-    find . | sort | tar --no-recursion --mode='u+rw,go+r-w,a+X' --owner=0 --group=0 -c -T - | gzip -9n > ${OUTDIR}/${DISTNAME}-osx-unsigned.tar.gz
+    find . | sort | tar --no-recursion --mode='u+rw,go+r-w,a+X' --owner=0 --group=0 -c -T - | gzip -9n > ${OUTDIR}/${DISTNAME}-${i}-unsigned.tar.gz
     popd
 
     ninja osx-dmg
-    mv "${OSX_VOLNAME}.dmg" ${OUTDIR}/${DISTNAME}-osx-unsigned.dmg
+    mv "${OSX_VOLNAME}.dmg" ${OUTDIR}/${DISTNAME}-${i}-unsigned.dmg
 
     cd installed
     # The install/strip target should do exactly that. However there is a bug in
@@ -242,4 +243,9 @@ script: |
   done
   mkdir -p $OUTDIR/src
   mv $SOURCEDIST $OUTDIR/src
-  mv ${OUTDIR}/${DISTNAME}-x86_64-*.tar.gz ${OUTDIR}/${DISTNAME}-osx64.tar.gz
+  mv ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin23.tar.gz           ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin.tar.gz
+  mv ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin23.tar.gz          ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin.tar.gz
+  mv ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin23-unsigned.tar.gz  ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin-unsigned.tar.gz
+  mv ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin23-unsigned.tar.gz ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin-unsigned.tar.gz
+  mv ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin23-unsigned.dmg     ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin-unsigned.dmg
+  mv ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin23-unsigned.dmg    ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin-unsigned.dmg
