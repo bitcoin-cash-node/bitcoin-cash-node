@@ -50,38 +50,74 @@ static constexpr int64_t TIMESTAMP_WINDOW = MAX_FUTURE_BLOCK_TIME;
 static constexpr int64_t MAX_BLOCK_TIME_GAP = 90 * 60;
 
 /**
- *  Mixin class that provides guarded, thread-safe access to the property: `ablaStateOpt`.
+ *  Mixin class that provides atomic, thread-safe access to an optional abla::State instance.
  *  Used by CBlockIndex and its subclasses to capture the abla state (if any) of a particular block.
  */
 class AblaStateMixin {
-    mutable SharedMutex cs_ablaState;
-    std::optional<abla::State> ablaStateOpt GUARDED_BY(cs_ablaState);
+    struct PackedState {
+        bool engaged : 1;
+        uint64_t blockSize : 63; ///< 2^63 is more than we will ever need, since consensus clamps at ~2^31
+        uint64_t controlBlockSize;
+        uint64_t elasticBufferSize;
+
+        constexpr PackedState &clear() noexcept {
+            engaged = false;
+            blockSize = controlBlockSize = elasticBufferSize = 0;
+            return *this;
+        }
+
+        std::optional<abla::State> unpack() const noexcept {
+            std::optional<abla::State> ret;
+            if (engaged) {
+                ret.emplace() = abla::State::FromTuple({blockSize, controlBlockSize, elasticBufferSize});
+            }
+            return ret;
+        }
+
+        static PackedState pack(const std::optional<abla::State> &o) noexcept {
+            PackedState r;
+            if (o.has_value()) {
+                r.engaged = true;
+                const uint64_t blockSize = o->GetBlockSize();
+                assert(0 == (blockSize >> 63) && "INTERNAL ERROR: blockSize has bit 64 set"); /* detect truncation */
+                r.blockSize = blockSize;
+                r.controlBlockSize = o->GetControlBlockSize();
+                r.elasticBufferSize = o->GetElasticBufferSize();
+            } else {
+                r.clear();
+            }
+            return r;
+        }
+    };
+    static_assert(std::is_trivially_default_constructible_v<PackedState> && std::is_trivially_copyable_v<PackedState>,
+                  "Paranoia extra constraints for std::atomic to guarantee POD-ness");
+
+    std::atomic<PackedState> atomicPacked;
 
 public:
-    AblaStateMixin() = default;
-    AblaStateMixin(const AblaStateMixin &o) : ablaStateOpt(o.GetAblaStateOpt()) {}
+    AblaStateMixin() noexcept { atomicPacked.store(PackedState().clear(), std::memory_order_relaxed); }
+    AblaStateMixin(const AblaStateMixin &o) noexcept {
+        atomicPacked.store(o.atomicPacked.load(), std::memory_order_relaxed);
+    }
 
     AblaStateMixin &operator=(const AblaStateMixin &) = delete;
 
     std::optional<abla::State> GetAblaStateOpt() const {
-        LOCK_SHARED(cs_ablaState);
-        return ablaStateOpt;
+        return atomicPacked.load().unpack();
     }
 
-    /// If `ablaStateOpt` is valid, returns `*ablaStateOpt`, otherwise returns the results of invoking `func()`.
-    /// `func()` is only invoked if `!ablaStateOpt`, and it is invoked without any locks held.
+    /// If `atomicPacked` is engaged, unpacks and returns the abla::State, otherwise returns the results of invoking
+    /// `func()`. `func()` is only invoked if the packed state is not engaged.
     template <typename Func>
     abla::State GetAblaStateOr(Func &&func) const {
-        {
-            LOCK_SHARED(cs_ablaState);
-            if (ablaStateOpt) return *ablaStateOpt;
+        if (const auto optState = GetAblaStateOpt()) {
+            return *optState;
         }
         return func();
     }
 
     void SetAblaStateOpt(const std::optional<abla::State> &s) {
-        LOCK(cs_ablaState);
-        ablaStateOpt = s;
+        atomicPacked.store(PackedState::pack(s));
     }
 };
 
