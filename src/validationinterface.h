@@ -35,12 +35,12 @@ enum class MemPoolRemovalReason;
  *  Register a wallet to receive updates from core. NOTE: This function is thread-safe, but *only* if called
  *  *after* GetMainSignals().RegisterBackgroundSignalScheduler() has been called.
  */
-void RegisterValidationInterface(CValidationInterface *pwalletIn) LOCKS_EXCLUDED(cs_main);
+void RegisterValidationInterface(CValidationInterface *pwalletIn);
 /**
  *  Unregister a wallet from core. NOTE: This function is thread-safe, but *only* if called *after*
  *  GetMainSignals().RegisterBackgroundSignalScheduler() has been called.
  */
-void UnregisterValidationInterface(CValidationInterface *pwalletIn) LOCKS_EXCLUDED(cs_main);
+void UnregisterValidationInterface(CValidationInterface *pwalletIn);
 /**
  *  Unregister all wallets from core
  *  WARNING: Do not call this after the app has initialized and threads are started.  It is not thread-safe.

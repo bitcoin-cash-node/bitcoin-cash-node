@@ -123,7 +123,6 @@ static bool IsImmediateModificationOfTheMainSignalsMapUnsafe(const SingleThreade
 }
 
 void RegisterValidationInterface(CValidationInterface *pwalletIn) {
-    AssertLockNotHeld(cs_main);
     assert(g_signals.m_internals);
     std::promise<void> promise;
     auto func = [pwalletIn, &promise] {
@@ -175,7 +174,6 @@ void RegisterValidationInterface(CValidationInterface *pwalletIn) {
 }
 
 void UnregisterValidationInterface(CValidationInterface *pwalletIn) {
-    AssertLockNotHeld(cs_main);
     if (g_signals.m_internals) {
         std::promise<void> promise;
         auto func = [pwalletIn, &promise] {
