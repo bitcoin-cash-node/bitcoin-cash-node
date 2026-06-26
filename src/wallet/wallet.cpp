@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2026 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -30,6 +30,7 @@
 #include <timedata.h>
 #include <txmempool.h>
 #include <ui_interface.h>
+#include <util/defer.h>
 #include <util/moneystr.h>
 #include <util/string.h>
 #include <util/system.h>
@@ -4802,6 +4803,14 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(
     // Try to top up keypool. No-op if the wallet is locked.
     walletInstance->TopUpKeyPool();
 
+    bool walletCreatedOk = false;
+    Defer registerWithValidationInterfaceOnScopeEndWithNoLocks = [&walletCreatedOk, walletInstance] {
+        if (walletCreatedOk && walletInstance) {
+            // Register with the validation interface. This should be done with no locks held to avoid deadlocking.
+            RegisterValidationInterface(walletInstance.get());
+        }
+    };
+
     auto locked_chain = chain.lock();
     LOCK(walletInstance->cs_wallet);
 
@@ -4906,9 +4915,9 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(
 
     uiInterface.LoadWallet(walletInstance);
 
-    // Register with the validation interface. It's ok to do this after rescan
-    // since we're still holding cs_main.
-    RegisterValidationInterface(walletInstance.get());
+    // Tell the "Defer" lambda above that the wallet was created ok, and it can proceed to register it with the
+    // validation interface after locks are released but before this scope ends.
+    walletCreatedOk = true;
 
     walletInstance->SetBroadcastTransactions(
         gArgs.GetBoolArg("-walletbroadcast", DEFAULT_WALLETBROADCAST));
