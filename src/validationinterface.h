@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2026 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -35,12 +35,12 @@ enum class MemPoolRemovalReason;
  *  Register a wallet to receive updates from core. NOTE: This function is thread-safe, but *only* if called
  *  *after* GetMainSignals().RegisterBackgroundSignalScheduler() has been called.
  */
-void RegisterValidationInterface(CValidationInterface *pwalletIn);
+void RegisterValidationInterface(CValidationInterface *pwalletIn) LOCKS_EXCLUDED(cs_main);
 /**
  *  Unregister a wallet from core. NOTE: This function is thread-safe, but *only* if called *after*
  *  GetMainSignals().RegisterBackgroundSignalScheduler() has been called.
  */
-void UnregisterValidationInterface(CValidationInterface *pwalletIn);
+void UnregisterValidationInterface(CValidationInterface *pwalletIn) LOCKS_EXCLUDED(cs_main);
 /**
  *  Unregister all wallets from core
  *  WARNING: Do not call this after the app has initialized and threads are started.  It is not thread-safe.
