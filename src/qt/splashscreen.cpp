@@ -134,6 +134,8 @@ SplashScreen::SplashScreen(interfaces::Node &node,
 
     subscribeToCoreSignals();
     installEventFilter(this);
+
+    GUIUtil::handleCloseWindowShortcut(this);
 }
 
 SplashScreen::~SplashScreen() {

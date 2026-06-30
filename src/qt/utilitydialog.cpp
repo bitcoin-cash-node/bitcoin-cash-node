@@ -101,6 +101,8 @@ HelpMessageDialog::HelpMessageDialog(interfaces::Node &node, QWidget *parent,
         ui->scrollArea->setVisible(false);
         ui->aboutLogo->setVisible(false);
     }
+
+    GUIUtil::handleCloseWindowShortcut(this);
 }
 
 HelpMessageDialog::~HelpMessageDialog() {
@@ -118,6 +120,8 @@ ShutdownWindow::ShutdownWindow(QWidget *parent) : QWidget(parent) {
         tr("%1 is shutting down...").arg(PACKAGE_NAME) + "<br /><br />" +
         tr("Do not shut down the computer until this window disappears.")));
     setLayout(layout);
+
+    GUIUtil::handleCloseWindowShortcut(this);
 }
 
 QWidget *ShutdownWindow::showShutdownWindow(BitcoinGUI *window) {
