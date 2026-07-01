@@ -47,6 +47,7 @@
 #include <QComboBox>
 #include <QDateTime>
 #include <QDragEnterEvent>
+#include <QKeySequence>
 #include <QListWidget>
 #include <QMenu>
 #include <QMenuBar>
@@ -254,7 +255,7 @@ void BitcoinGUI::createActions() {
     overviewAction->setStatusTip(tr("Show general overview of wallet"));
     overviewAction->setToolTip(overviewAction->statusTip());
     overviewAction->setCheckable(true);
-    overviewAction->setShortcut(QKeySequence(Qt::ALT + static_cast<int>(Qt::Key_1)));
+    overviewAction->setShortcut(QKeySequence(QStringLiteral("Alt+1")));
     tabGroup->addAction(overviewAction);
 
     sendCoinsAction = new QAction(
@@ -262,7 +263,7 @@ void BitcoinGUI::createActions() {
     sendCoinsAction->setStatusTip(tr("Send coins to a Bitcoin Cash address"));
     sendCoinsAction->setToolTip(sendCoinsAction->statusTip());
     sendCoinsAction->setCheckable(true);
-    sendCoinsAction->setShortcut(QKeySequence(Qt::ALT + static_cast<int>(Qt::Key_2)));
+    sendCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+2")));
     tabGroup->addAction(sendCoinsAction);
 
     sendCoinsMenuAction =
@@ -280,7 +281,7 @@ void BitcoinGUI::createActions() {
                 config->GetChainParams().CashAddrPrefix())));
     receiveCoinsAction->setToolTip(receiveCoinsAction->statusTip());
     receiveCoinsAction->setCheckable(true);
-    receiveCoinsAction->setShortcut(QKeySequence(Qt::ALT + static_cast<int>(Qt::Key_3)));
+    receiveCoinsAction->setShortcut(QKeySequence(QStringLiteral("Alt+3")));
     tabGroup->addAction(receiveCoinsAction);
 
     receiveCoinsMenuAction =
@@ -295,7 +296,7 @@ void BitcoinGUI::createActions() {
     historyAction->setStatusTip(tr("Browse transaction history"));
     historyAction->setToolTip(historyAction->statusTip());
     historyAction->setCheckable(true);
-    historyAction->setShortcut(QKeySequence(Qt::ALT + static_cast<int>(Qt::Key_4)));
+    historyAction->setShortcut(QKeySequence(QStringLiteral("Alt+4")));
     tabGroup->addAction(historyAction);
 
 #ifdef ENABLE_WALLET
@@ -331,7 +332,7 @@ void BitcoinGUI::createActions() {
     quitAction = new QAction(platformStyle->TextColorIcon(":/icons/quit"),
                              tr("E&xit"), this);
     quitAction->setStatusTip(tr("Quit application"));
-    quitAction->setShortcut(QKeySequence(Qt::CTRL + static_cast<int>(Qt::Key_Q)));
+    quitAction->setShortcut(QKeySequence(tr("Ctrl+Q")));
     quitAction->setMenuRole(QAction::QuitRole);
     aboutAction = new QAction(platformStyle->TextColorIcon(":/icons/about"),
                               tr("&About %1").arg(PACKAGE_NAME), this);
@@ -497,7 +498,7 @@ void BitcoinGUI::createMenuBar() {
     QAction *minimize_action = window_menu->addAction(tr("Minimize"));
     minimize_action->setStatusTip(tr("Minimize the Main Window"));
     minimize_action->setToolTip(minimize_action->statusTip());
-    minimize_action->setShortcut(QKeySequence(Qt::CTRL + static_cast<int>(Qt::Key_M)));
+    minimize_action->setShortcut(QKeySequence(tr("Ctrl+M")));
     connect(minimize_action, &QAction::triggered,
             [] { QApplication::activeWindow()->showMinimized(); });
     connect(qApp, &QApplication::focusWindowChanged,
