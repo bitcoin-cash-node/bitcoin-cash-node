@@ -53,7 +53,8 @@ public:
     static bool decimalSeparatorIsComma();
     //! Format as string (locale-dependent decimal separator)
     static QString format(int unit, const Amount amount, bool plussign = false,
-                          SeparatorStyle separators = separatorStandard);
+                          SeparatorStyle separators = separatorStandard,
+                          bool justify = false);
     //! Format as string (with unit)
     static QString
     formatWithUnit(int unit, const Amount amount, bool plussign = false,
@@ -62,6 +63,10 @@ public:
     static QString
     formatHtmlWithUnit(int unit, const Amount amount, bool plussign = false,
                        SeparatorStyle separators = separatorStandard);
+    //! Format as string (with unit) of fixed length to preserve privacy, if it
+    //! is set.
+    static QString formatWithPrivacy(int unit, const Amount &amount,
+                                     SeparatorStyle separators, bool privacy);
     //! Parse string to coin amount
     static std::optional<Amount> parse(int unit, bool allowComma, const QString& value);
     //! Gets title for amount column including current display unit if
