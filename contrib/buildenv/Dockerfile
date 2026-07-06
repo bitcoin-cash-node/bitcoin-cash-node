@@ -5,7 +5,8 @@ ENV DEBIAN_FRONTEND=noninteractive \
   APT_KEY_DONT_WARN_ON_DANGEROUS_USAGE=true \
   LANG=en_US.UTF-8 \
   LANGUAGE=en_US:en \
-  LC_ALL=en_US.UTF-8
+  LC_ALL=en_US.UTF-8 \
+  PATH="/usr/share/arcanist/bin:${PATH}"
 
 
 # Disable installation of suggested and recommended packages
@@ -107,7 +108,7 @@ echo Add clang sanitizers && \
 apt-get -y install libclang-rt-18-dev && \
 echo && \
 echo Add tools for static checking and Gitlab CI processing of results && \
-apt-get -y install arcanist \
+apt-get -y install \
     clang-format-18 \
     eatmydata \
     git \
@@ -116,9 +117,24 @@ apt-get -y install arcanist \
     python3-dev \
     python3-pip \
     python3-scipy \
+    python3-venv \
     php-codesniffer \
+    php-curl \
     shellcheck \
-    xmlstarlet && \
+    xmlstarlet \
+    && \
+git clone https://github.com/phorgeit/arcanist.git /usr/share/arcanist && \
+python3 -m venv /opt/venv && \
+. /opt/venv/bin/activate && \
+python3 -m pip install \
+    autopep8 \
+    flake8 \
+    jinja2 \
+    mkdocs \
+    mkdocs-material \
+    packaging \
+    pymdown-extensions \
+    && \
 echo && \
 echo && \
 echo Support windows build && \
@@ -126,6 +142,7 @@ update-alternatives --set x86_64-w64-mingw32-g++ /usr/bin/x86_64-w64-mingw32-g++
 update-alternatives --set x86_64-w64-mingw32-gcc /usr/bin/x86_64-w64-mingw32-gcc-posix && \
 echo && \
 echo Linters for documentation && \
+npm install -g node@latest && \
 npm install -g npm@latest && \
 npm install -g markdownlint-cli && \
 echo && \
@@ -133,5 +150,5 @@ echo Linter dependencies && \
 apt-get install -y flake8 mypy yamllint && \
 echo && \
 echo Cleanup && \
-apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* /var/cache/* /var/log/*
+apt-get clean && rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* /usr/share/doc/* /var/cache/* /var/log/* /usr/share/arcanist/.git
 
