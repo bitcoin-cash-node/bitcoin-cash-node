@@ -48,6 +48,7 @@ bool WalletFrame::addWallet(WalletModel *walletModel) {
     walletView->setBitcoinGUI(gui);
     walletView->setClientModel(clientModel);
     walletView->showOutOfSyncWarning(bOutOfSync);
+    walletView->setPrivacy(gui->isPrivacyModeActivated());
 
     WalletView *current_wallet_view = currentWalletView();
     if (current_wallet_view) {
@@ -65,6 +66,7 @@ bool WalletFrame::addWallet(WalletModel *walletModel) {
 
     connect(walletView, &WalletView::outOfSyncWarningClicked, this,
             &WalletFrame::outOfSyncWarningClicked);
+    connect(gui, &BitcoinGUI::setPrivacy, walletView, &WalletView::setPrivacy);
 
     return true;
 }
