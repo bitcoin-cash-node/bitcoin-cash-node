@@ -551,7 +551,7 @@ bool FastBigNum::doInPlaceSafeArithOp(const FastBigNum &o, CSN_Mem_Fn csnMemFn, 
                 }
                 // Doesn't fit, switch .var to use ScriptBigInt; `csn` invalidated here
                 ScriptBigInt &sbi = ensureScriptBigInt();
-                return (sbi.*sbiMemFn)(ocsn.getint64());
+                return (sbi.*sbiMemFnI64)(ocsn.getint64()); // apply op to i64 member func for speed
             },
             [&](ScriptBigInt &sbi) {
                 const ScriptBigInt &osbi = std::get<ScriptBigInt>(o.var);
