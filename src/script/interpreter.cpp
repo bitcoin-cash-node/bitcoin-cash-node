@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -840,9 +840,10 @@ bool EvalScriptImpl(std::vector<valtype> &stack, const CScript &initialScript, u
                                 return set_error(
                                     serror, ScriptError::INVALID_STACK_OPERATION);
                             }
-                            valtype vch = stacktop(-1);
+                            const valtype &vch = stacktop(-1);
                             if (CastToBool(vch)) {
-                                stack.push_back(std::move(vch));
+                                valtype copy = vch;
+                                stack.push_back(std::move(copy)); // Note: `vch` reference may be invalidated here
                                 metrics.TallyPushOp(stack.back().size());
                             }
                         } break;
@@ -1640,20 +1641,14 @@ bool EvalScriptImpl(std::vector<valtype> &stack, const CScript &initialScript, u
                                 int nSigsRemaining = nSigsCount;
                                 int nKeysRemaining = nKeysCount;
                                 while (fSuccess && nSigsRemaining > 0) {
-                                    valtype const &vchSig = stacktop(
-                                        -idxTopSig - (nSigsCount - nSigsRemaining));
-                                    valtype const &vchPubKey = stacktop(
-                                        -idxTopKey - (nKeysCount - nKeysRemaining));
+                                    valtype const &vchSig = stacktop(-idxTopSig - (nSigsCount - nSigsRemaining));
+                                    valtype const &vchPubKey = stacktop(-idxTopKey - (nKeysCount - nKeysRemaining));
 
-                                    // Note how this makes the exact order of
-                                    // pubkey/signature evaluation distinguishable
-                                    // by CHECKMULTISIG NOT if the STRICTENC flag is
-                                    // set. See the script_(in)valid tests for
-                                    // details.
-                                    if (!CheckTransactionECDSASignatureEncoding(
-                                            vchSig, flags, serror) ||
-                                        !CheckPubKeyEncoding(vchPubKey, flags,
-                                                             serror)) {
+                                    // Note how this makes the exact order of pubkey/signature evaluation
+                                    // distinguishable by CHECKMULTISIG NOT if the STRICTENC flag is set. See the
+                                    // script_(in)valid tests for details.
+                                    if (!CheckTransactionECDSASignatureEncoding(vchSig, flags, serror) ||
+                                        !CheckPubKeyEncoding(vchPubKey, flags, serror)) {
                                         // serror is set
                                         return false;
                                     }
@@ -1671,10 +1666,8 @@ bool EvalScriptImpl(std::vector<valtype> &stack, const CScript &initialScript, u
                                     }
                                     nKeysRemaining--;
 
-                                    // If there are more signatures left than keys
-                                    // left, then too many signatures have failed.
-                                    // Exit early, without checking any further
-                                    // signatures.
+                                    // If there are more signatures left than keys left, then too many signatures have
+                                    // failed. Exit early, without checking any further signatures.
                                     if (nSigsRemaining > nKeysRemaining) {
                                         fSuccess = false;
                                     }
@@ -1688,18 +1681,14 @@ bool EvalScriptImpl(std::vector<valtype> &stack, const CScript &initialScript, u
                                     }
                                 }
 
-                                // If the operation failed, we may require that all
-                                // signatures must be empty vector
-                                if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) &&
-                                    !areAllSignaturesNull) {
+                                // If the operation failed, we may require that all signatures must be empty vector
+                                if (!fSuccess && (flags & SCRIPT_VERIFY_NULLFAIL) && !areAllSignaturesNull) {
                                     return set_error(serror, ScriptError::SIG_NULLFAIL);
                                 }
 
                                 if (!areAllSignaturesNull) {
-                                    // This is not identical to the number of actual
-                                    // ECDSA verifies, but, it is an upper bound
-                                    // that can be easily determined without doing
-                                    // CPU-intensive checks.
+                                    // This is not identical to the number of actual ECDSA verifies, but, it is an upper
+                                    // bound that can be easily determined without doing CPU-intensive checks.
                                     metrics.TallySigChecks(nKeysCount);
                                 }
                             }
@@ -2365,8 +2354,7 @@ public:
     /** Serialize an output of txTo */
     template <typename S>
     void SerializeOutput(S &s, unsigned int nOutput) const {
-        if (sigHashType.getBaseType() == BaseSigHashType::SINGLE &&
-            nOutput != nIn) {
+        if (sigHashType.getBaseType() == BaseSigHashType::SINGLE && nOutput != nIn) {
             // Do not lock-in the txout payee at other indices as txin
             ::Serialize(s, CTxOut());
         } else {
@@ -2393,7 +2381,7 @@ public:
                        ? nIn + 1
                        : txTo.vout().size());
         ::WriteCompactSize(s, nOutputs);
-        for (unsigned int nOutput = 0; nOutput < nOutputs; nOutput++) {
+        for (unsigned int nOutput = 0; nOutput < nOutputs; ++nOutput) {
             SerializeOutput(s, nOutput);
         }
         // Serialize nLockTime

@@ -1,5 +1,5 @@
 // Copyright (c) 2017-2018 Bitcoin developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,7 +8,6 @@
 #include <serialize.h>
 
 #include <cstdint>
-#include <stdexcept>
 
 /** Signature hash types/flags */
 enum {

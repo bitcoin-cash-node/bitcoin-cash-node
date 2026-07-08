@@ -1,4 +1,4 @@
-// Copyright (c) 2019 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -7,10 +7,8 @@
 #include <script/script_error.h>
 
 #include <cstddef>
-#include <limits>
 
-bool DecodeBitfield(const std::vector<uint8_t> &vch, unsigned size,
-                    uint32_t &bitfield, ScriptError *serror) {
+bool DecodeBitfield(const std::vector<uint8_t> &vch, unsigned size, uint32_t &bitfield, ScriptError *serror) {
     if (size > 32) {
         return set_error(serror, ScriptError::INVALID_BITFIELD_SIZE);
     }
@@ -21,7 +19,7 @@ bool DecodeBitfield(const std::vector<uint8_t> &vch, unsigned size,
     }
 
     bitfield = 0;
-    for (size_t i = 0; i < bitfield_size; i++) {
+    for (size_t i = 0; i < bitfield_size; ++i) {
         // Decode the bitfield as little endian.
         bitfield |= uint32_t(vch[i]) << (8 * i);
     }

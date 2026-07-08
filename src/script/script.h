@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2026 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -17,7 +17,6 @@
 
 #include <bit>
 #include <cassert>
-#include <climits>
 #include <compare>
 #include <cstdint>
 #include <cstring>
@@ -1084,8 +1083,7 @@ protected:
 
 public:
     CScript() {}
-    CScript(std::vector<uint8_t>::const_iterator pbegin,
-            std::vector<uint8_t>::const_iterator pend)
+    CScript(std::vector<uint8_t>::const_iterator pbegin, std::vector<uint8_t>::const_iterator pend)
         : CScriptBase(pbegin, pend) {}
     CScript(const uint8_t *pbegin, const uint8_t *pend)
         : CScriptBase(pbegin, pend) {}
@@ -1171,8 +1169,7 @@ public:
     ///     `script << ByteView{otherScript}`
     CScript &operator<<(const CScript &) = delete;
 
-    bool GetOp(const_iterator &pc, opcodetype &opcodeRet,
-               std::vector<uint8_t> &vchRet) const {
+    bool GetOp(const_iterator &pc, opcodetype &opcodeRet, std::vector<uint8_t> &vchRet) const {
         return GetScriptOp(pc, end(), opcodeRet, &vchRet);
     }
 
