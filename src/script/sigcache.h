@@ -1,14 +1,12 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #pragma once
 
 #include <script/interpreter.h>
-
-#include <vector>
 
 // DoS prevention: limit cache size to 32MB (over 1000000 entries on 64-bit
 // systems). Due to how we count cache size, actual memory usage is slightly
@@ -30,9 +28,8 @@ class CPubKey;
 class SignatureCacheHasher {
 public:
     template <uint8_t hash_select>
-    uint32_t operator()(const uint256 &key) const {
-        static_assert(hash_select < 8,
-                      "SignatureCacheHasher only has 8 hashes available.");
+    uint32_t operator()(const uint256 &key) const noexcept {
+        static_assert(hash_select < 8, "SignatureCacheHasher only has 8 hashes available.");
         uint32_t u;
         std::memcpy(&u, key.begin() + 4 * hash_select, 4);
         return u;
