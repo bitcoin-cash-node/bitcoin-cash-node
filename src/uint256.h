@@ -1,14 +1,17 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2022 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #pragma once
 
+#include <util/hwaccel.h>
+
 #include <cassert>
 #include <cstdint>
 #include <string>
+#include <type_traits>
 #include <vector>
 
 /** Template base class for fixed-sized opaque blobs. */
@@ -33,12 +36,16 @@ public:
     explicit base_blob(const std::vector<uint8_t> &vch) noexcept;
 
     constexpr bool IsNull() const noexcept {
-        unsigned i = 0;
-        do {
-            if (m_data[i] != 0)
-                return false;
-        } while (++i < WIDTH);
-        return true;
+        if (std::is_constant_evaluated()) {
+            unsigned i = 0;
+            do {
+                if (m_data[i] != 0)
+                    return false;
+            } while (++i < WIDTH);
+            return true;
+        } else {
+            return hwaccel::IsAllZeros({m_data, WIDTH});
+        }
     }
 
     constexpr void SetNull() noexcept { *this = base_blob{}; }

@@ -5,6 +5,8 @@
 #include <bench/bench.h>
 #include <util/hwaccel.h>
 
+#include <uint256.h>
+
 #include <span>
 
 // Naïve "IsAllZeros" check that just does a simple bytewise scan (should be slowest)
@@ -46,6 +48,16 @@ static void IsAllZeros_Portable(benchmark::State &state, const size_t size) {
     }
 }
 
+// Bench uint256::IsNull(), which ultimately calls hwaccel::IsAllZeros in non-consteval contexts
+static void IsAllZeros_uint256_IsNull(benchmark::State &state) {
+    uint256 u256;
+    benchmark::NoOptimize(u256);
+
+    BENCHMARK_LOOP {
+        benchmark::NoOptimize(u256.IsNull());
+    }
+}
+
 static void IsAllZeros_Naive_8(benchmark::State &state) { IsAllZeros_Naive(state, 8); }
 static void IsAllZeros_Naive_16(benchmark::State &state) { IsAllZeros_Naive(state, 16); }
 static void IsAllZeros_Naive_520(benchmark::State &state) { IsAllZeros_Naive(state, 520); }
@@ -75,3 +87,5 @@ BENCHMARK(IsAllZeros_Portable_8, 100'000);
 BENCHMARK(IsAllZeros_Portable_16, 100'000);
 BENCHMARK(IsAllZeros_Portable_520, 100'000);
 BENCHMARK(IsAllZeros_Portable_10000, 100'000);
+
+BENCHMARK(IsAllZeros_uint256_IsNull, 100'000);
