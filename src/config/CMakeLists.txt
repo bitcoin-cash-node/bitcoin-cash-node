@@ -105,6 +105,7 @@ check_builtin_exist(__builtin_clz HAVE_DECL___BUILTIN_CLZ)
 check_builtin_exist(__builtin_clzl HAVE_DECL___BUILTIN_CLZL)
 check_builtin_exist(__builtin_clzll HAVE_DECL___BUILTIN_CLZLL)
 check_builtin_exist(__builtin_popcount HAVE_DECL___BUILTIN_POPCOUNT)
+check_cxx_source_compiles("int main() { return __builtin_cpu_supports(\"sse2\"); }" HAVE_X86_BUILTIN_CPU_SUPPORTS)
 
 # Memory management capabilities
 check_symbol_exists(M_ARENA_MAX "malloc.h" HAVE_MALLOPT_ARENA_MAX)

@@ -39,6 +39,8 @@
 #cmakedefine HAVE_DECL___BUILTIN_CLZLL 1
 #cmakedefine HAVE_DECL___BUILTIN_POPCOUNT 1
 
+#cmakedefine HAVE_X86_BUILTIN_CPU_SUPPORTS 1
+
 #cmakedefine HAVE_MALLOPT_ARENA_MAX 1
 #cmakedefine HAVE_MALLOC_INFO 1
 
