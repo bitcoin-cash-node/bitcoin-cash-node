@@ -410,6 +410,7 @@ add_library(util
   util/asmap.cpp
   util/bitmanip.cpp
   util/check.cpp
+  util/hwaccel.cpp
   util/moneystr.cpp
   util/saltedhashers.cpp
   util/strencodings.cpp
