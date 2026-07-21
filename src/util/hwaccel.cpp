@@ -88,6 +88,7 @@ namespace {
         return v;
     }
 
+    [[maybe_unused]]
     bool IsAllZerosSSE2(const std::span<const std::byte> &bytes) noexcept {
         const size_t n = bytes.size();
         if (n < 128u) return detail::IsAllZerosPortable(bytes);
@@ -109,6 +110,7 @@ namespace {
         return _mm_movemask_epi8(_mm_cmpeq_epi8(acc, zero)) == 0xFFFF;
     }
 
+    [[maybe_unused]]
     __attribute__((target("avx2")))
     bool IsAllZerosAVX2(const std::span<const std::byte> &bytes) noexcept {
         const size_t n = bytes.size();
@@ -130,6 +132,7 @@ namespace {
         return _mm256_testz_si256(acc, acc);
     }
 
+    [[maybe_unused]]
     __attribute__((target("avx512f")))
     bool IsAllZerosAVX512(const std::span<const std::byte> &bytes) noexcept {
         const size_t n = bytes.size();
@@ -186,6 +189,7 @@ namespace {
 bool IsAllZeros(std::span<const std::byte> bytes) noexcept {
 #if USE_X86_SIMD
     if (bytes.size() >= 128u) {
+#  if HAVE_X86_BUILTIN_CPU_SUPPORTS
         static const auto hwspecific = [] {
             if (__builtin_cpu_supports("avx512f")) return &IsAllZerosAVX512;
             if (__builtin_cpu_supports("avx2")) return &IsAllZerosAVX2;
@@ -193,6 +197,14 @@ bool IsAllZeros(std::span<const std::byte> bytes) noexcept {
             return &detail::IsAllZerosPortable;
         }();
         return hwspecific(bytes);
+#  else
+        // Cross-compiling on Linux for macOS x86-64 leads to this compile-time branch (such as on gitian builds).
+        // This is because clang-18 that we use to cross-compile when using gitian expects the runtime libs to provide
+        // the symbol: __cpu_model, but the macOS SDK does not have this symbol (perhaps it's inlined on apple-clang?).
+        //
+        // We can remove this branch for darwin x86-64 when we go beyond clang-18 for the cross compiler on gitian.
+        return detail::IsAllZerosPortable(bytes);
+#  endif /* HAVE_X86_BUILTIN_CPU_SUPPORTS */
     }
 #elif USE_ARM64_SIMD
     if (bytes.size() >= 128u) {
