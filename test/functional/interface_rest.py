@@ -15,6 +15,10 @@ from struct import pack, unpack
 import urllib.parse
 
 from test_framework.test_framework import BitcoinTestFramework
+from test_framework.messages import (
+    COIN,
+    deser_block_spent_outputs
+)
 from test_framework.util import (
     assert_equal,
     assert_greater_than,
@@ -365,6 +369,37 @@ class RESTTest (BitcoinTestFramework):
 
         json_obj = self.test_rest_request("/chaininfo")
         assert_equal(json_obj['bestblockhash'], bb_hash)
+
+        self.log.info("Test the /spenttxouts URI")
+        block_count = self.nodes[0].getblockcount()
+        for height in range(0, block_count + 1):
+            blockhash = self.nodes[0].getblockhash(height)
+            for include_patterns in (False, True):
+                block = self.nodes[0].getblock(blockhash, 3, include_patterns)  # return prevout for each input
+                if include_patterns:
+                    uri = f"/spenttxouts/withpatterns/{blockhash}"
+                else:
+                    uri = f"/spenttxouts/{blockhash}"
+                spent_bin = self.test_rest_request(uri, req_type=ReqType.BIN, ret_type=RetType.BYTES)
+                spent_hex = self.test_rest_request(uri, req_type=ReqType.HEX, ret_type=RetType.BYTES)
+                spent_json = self.test_rest_request(uri, req_type=ReqType.JSON, ret_type=RetType.JSON)
+
+                assert_equal(bytes.fromhex(spent_hex.decode()), spent_bin)
+
+                spent = deser_block_spent_outputs(BytesIO(spent_bin))
+                assert_equal(len(spent), len(block["tx"]))
+                assert_equal(len(spent_json), len(block["tx"]))
+
+                for i, tx in enumerate(block["tx"]):
+                    prevouts = [txin["prevout"] for txin in tx["vin"] if "coinbase" not in txin]
+                    # compare with `getblock` JSON output (coinbase tx has no prevouts)
+                    actual = [(txout.scriptPubKey.hex(), Decimal(txout.nValue) / COIN) for txout in spent[i]]
+                    expected = [(p["scriptPubKey"]["hex"], p["value"]) for p in prevouts]
+                    assert_equal(expected, actual)
+                    # also compare JSON format
+                    actual = [(prevout["scriptPubKey"], prevout["value"]) for prevout in spent_json[i]]
+                    expected = [(p["scriptPubKey"], p["value"]) for p in prevouts]
+                    assert_equal(expected, actual)
 
 
 if __name__ == '__main__':

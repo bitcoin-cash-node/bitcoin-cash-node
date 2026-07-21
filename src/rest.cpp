@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -19,6 +19,7 @@
 #include <streams.h>
 #include <sync.h>
 #include <txmempool.h>
+#include <undo.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <validation.h>
@@ -181,7 +182,8 @@ static bool rest_headers(const std::any& context, Config &config, HTTPRequest *r
                 ssHeader << pindex->GetBlockHeader();
             }
 
-            std::string strHex = HexStr(ssHeader) + "\n";
+            std::string strHex = HexStr(ssHeader, false, 1);
+            strHex.append("\n");
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
             return true;
@@ -192,7 +194,8 @@ static bool rest_headers(const std::any& context, Config &config, HTTPRequest *r
             for (const CBlockIndex *pindex : headers) {
                 jsonHeaders.emplace_back(blockheaderToJSON(config, tip, pindex));
             }
-            std::string strJSON = UniValue::stringify(jsonHeaders) + "\n";
+            std::string strJSON = UniValue::stringify(jsonHeaders);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -202,6 +205,116 @@ static bool rest_headers(const std::any& context, Config &config, HTTPRequest *r
                            "output format not found (available: .bin, .hex)");
         }
     }
+}
+
+/**
+ * Serialize spent outputs as a vector of per-transaction CTxOut vectors using binary format.
+ */
+static void SerializeBlockUndo(CDataStream &stream, const CBlockUndo &block_undo) {
+    WriteCompactSize(stream, block_undo.vtxundo.size() + 1);
+    WriteCompactSize(stream, 0); // dummy entry for coinbase tx; block_undo.vtxundo doesn't contain coinbase tx
+    for (const CTxUndo &tx_undo : block_undo.vtxundo) {
+        WriteCompactSize(stream, tx_undo.vprevout.size());
+        for (const Coin &coin : tx_undo.vprevout) {
+            coin.GetTxOut().Serialize(stream);
+        }
+    }
+}
+
+/**
+ * Serialize spent outputs as a JSON array of per-transaction CTxOut JSON array of objects.
+ */
+static UniValue::Array BlockUndoToJSON(const Config &config, const CBlockUndo &block_undo, const bool with_patterns) {
+    UniValue::Array result;
+    result.reserve(block_undo.vtxundo.size() + 1);
+    result.emplace_back(UniValue::VARR); // dummy entry for coinbase tx; block_undo.vtxundo doesn't contain coinbase tx
+    for (const CTxUndo &tx_undo : block_undo.vtxundo) {
+        UniValue::Array tx_prevouts;
+        tx_prevouts.reserve(tx_undo.vprevout.size());
+        for (const Coin &coin : tx_undo.vprevout) {
+            const CTxOut &txout = coin.GetTxOut();
+
+            UniValue::Object prevout;
+            prevout.reserve(2 + bool(txout.tokenDataPtr));
+
+            prevout.emplace_back("value", ValueFromAmount(txout.nValue));;
+            prevout.emplace_back("scriptPubKey", ScriptToUniv(config, txout.scriptPubKey, /*include_address=*/true,
+                                                              /*include_type=*/true, with_patterns));
+            if (txout.tokenDataPtr) {
+                prevout.emplace_back("tokenData", TokenDataToUniv(*txout.tokenDataPtr));
+            }
+
+            tx_prevouts.push_back(std::move(prevout));
+        }
+        result.push_back(std::move(tx_prevouts));
+    }
+    return result;
+}
+
+static bool rest_spent_txouts(const Config &config, HTTPRequest *req, const std::string &strURIPart,
+                              const bool with_patterns) {
+    if (!CheckWarmup(req)) {
+        return false;
+    }
+    std::string hashStr;
+    const RetFormat rf = ParseDataFormat(hashStr, strURIPart);
+
+    BlockHash hash;
+    if (!ParseHashStr(hashStr, hash)) {
+        return RESTERR(req, HTTP_BAD_REQUEST, "Invalid hash: " + hashStr);
+    }
+
+    const CBlockIndex * const pblockindex = WITH_LOCK(cs_main, return ::LookupBlockIndex(hash));
+    if (!pblockindex) {
+        return RESTERR(req, HTTP_NOT_FOUND, hashStr + " not found");
+    }
+
+    CBlockUndo block_undo;
+    if (pblockindex->nHeight > 0 && !UndoReadFromDisk(block_undo, pblockindex)) {
+        return RESTERR(req, HTTP_NOT_FOUND, hashStr + " undo not available");
+    }
+
+    switch (rf) {
+        case RetFormat::BINARY: {
+            CDataStream ssSpentResponse(SER_NETWORK, PROTOCOL_VERSION);
+            SerializeBlockUndo(ssSpentResponse, block_undo);
+            req->WriteHeader("Content-Type", "application/octet-stream");
+            req->WriteReply(HTTP_OK, MakeUInt8Span(ssSpentResponse));
+            return true;
+        }
+
+        case RetFormat::HEX: {
+            CDataStream ssSpentResponse(SER_NETWORK, PROTOCOL_VERSION);
+            SerializeBlockUndo(ssSpentResponse, block_undo);
+            std::string strHex = HexStr(ssSpentResponse, false, 1);
+            strHex.append("\n");
+            req->WriteHeader("Content-Type", "text/plain");
+            req->WriteReply(HTTP_OK, strHex);
+            return true;
+        }
+
+        case RetFormat::JSON: {
+            std::string strJSON = UniValue::stringify(BlockUndoToJSON(config, block_undo, with_patterns));
+            strJSON.append("\n");
+            req->WriteHeader("Content-Type", "application/json");
+            req->WriteReply(HTTP_OK, strJSON);
+            return true;
+        }
+
+        default: {
+            return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: " + AvailableDataFormatsString() + ")");
+        }
+    }
+}
+
+static bool rest_spent_txouts_no_patterns(const std::any &, Config &config, HTTPRequest *req,
+                                          const std::string &strURIPart) {
+    return rest_spent_txouts(config, req, strURIPart, false);
+}
+
+static bool rest_spent_txouts_with_patterns(const std::any &, Config &config, HTTPRequest *req,
+                                            const std::string &strURIPart) {
+    return rest_spent_txouts(config, req, strURIPart, true);
 }
 
 static bool rest_block(const Config &config, HTTPRequest *req,
@@ -250,7 +363,8 @@ static bool rest_block(const Config &config, HTTPRequest *req,
         }
 
         case RetFormat::HEX: {
-            std::string strHex = HexStr(rawBlock) + "\n";
+            std::string strHex = HexStr(rawBlock, false, 1);
+            strHex.append("\n");
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
             return true;
@@ -260,7 +374,8 @@ static bool rest_block(const Config &config, HTTPRequest *req,
             CBlock block;
             VectorReader(SER_NETWORK, PROTOCOL_VERSION, rawBlock, 0) >> block;
             UniValue::Object objBlock = blockToJSON(config, block, tip, pblockindex, txOptions);
-            std::string strJSON = UniValue::stringify(objBlock) + "\n";
+            std::string strJSON = UniValue::stringify(objBlock);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -304,7 +419,8 @@ static bool rest_chaininfo(const std::any& context, Config &config, HTTPRequest 
             jsonRequest.context = context;
             jsonRequest.params.setArray();
             UniValue chainInfoObject = getblockchaininfo(config, jsonRequest);
-            std::string strJSON = UniValue::stringify(chainInfoObject) + "\n";
+            std::string strJSON = UniValue::stringify(chainInfoObject);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -329,7 +445,8 @@ static bool rest_mempool_info(const std::any& context, Config &config, HTTPReque
         case RetFormat::JSON: {
             UniValue::Object mempoolInfoObject = MempoolInfoToJSON(config, ::g_mempool);
 
-            std::string strJSON = UniValue::stringify(mempoolInfoObject) + "\n";
+            std::string strJSON = UniValue::stringify(mempoolInfoObject);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -354,7 +471,8 @@ static bool rest_mempool_contents(const std::any& context, Config &config, HTTPR
         case RetFormat::JSON: {
             UniValue mempoolObject = MempoolToJSON(::g_mempool, true);
 
-            std::string strJSON = UniValue::stringify(mempoolObject) + "\n";
+            std::string strJSON = UniValue::stringify(mempoolObject);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -409,7 +527,8 @@ static bool rest_tx(const std::any& context, Config &config, HTTPRequest *req,
                              PROTOCOL_VERSION);
             ssTx << tx;
 
-            std::string strHex = HexStr(ssTx) + "\n";
+            std::string strHex = HexStr(ssTx, false, 1);
+            strHex.append("\n");
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
             return true;
@@ -421,7 +540,8 @@ static bool rest_tx(const std::any& context, Config &config, HTTPRequest *req,
             if (hasHash) {
                 objTx.emplace_back("blockhash", hashBlock.GetHex());
             }
-            std::string strJSON = UniValue::stringify(objTx) + "\n";
+            std::string strJSON = UniValue::stringify(objTx);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -613,7 +733,8 @@ static bool rest_getutxos(const std::any& context, Config &config, HTTPRequest *
                                   << ::ChainActive().Tip()->GetBlockHash() << bitmap
                                   << outs;
             }
-            std::string strHex = HexStr(ssGetUTXOResponse) + "\n";
+            std::string strHex = HexStr(ssGetUTXOResponse, false, 1);
+            strHex.append("\n");
 
             req->WriteHeader("Content-Type", "text/plain");
             req->WriteReply(HTTP_OK, strHex);
@@ -647,7 +768,8 @@ static bool rest_getutxos(const std::any& context, Config &config, HTTPRequest *
             objGetUTXOResponse.emplace_back("utxos", std::move(utxos));
 
             // return json string
-            std::string strJSON = UniValue::stringify(objGetUTXOResponse) + "\n";
+            std::string strJSON = UniValue::stringify(objGetUTXOResponse);
+            strJSON.append("\n");
             req->WriteHeader("Content-Type", "application/json");
             req->WriteReply(HTTP_OK, strJSON);
             return true;
@@ -677,6 +799,8 @@ static const struct {
     {"/rest/mempool/contents", rest_mempool_contents},
     {"/rest/headers/", rest_headers},
     {"/rest/getutxos", rest_getutxos},
+    {"/rest/spenttxouts/withpatterns/", rest_spent_txouts_with_patterns},
+    {"/rest/spenttxouts/", rest_spent_txouts_no_patterns},
 };
 
 void StartREST(const std::any& context) {

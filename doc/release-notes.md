@@ -52,7 +52,9 @@ None
 
 ## New RPC methods
 
-None
+- Two new REST API endpoints have been introduced: `/rest/spenttxouts/<BLOCK-HASH>.<bin|hex|json>` and
+  `/rest/spenttxouts/withpatterns/<BLOCK-HASH>.<bin|hex|json>`. They can be used for efficiently fetching spent
+  transaction outputs using the block's undo data.
 
 ## User interface changes
 
