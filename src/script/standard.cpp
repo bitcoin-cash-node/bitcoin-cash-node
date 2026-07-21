@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -39,29 +39,26 @@ const char *GetTxnOutputType(txnouttype t) {
     return nullptr;
 }
 
-static bool MatchPayToPubkey(const CScript &script, valtype &pubkey) {
+static bool MatchPayToPubkey(const CScript &script, StackVec &pubkey) {
     if (script.size() == CPubKey::PUBLIC_KEY_SIZE + 2 &&
         script[0] == CPubKey::PUBLIC_KEY_SIZE && script.back() == OP_CHECKSIG) {
-        pubkey = valtype(script.begin() + 1,
-                         script.begin() + CPubKey::PUBLIC_KEY_SIZE + 1);
+        pubkey.assign(script.begin() + 1, script.begin() + CPubKey::PUBLIC_KEY_SIZE + 1);
         return CPubKey::ValidSize(pubkey);
     }
     if (script.size() == CPubKey::COMPRESSED_PUBLIC_KEY_SIZE + 2 &&
         script[0] == CPubKey::COMPRESSED_PUBLIC_KEY_SIZE &&
         script.back() == OP_CHECKSIG) {
-        pubkey =
-            valtype(script.begin() + 1,
-                    script.begin() + CPubKey::COMPRESSED_PUBLIC_KEY_SIZE + 1);
+        pubkey.assign(script.begin() + 1, script.begin() + CPubKey::COMPRESSED_PUBLIC_KEY_SIZE + 1);
         return CPubKey::ValidSize(pubkey);
     }
     return false;
 }
 
-static bool MatchPayToPubkeyHash(const CScript &script, valtype &pubkeyhash) {
+static bool MatchPayToPubkeyHash(const CScript &script, StackVec &pubkeyhash) {
     if (script.size() == 25 && script[0] == OP_DUP && script[1] == OP_HASH160 &&
         script[2] == 20 && script[23] == OP_EQUALVERIFY &&
         script[24] == OP_CHECKSIG) {
-        pubkeyhash = valtype(script.begin() + 3, script.begin() + 23);
+        pubkeyhash.assign(script.begin() + 3, script.begin() + 23);
         return true;
     }
     return false;
@@ -72,10 +69,9 @@ static constexpr bool IsSmallInteger(opcodetype opcode) {
     return opcode >= OP_1 && opcode <= OP_16;
 }
 
-static bool MatchMultisig(const CScript &script, unsigned int &required,
-                          std::vector<valtype> &pubkeys) {
+static bool MatchMultisig(const CScript &script, unsigned int &required, std::vector<StackVec> &pubkeys) {
     opcodetype opcode;
-    valtype data;
+    StackVec data;
     CScript::const_iterator it = script.begin();
     if (script.size() < 1 || script.back() != OP_CHECKMULTISIG) {
         return false;
@@ -109,7 +105,7 @@ txnouttype Solver(const CScript &scriptPubKey, std::vector<std::vector<uint8_t>>
     // other types:
     // Before p2sh_32 activation in `flags`, it is always:    OP_HASH160 20 [20 byte hash] OP_EQUAL
     // *After* p2sh_32 activation in `flags`, it may also be: OP_HASH256 32 [32 byte hash] OP_EQUAL
-    if (valtype hashBytes; scriptPubKey.IsPayToScriptHash(flags, &hashBytes)) {
+    if (StackVec hashBytes; scriptPubKey.IsPayToScriptHash(flags, &hashBytes)) {
         vSolutionsRet.push_back(std::move(hashBytes));
         return TX_SCRIPTHASH;
     }
@@ -157,7 +153,7 @@ txnouttype Solver(const CScript &scriptPubKey, std::vector<std::vector<uint8_t>>
 }
 
 bool ExtractDestination(const CScript &scriptPubKey, CTxDestination &addressRet, uint32_t flags) {
-    std::vector<valtype> vSolutions;
+    std::vector<StackVec> vSolutions;
     txnouttype whichType = Solver(scriptPubKey, vSolutions, flags);
 
     if (whichType == TX_PUBKEY) {
@@ -196,7 +192,7 @@ bool ExtractDestinations(const CScript &scriptPubKey, txnouttype &typeRet,
                          std::vector<CTxDestination> &addressRet,
                          int &nRequiredRet, uint32_t flags) {
     addressRet.clear();
-    std::vector<valtype> vSolutions;
+    std::vector<StackVec> vSolutions;
     typeRet = Solver(scriptPubKey, vSolutions, flags);
     if (typeRet == TX_NONSTANDARD) {
         return false;

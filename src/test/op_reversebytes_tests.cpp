@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,25 +13,38 @@
 
 BOOST_FIXTURE_TEST_SUITE(op_reversebytes_tests, BasicTestingSetup)
 
+using valtype = StackVec;
+using MyStackT = std::vector<valtype>;
+
 static
-void CheckErrorWithFlags(const uint32_t flags, const StackT &original_stack, const CScript &script, const ScriptError expected) {
+StackT ConvertStack(const MyStackT &s) {
+    StackT ret;
+    ret.reserve(s.size());
+    for (const auto &v : s) {
+        ret.emplace_back(v);
+    }
+    return ret;
+}
+
+static
+void CheckErrorWithFlags(const uint32_t flags, const MyStackT &original_stack, const CScript &script, const ScriptError expected) {
     BaseSignatureChecker sigchecker;
     ScriptError err = ScriptError::OK;
-    StackT stack{original_stack};
+    StackT stack = ConvertStack(original_stack);
     bool r = EvalScript(stack, script, flags, sigchecker, &err);
     BOOST_CHECK(!r);
     BOOST_CHECK(err == expected);
 }
 
 static
-void CheckPassWithFlags(const uint32_t flags, const StackT &original_stack, const CScript &script, const StackT &expected) {
+void CheckPassWithFlags(const uint32_t flags, const MyStackT &original_stack, const CScript &script, const MyStackT &expected) {
     BaseSignatureChecker sigchecker;
     ScriptError err = ScriptError::OK;
-    StackT stack{original_stack};
+    StackT stack = ConvertStack(original_stack);
     bool r = EvalScript(stack, script, flags, sigchecker, &err);
     BOOST_CHECK(r);
     BOOST_CHECK(err == ScriptError::OK);
-    BOOST_CHECK(stack == expected);
+    BOOST_CHECK(stack == ConvertStack(expected));
 }
 
 /**

@@ -2553,27 +2553,27 @@ BOOST_AUTO_TEST_CASE(script_PushData) {
     static const uint8_t pushdata4[] = {OP_PUSHDATA4, 1, 0, 0, 0, 0x5a};
 
     ScriptError err;
-    std::vector<std::vector<uint8_t>> directStack;
+    StackT directStack;
     BOOST_CHECK(EvalScript(directStack,
                            CScript(direct, direct + sizeof(direct)),
                            SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), &err));
     BOOST_CHECK_MESSAGE(err == ScriptError::OK, ScriptErrorString(err));
 
-    std::vector<std::vector<uint8_t>> pushdata1Stack;
+    StackT pushdata1Stack;
     BOOST_CHECK(EvalScript(pushdata1Stack,
                            CScript(pushdata1, pushdata1 + sizeof(pushdata1)),
                            SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), &err));
     BOOST_CHECK(pushdata1Stack == directStack);
     BOOST_CHECK_MESSAGE(err == ScriptError::OK, ScriptErrorString(err));
 
-    std::vector<std::vector<uint8_t>> pushdata2Stack;
+    StackT pushdata2Stack;
     BOOST_CHECK(EvalScript(pushdata2Stack,
                            CScript(pushdata2, pushdata2 + sizeof(pushdata2)),
                            SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), &err));
     BOOST_CHECK(pushdata2Stack == directStack);
     BOOST_CHECK_MESSAGE(err == ScriptError::OK, ScriptErrorString(err));
 
-    std::vector<std::vector<uint8_t>> pushdata4Stack;
+    StackT pushdata4Stack;
     BOOST_CHECK(EvalScript(pushdata4Stack,
                            CScript(pushdata4, pushdata4 + sizeof(pushdata4)),
                            SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), &err));
@@ -2584,7 +2584,7 @@ BOOST_AUTO_TEST_CASE(script_PushData) {
     const std::vector<uint8_t> pushdata2_trunc{OP_PUSHDATA2, 1, 0};
     const std::vector<uint8_t> pushdata4_trunc{OP_PUSHDATA4, 1, 0, 0, 0};
 
-    std::vector<std::vector<uint8_t>> stack_ignore;
+    StackT stack_ignore;
     BOOST_CHECK( ! EvalScript(stack_ignore, CScript(pushdata1_trunc.begin(), pushdata1_trunc.end()),
                               SCRIPT_VERIFY_P2SH, BaseSignatureChecker(), &err));
     BOOST_CHECK_EQUAL(err, ScriptError::BAD_OPCODE);
@@ -2599,7 +2599,7 @@ BOOST_AUTO_TEST_CASE(script_PushData) {
 BOOST_AUTO_TEST_CASE(script_cltv_truncated) {
     const auto script_cltv_trunc = CScript() << OP_CHECKLOCKTIMEVERIFY;
 
-    std::vector<std::vector<uint8_t>> stack_ignore;
+    StackT stack_ignore;
     ScriptError err;
     BOOST_CHECK(!EvalScript(stack_ignore, script_cltv_trunc, SCRIPT_VERIFY_CHECKLOCKTIMEVERIFY,
                             BaseSignatureChecker(), &err));
@@ -3309,7 +3309,8 @@ BOOST_AUTO_TEST_CASE(interpreter_CastToBool) {
 
     auto check = [&](const uint8_t *p, const size_t n) {
         const bool expect = refCastToBool(p, n);
-        BOOST_CHECK_EQUAL(CastToBool({p, p+n}), expect);
+        StackItem item({p, p+n});
+        BOOST_CHECK_EQUAL(CastToBool(item), expect);
         ++ncases;
     };
 

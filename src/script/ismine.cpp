@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -37,8 +37,8 @@ enum class IsMineResult {
     INVALID = 3,    //! Not spendable by anyone (P2SH inside P2SH)
 };
 
-bool HaveKeys(const std::vector<valtype> &pubkeys, const CKeyStore &keystore) {
-    for (const valtype &pubkey : pubkeys) {
+bool HaveKeys(const std::vector<StackVec> &pubkeys, const CKeyStore &keystore) {
+    for (const StackVec &pubkey : pubkeys) {
         CKeyID keyID = CPubKey(pubkey).GetID();
         if (!keystore.HaveKey(keyID)) {
             return false;
@@ -51,7 +51,7 @@ IsMineResult IsMineInner(const CKeyStore &keystore, const CScript &scriptPubKey,
                          IsMineSigVersion sigversion) {
     IsMineResult ret = IsMineResult::NO;
 
-    std::vector<valtype> vSolutions;
+    std::vector<StackVec> vSolutions;
     txnouttype whichType = Solver(scriptPubKey, vSolutions, SCRIPT_ENABLE_P2SH_32);
 
     CKeyID keyID;
@@ -107,8 +107,8 @@ IsMineResult IsMineInner(const CKeyStore &keystore, const CScript &scriptPubKey,
             // (somebody else has a key that can spend them) enable
             // spend-out-from-under-you attacks, especially in shared-wallet
             // situations.
-            std::vector<valtype> keys(vSolutions.begin() + 1,
-                                      vSolutions.begin() + vSolutions.size() -
+            std::vector<StackVec> keys(vSolutions.begin() + 1,
+                                       vSolutions.begin() + vSolutions.size() -
                                           1);
             if (HaveKeys(keys, keystore)) {
                 ret = std::max(ret, IsMineResult::SPENDABLE);

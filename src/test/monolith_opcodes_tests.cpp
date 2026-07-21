@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2025 The Bitcoin developers
+// Copyright (c) 2018-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,34 +15,47 @@ BOOST_FIXTURE_TEST_SUITE(monolith_opcodes_tests, BasicTestingSetup)
 
 std::array<uint32_t, 3> flagset{{0, STANDARD_SCRIPT_VERIFY_FLAGS}};
 
+using valtype = StackVec;
+using MyStackT = std::vector<valtype>;
+
+static
+StackT ConvertStack(const MyStackT &s) {
+    StackT ret;
+    ret.reserve(s.size());
+    for (const auto &v : s) {
+        ret.emplace_back(v);
+    }
+    return ret;
+}
+
 /**
  * General utility functions to check for script passing/failing.
  */
 static
-void CheckTestResultForAllFlags(const StackT &original_stack, const CScript &script, const StackT &expected) {
+void CheckTestResultForAllFlags(const MyStackT &original_stack, const CScript &script, const MyStackT &expected) {
     BaseSignatureChecker sigchecker;
 
     for (uint32_t flags : flagset) {
         ScriptError err = ScriptError::OK;
-        StackT stack{original_stack};
+        StackT stack = ConvertStack(original_stack);
         bool r = EvalScript(stack, script, flags, sigchecker, &err);
         BOOST_CHECK(r);
-        BOOST_CHECK(stack == expected);
+        BOOST_CHECK(stack == ConvertStack(expected));
     }
 }
 
 static
-void CheckError(uint32_t flags, const StackT &original_stack, const CScript &script, ScriptError expected_error) {
+void CheckError(uint32_t flags, const MyStackT &original_stack, const CScript &script, ScriptError expected_error) {
     BaseSignatureChecker sigchecker;
     ScriptError err = ScriptError::OK;
-    StackT stack{original_stack};
+    StackT stack = ConvertStack(original_stack);
     bool r = EvalScript(stack, script, flags, sigchecker, &err);
     BOOST_CHECK(!r);
     BOOST_CHECK_MESSAGE(err == expected_error, strprintf("err: \"%s\", expected_error: \"%s\"",
                                                          ScriptErrorString(err), ScriptErrorString(expected_error)));
 }
 
-static void CheckErrorForAllFlags(const StackT &original_stack,
+static void CheckErrorForAllFlags(const MyStackT &original_stack,
                                   const CScript &script,
                                   ScriptError expected_error) {
     for (uint32_t flags : flagset) {
@@ -50,13 +63,12 @@ static void CheckErrorForAllFlags(const StackT &original_stack,
     }
 }
 
-static void CheckOpError(const StackT &original_stack, opcodetype op,
+static void CheckOpError(const MyStackT &original_stack, opcodetype op,
                          ScriptError expected_error) {
     CheckErrorForAllFlags(original_stack, CScript() << op, expected_error);
 }
 
-static void CheckAllBitwiseOpErrors(const StackT &stack,
-                                    ScriptError expected_error) {
+static void CheckAllBitwiseOpErrors(const MyStackT &stack, ScriptError expected_error) {
     CheckOpError(stack, OP_AND, expected_error);
     CheckOpError(stack, OP_OR, expected_error);
     CheckOpError(stack, OP_XOR, expected_error);
@@ -542,11 +554,11 @@ static void CheckTypeConversionOp(const valtype &bin, const valtype &num) {
     CheckTestResultForAllFlags({bin}, CScript() << OP_BIN2NUM << OP_BIN2NUM, {num});
 }
 
-static void CheckBin2NumError(const StackT &original_stack, ScriptError expected_error) {
+static void CheckBin2NumError(const MyStackT &original_stack, ScriptError expected_error) {
     CheckErrorForAllFlags(original_stack, CScript() << OP_BIN2NUM, expected_error);
 }
 
-static void CheckNum2BinError(const StackT &original_stack, ScriptError expected_error) {
+static void CheckNum2BinError(const MyStackT &original_stack, ScriptError expected_error) {
     CheckErrorForAllFlags(original_stack, CScript() << OP_NUM2BIN, expected_error);
 }
 
@@ -674,7 +686,7 @@ static void CheckDivMod(const valtype &a, const valtype &b, const valtype &divEx
         {modExpected});
 }
 
-static void CheckDivModError(const StackT &original_stack, ScriptError expected_error) {
+static void CheckDivModError(const MyStackT &original_stack, ScriptError expected_error) {
     CheckOpError(original_stack, OP_DIV, expected_error);
     CheckOpError(original_stack, OP_MOD, expected_error);
 }

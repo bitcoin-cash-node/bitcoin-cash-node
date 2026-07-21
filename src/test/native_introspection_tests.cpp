@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2025 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -36,8 +36,31 @@ auto genArr(F&& f) {
     return detail::genArr<T>(f, std::make_index_sequence<N>{});
 }
 
+using valtype = StackVec;
+using MyStackT = std::vector<valtype>;
+
 static
-std::string ToString(const StackT &s) {
+StackT ConvertStack(const MyStackT &s) {
+    StackT ret;
+    ret.reserve(s.size());
+    for (const auto &v : s) {
+        ret.emplace_back(v);
+    }
+    return ret;
+}
+
+static
+MyStackT ConvertStack(const StackT &s) {
+    MyStackT ret;
+    ret.reserve(s.size());
+    for (const auto &item : s) {
+        ret.push_back(item.vec());
+    }
+    return ret;
+}
+
+static
+std::string ToString(const MyStackT &s) {
     std::string ret = "[";
     int ctr = 0;
     for (const auto &v : s) {
@@ -49,30 +72,31 @@ std::string ToString(const StackT &s) {
 }
 
 static
-void CheckErrorWithFlags(uint32_t flags, StackT const& original_stack, CScript const& script, ScriptExecutionContextOpt const& context, ScriptError expected) {
+void CheckErrorWithFlags(uint32_t flags, MyStackT const& original_stack, CScript const& script, ScriptExecutionContextOpt const& context, ScriptError expected) {
     const ContextOptSignatureChecker sigchecker(context);
     ScriptError err = ScriptError::OK;
-    StackT stack{original_stack};
+    StackT stack = ConvertStack(original_stack);
     bool r = EvalScript(stack, script, flags, sigchecker, &err);
     BOOST_CHECK_MESSAGE(!r, strprintf("CheckError Result: %d for script: \"%s\" with stack: %s, resulting stack: %s, "
                                       "flags: %x",
-                                      int(r), HexStr(script), ToString(original_stack), ToString(stack), flags));
+                                      int(r), HexStr(script), ToString(original_stack), ToString(ConvertStack(stack)), flags));
     BOOST_CHECK_MESSAGE(err == expected,
                         strprintf("err == expected: %s == %s", ScriptErrorString(err), ScriptErrorString(expected)));
 }
 
 static
-void CheckPassWithFlags(uint32_t flags, StackT const& original_stack, CScript const& script, ScriptExecutionContextOpt const& context, StackT const& expected) {
+void CheckPassWithFlags(uint32_t flags, MyStackT const& original_stack, CScript const& script, ScriptExecutionContextOpt const& context,
+                        MyStackT const& expected) {
     const ContextOptSignatureChecker sigchecker(context);
     ScriptError err = ScriptError::OK;
-    StackT stack{original_stack};
+    StackT stack = ConvertStack(original_stack);
     bool r = EvalScript(stack, script, flags, sigchecker, &err);
     BOOST_CHECK_MESSAGE(r, strprintf("CheckPass Result: %d for script: \"%s\" with stack: %s, resulting stack: %s, "
                                      "flags: %x",
-                                     int(r), HexStr(script), ToString(original_stack), ToString(stack), flags));
+                                     int(r), HexStr(script), ToString(original_stack), ToString(ConvertStack(stack)), flags));
     BOOST_CHECK(err == ScriptError::OK);
-    BOOST_CHECK_MESSAGE(stack == expected,
-                        strprintf("stack == expected: %s == %s", ToString(stack), ToString(expected)));
+    BOOST_CHECK_MESSAGE(stack == ConvertStack(expected),
+                        strprintf("stack == expected: %s == %s", ToString(ConvertStack(stack)), ToString(expected)));
 }
 
 static

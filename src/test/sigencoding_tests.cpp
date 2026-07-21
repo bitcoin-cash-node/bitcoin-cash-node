@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2022 The Bitcoin developers
+// Copyright (c) 2018-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -10,6 +10,8 @@
 #include <test/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
+
+using valtype = StackVec;
 
 BOOST_FIXTURE_TEST_SUITE(sigencoding_tests, BasicTestingSetup)
 

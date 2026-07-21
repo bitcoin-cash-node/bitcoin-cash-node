@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -83,13 +83,13 @@ static bool CreateSig(const BaseSignatureCreator &creator,
  */
 static bool SignStep(const SigningProvider &provider,
                      const BaseSignatureCreator &creator,
-                     const CScript &scriptPubKey, std::vector<valtype> &ret,
+                     const CScript &scriptPubKey, std::vector<StackVec> &ret,
                      txnouttype &whichTypeRet, SignatureData &sigdata, uint32_t scriptFlags) {
     CScript scriptRet;
     ret.clear();
     std::vector<uint8_t> sig;
 
-    std::vector<valtype> vSolutions;
+    std::vector<StackVec> vSolutions;
     whichTypeRet = Solver(scriptPubKey, vSolutions, scriptFlags);
 
     switch (whichTypeRet) {
@@ -134,7 +134,7 @@ static bool SignStep(const SigningProvider &provider,
         case TX_MULTISIG: {
             size_t required = vSolutions.front()[0];
             // workaround CHECKMULTISIG bug
-            ret.push_back(valtype());
+            ret.push_back(StackVec());
             for (size_t i = 1; i < vSolutions.size() - 1; ++i) {
                 CPubKey pubkey = CPubKey(vSolutions[i]);
                 if (ret.size() < required + 1 &&
@@ -144,7 +144,7 @@ static bool SignStep(const SigningProvider &provider,
             }
             bool ok = ret.size() == required + 1;
             for (size_t i = 0; i + ret.size() < required + 1; ++i) {
-                ret.push_back(valtype());
+                ret.push_back(StackVec());
             }
             return ok;
         }
@@ -153,9 +153,9 @@ static bool SignStep(const SigningProvider &provider,
     }
 }
 
-static CScript PushAll(const std::vector<valtype> &values) {
+static CScript PushAll(const std::vector<StackVec> &values) {
     CScript result;
-    for (const valtype &v : values) {
+    for (const StackVec &v : values) {
         if (v.size() == 0) {
             result << OP_0;
         } else if (v.size() == 1 && v[0] >= 1 && v[0] <= 16) {
@@ -175,7 +175,7 @@ bool ProduceSignature(const SigningProvider &provider,
         return true;
     }
 
-    std::vector<valtype> result;
+    std::vector<StackVec> result;
     txnouttype whichType;
     bool solved = SignStep(provider, creator, fromPubKey, result, whichType, sigdata, scriptFlags);
     CScript subscript;
@@ -232,7 +232,7 @@ bool SignatureExtractorChecker::CheckSig(const ByteView &scriptSig,
 
 namespace {
 struct Stacks {
-    std::vector<valtype> script;
+    StackT script;
 
     Stacks() = delete;
     Stacks(const Stacks &) = delete;
@@ -273,8 +273,8 @@ SignatureData DataFromTransaction(const ScriptExecutionContext &context, const u
     if (script_type == TX_SCRIPTHASH && !stack.script.empty() &&
         !stack.script.back().empty()) {
         // Get the redeemScript
-        CScript redeem_script(stack.script.back().begin(),
-                              stack.script.back().end());
+        CScript redeem_script(stack.script.back().vec().begin(),
+                              stack.script.back().vec().end());
         data.redeem_script = redeem_script;
         next_script = std::move(redeem_script);
 
@@ -287,9 +287,10 @@ SignatureData DataFromTransaction(const ScriptExecutionContext &context, const u
         assert(solutions.size() > 1);
         unsigned int num_pubkeys = solutions.size() - 2;
         unsigned int last_success_key = 0;
-        for (const valtype &sig : stack.script) {
+        for (const StackItem &item : stack.script) {
+            const StackVec &sig = item.vec();
             for (unsigned int i = last_success_key; i < num_pubkeys; ++i) {
-                const valtype &pubkey = solutions[i + 1];
+                const StackVec &pubkey = solutions[i + 1];
                 // We either have a signature for this pubkey, or we have found
                 // a signature and it is valid
                 if (data.signatures.count(CPubKey(pubkey).GetID()) ||
