@@ -1,3 +1,7 @@
+// Copyright (c) 2024-present The Bitcoin developers
+// Distributed under the MIT software license, see the accompanying
+// file COPYING or http://www.opensource.org/licenses/mit-license.php.
+
 #include <policy/policy.h>
 #include <random.h>
 #include <script/interpreter.h>
@@ -28,7 +32,6 @@ do { \
 namespace {
 
 using ::StackT;
-using VecT = StackT::value_type; // std::vector<uint8_t>
 
 BigInt::InsecureRand randGen; // BigInt random number generator
 FastRandomContext fastRand; // Regular int random number generator
@@ -43,7 +46,7 @@ std::string DumpStack(const StackT &stack) { // used for debugging
     std::string ret;
     ret += "Stack (top to bottom):\n";
     for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
-        ret += "  [" + HexStr(*it) + "]\n";
+        ret += "  [" + HexStr(it->vec()) + "]\n";
     }
     return ret;
 }
@@ -90,12 +93,12 @@ void TestStack(const size_t depthIn, const size_t depthOut, const opcodetype &op
     for (; i <= depthIn; ++i) {
         BOOST_CHECK(TestScript(script, stack, ScriptError::INVALID_STACK_OPERATION));
         stack.clear();
-        stack.resize(i+1, VecT{1});
+        stack.resize(i+1, StackItem(StackVec{1}));
     }
     // Test exact-sized stack
     BOOST_CHECK(TestScript(script, stack, ScriptError::OK));
     // Test oversized stack
-    stack.resize(i+1, VecT{1});
+    stack.resize(i+1, StackItem(StackVec{1}));
     BOOST_CHECK(TestScript(script, stack, ScriptError::NUMEQUALVERIFY));
 }
 

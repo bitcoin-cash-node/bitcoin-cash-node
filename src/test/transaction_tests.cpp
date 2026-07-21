@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2026 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -408,15 +408,15 @@ void CheckWithFlag(const CTransactionRef &output, const CMutableTransaction &inp
     BOOST_CHECK_EQUAL(ret, success);
 }
 
-static CScript PushAll(const std::vector<valtype> &values) {
+static CScript PushAll(const StackT &values) {
     CScript result;
-    for (const valtype &v : values) {
+    for (const StackItem &v : values) {
         if (v.size() == 0) {
             result << OP_0;
         } else if (v.size() == 1 && v[0] >= 1 && v[0] <= 16) {
             result << CScript::EncodeOP_N(v[0]);
         } else {
-            result << v;
+            result << v.vec();
         }
     }
     return result;
@@ -424,10 +424,10 @@ static CScript PushAll(const std::vector<valtype> &values) {
 
 static
 void ReplaceRedeemScript(CScript &script, const CScript &redeemScript) {
-    std::vector<valtype> stack;
+    StackT stack;
     EvalScript(stack, script, SCRIPT_VERIFY_STRICTENC, BaseSignatureChecker());
     BOOST_CHECK(stack.size() > 0);
-    stack.back() = valtype(redeemScript.begin(), redeemScript.end());
+    stack.back().mutableVec() = StackVec(redeemScript.begin(), redeemScript.end());
     script = PushAll(stack);
 }
 

@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -145,5 +145,6 @@ struct FindAndDeleteResult {
 [[nodiscard]]
 FindAndDeleteResult FindAndDelete(const ByteView &script, const CScript &b);
 
-/** Used internally by interpreter.cpp but also exported here for use by tests. */
-bool CastToBool(const StackT::value_type &vch);
+/** Used internally by interpreter.cpp but also exported here for use by tests.
+    Note that this function may modify its argument to set the memoized result. */
+bool CastToBool(StackItem &stackItem);

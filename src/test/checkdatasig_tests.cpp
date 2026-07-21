@@ -1,4 +1,4 @@
-// Copyright (c) 2018-2026 The Bitcoin developers
+// Copyright (c) 2018-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -34,39 +34,51 @@ struct KeyData {
     }
 };
 
+using valtype = StackVec;
+using MyStackT = std::vector<StackVec>;
+
+static StackT ConvertStack(const MyStackT &stack) {
+    StackT ret;
+    ret.reserve(stack.size());
+    for (const auto &v  : stack) {
+        ret.emplace_back(v);
+    }
+    return ret;
+}
+
 static
-void CheckError(uint32_t flags, const StackT &original_stack, const CScript &script, ScriptError expected) {
+void CheckError(uint32_t flags, const MyStackT &original_stack, const CScript &script, ScriptError expected) {
     BaseSignatureChecker sigchecker;
     ScriptError err = ScriptError::OK;
-    StackT stack{original_stack};
+    StackT stack = ConvertStack(original_stack);
     bool r = EvalScript(stack, script, flags, sigchecker, &err);
     BOOST_CHECK(!r);
     BOOST_CHECK(err == expected);
 }
 
 static
-void CheckPass(uint32_t flags, const StackT &original_stack, const CScript &script, const StackT &expected) {
+void CheckPass(uint32_t flags, const MyStackT &original_stack, const CScript &script, const MyStackT &expected) {
     BaseSignatureChecker sigchecker;
     ScriptError err = ScriptError::OK;
-    StackT stack{original_stack};
+    StackT stack = ConvertStack(original_stack);
     bool r = EvalScript(stack, script, flags, sigchecker, &err);
     BOOST_CHECK(r);
     BOOST_CHECK(err == ScriptError::OK);
-    BOOST_CHECK(stack == expected);
+    BOOST_CHECK(stack == ConvertStack(expected));
 }
 
 /**
  * General utility functions to check for script passing/failing.
  */
-static void CheckTestResultForAllFlags(const StackT &original_stack,
+static void CheckTestResultForAllFlags(const MyStackT &original_stack,
                                        const CScript &script,
-                                       const StackT &expected) {
+                                       const MyStackT &expected) {
     for (uint32_t flags : flagset) {
         CheckPass(flags, original_stack, script, expected);
     }
 }
 
-static void CheckErrorForAllFlags(const StackT &original_stack,
+static void CheckErrorForAllFlags(const MyStackT &original_stack,
                                   const CScript &script, ScriptError expected) {
     for (uint32_t flags : flagset) {
         CheckError(flags, original_stack, script, expected);

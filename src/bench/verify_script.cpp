@@ -1,5 +1,5 @@
 // Copyright (c) 2016-2018 The Bitcoin Core developers
-// Copyright (c) 2021-2025 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -26,7 +26,7 @@
 #include <stdexcept>
 
 static void VerifyNestedIfScript(benchmark::State &state) {
-    std::vector<std::vector<uint8_t>> stack;
+    StackT stack;
     CScript script;
     for (int i = 0; i < 100; ++i) {
         script << OP_1 << OP_IF;
@@ -303,7 +303,7 @@ static void VerifyLoopScript(benchmark::State &state, int which, bool tightLoop)
         .opCost = metrics.GetCompositeOpCost(flags),
         .opCostLimit = metrics.GetScriptLimits()->GetOpCostLimit(),
         .scriptSize = script.size(),
-        .stackBottom = ScriptBigInt(stackBottom, false, ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT).getBigInt().ToString(),
+        .stackBottom = ScriptBigInt(stackBottom.vec(), false, ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT).getBigInt().ToString(),
         .bogoCostPerByte = t0.nsec() / double(nBytesEvaluated),
     };
     using StatVec = std::vector<Stat>;
