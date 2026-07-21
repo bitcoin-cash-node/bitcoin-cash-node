@@ -18,6 +18,7 @@
 #include <tinyformat.h>
 #include <uint256.h>
 #include <util/bitmanip.h>
+#include <util/hwaccel.h>
 
 #include <limits>
 #include <list>
@@ -25,17 +26,28 @@
 #include <span>
 #include <utility>
 
-bool CastToBool(const valtype &vch) {
-    for (size_t i = 0; i < vch.size(); i++) {
-        if (vch[i] != 0) {
-            // Can be negative zero
-            if (i == vch.size() - 1 && vch[i] == 0x80) {
-                return false;
-            }
-            return true;
-        }
+bool CastToBool(const StackT::value_type &vch) {
+    // Note: 'false' can be all zero bytes or "negative zero", which is, byte-wise, 0 or more 0x0's followed by a 0x80
+    // byte, e.g.: {0x0, 0x0, ..., 0x0, 0x80}
+
+    const size_t sz = vch.size();
+    if (sz == 0) {
+        // Empty vector is false
+        return false;
+    } else if (const auto last = vch.back(); last != 0x00u && last != 0x80u) {
+        // If the last byte is not zero and is not negative 0, then this byte blob must be truthy (fast path)
+        return true;
     }
-    return false;
+    // At this point we know that the vector is: (1) not empty and (2) the last byte is either 0x00 or it's 0x80
+
+    if (sz == 1) {
+        // Since the only byte is one of: 0x00 or 0x80 ("negative 0"), we know it's false
+        return false;
+    }
+
+    // At this point we know that: sz > 1, and last byte is either 0x00 or 0x80, proceed with scanning all bytes except
+    // the last one. If all remaining bytes are zero, it's false, otherwise it's true.
+    return not hwaccel::IsAllZeros(std::span{vch}.first(sz - 1));
 }
 
 /**

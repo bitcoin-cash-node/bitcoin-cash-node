@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2025 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <uint256.h>
@@ -24,6 +24,7 @@
 #include <new> // for std::launder
 #include <sstream>
 #include <string>
+#include <utility>
 
 BOOST_FIXTURE_TEST_SUITE(uint256_tests, BasicTestingSetup)
 
@@ -202,10 +203,12 @@ BOOST_AUTO_TEST_CASE(methods) {
     BOOST_CHECK(MaxL.GetHex() == MaxL.ToString());
     uint256 TmpL(R1L);
     BOOST_CHECK(TmpL == R1L);
+    BOOST_CHECK(!TmpL.IsNull());
     TmpL.SetHex(R2L.ToString());
     BOOST_CHECK(TmpL == R2L);
     TmpL.SetHex(ZeroL.ToString());
     BOOST_CHECK(TmpL == uint256());
+    BOOST_CHECK(TmpL.IsNull());
 
     TmpL.SetHex(R1L.ToString());
     BOOST_CHECK(std::memcmp(R1L.begin(), R1Array, 32) == 0);
@@ -250,10 +253,13 @@ BOOST_AUTO_TEST_CASE(methods) {
     BOOST_CHECK(MaxS.GetHex() == MaxS.ToString());
     uint160 TmpS(R1S);
     BOOST_CHECK(TmpS == R1S);
+    BOOST_CHECK(!TmpS.IsNull());
     TmpS.SetHex(R2S.ToString());
     BOOST_CHECK(TmpS == R2S);
+    BOOST_CHECK(!TmpS.IsNull());
     TmpS.SetHex(ZeroS.ToString());
     BOOST_CHECK(TmpS == uint160());
+    BOOST_CHECK(TmpS.IsNull());
 
     TmpS.SetHex(R1S.ToString());
     BOOST_CHECK(std::memcmp(R1S.begin(), R1Array, 20) == 0);
@@ -409,6 +415,43 @@ BOOST_AUTO_TEST_CASE(operator_with_self) {
     BOOST_CHECK(v == UintToArith256(uint256S("02")));
     v -= SELF(v);
     BOOST_CHECK(v == UintToArith256(uint256S("0")));
+}
+
+BOOST_AUTO_TEST_CASE(isnull_fuzz) {
+    // Test 100 separate default-constructed instances and ensure they are IsNull()
+    for (auto & [u256, u160] : std::vector<std::pair<uint256, uint160>>(100)) {
+        BOOST_CHECK(u256.IsNull());
+        BOOST_CHECK(u160.IsNull());
+
+        // Next, randomly pick an index to set to nonzero for both u256 and u160, and IsNull should become false
+        uint8_t randNonZeroByte;
+        do {
+            randNonZeroByte = InsecureRandRange(std::numeric_limits<uint8_t>::max()) + 1u;
+        } while (!randNonZeroByte);
+        // u256
+        size_t idx = InsecureRandRange(u256.size());
+        BOOST_REQUIRE(idx < u256.size());
+        u256.data()[idx] = randNonZeroByte;
+        BOOST_CHECK(!u256.IsNull());
+        // u160
+        BOOST_REQUIRE(u160.size() > 0);
+        idx = InsecureRandRange(u160.size());
+        BOOST_REQUIRE(idx < u160.size());
+        u160.data()[idx] = randNonZeroByte;
+        BOOST_CHECK(!u160.IsNull());
+    }
+
+    // Next, construct 100 uint256's and uint160's from random data and ensure they are not IsNull()
+    for (size_t i = 0; i < 100; ++i) {
+        const uint256 u256 = InsecureRand256();
+        BOOST_CHECK(!u256.IsNull());
+
+        uint160 u160{uint160::Uninitialized};
+        const auto rb = g_insecure_rand_ctx.randbytes(u160.size());
+        BOOST_REQUIRE(rb.size() == u160.size());
+        std::copy(rb.begin(), rb.end(), u160.begin());
+        BOOST_CHECK(!u160.IsNull());
+    }
 }
 
 BOOST_AUTO_TEST_SUITE_END()
