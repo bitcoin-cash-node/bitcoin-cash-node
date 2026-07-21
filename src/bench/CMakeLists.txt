@@ -70,6 +70,7 @@ add_executable(bench_bitcoin
 	rpc_blockchain.cpp
 	rpc_mempool.cpp
 	script.cpp
+	util_hwaccel.cpp
 	util_string.cpp
 	util_time.cpp
 	verify_script.cpp

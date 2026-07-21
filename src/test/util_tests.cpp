@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -11,6 +11,7 @@
 #include <tinyformat.h>
 #include <util/bit_cast.h>
 #include <util/defer.h>
+#include <util/hwaccel.h>
 #include <util/moneystr.h>
 #include <util/overflow.h>
 #include <util/overloaded.h>
@@ -22,12 +23,14 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <optional>
 #include <set>
+#include <span>
 #include <string>
 #include <string_view>
 #include <system_error>
@@ -2429,6 +2432,70 @@ BOOST_AUTO_TEST_CASE(test_LogEscapeMessageInPlace) {
     str.assign("O\x00O", 3);
     BOOST_CHECK(BCLog::LogEscapeMessageInPlace(str));
     BOOST_CHECK_EQUAL(str, R"(O\x00O)");
+}
+
+// Correctness test for the hwaccel::IsAllZeros() function
+BOOST_AUTO_TEST_CASE(test_IsAllZeros) {
+    FastRandomContext rng;
+    // Buffer with room for misalignment offsets.
+    std::vector<uint8_t> buf(16 + 10000 + 16);
+    size_t ncases = 0;
+
+    // Reference implementation: direct byte-wise check for all zeros
+    auto bytewiseRefImpl = [](const std::span<const uint8_t> &bytes) {
+        return std::none_of(bytes.begin(), bytes.end(), [](auto b) { return b != 0; });
+    };
+
+    auto check = [&](const std::span<const uint8_t> &bytes) {
+        const bool expect = bytewiseRefImpl(bytes);
+        BOOST_CHECK_EQUAL(hwaccel::IsAllZeros(bytes), expect);
+        // also check vs non-SIMD version
+        BOOST_CHECK_EQUAL(hwaccel::detail::IsAllZerosPortable(std::as_bytes(bytes)), expect);
+        ++ncases;
+    };
+
+    std::vector<size_t> sizes;
+    for (size_t n = 0; n <= 320; ++n) {
+        sizes.push_back(n);
+    }
+    for (size_t n : {size_t(511), size_t(512), size_t(513), size_t(1000), size_t(4095),
+                     size_t(4096), size_t(4097), size_t(9998), size_t(9999), size_t(10000)}) {
+        sizes.push_back(n);
+    }
+
+    for (size_t offset : {0, 1, 7, 13}) {
+        uint8_t *base = buf.data() + offset;
+        for (const size_t n : sizes) {
+            // all zeros
+            std::fill(base, base + n, 0);
+            check({base, n});
+            if (n >= 1) {
+                // single nonzero at various positions/values
+                for (size_t pos : {size_t(0), n / 2, n - 1}) {
+                    for (uint8_t v : {0x01, 0x80, 0xff}) {
+                        base[pos] = v;
+                        check({base, n});
+                        base[pos] = 0;
+                    }
+                }
+                // nonzero early
+                if (n >= 2) {
+                    base[0] = 1;
+                    check({base, n});
+                    base[0] = 0;
+                }
+            }
+            // random, zero-biased
+            for (int r = 0; r < (n <= 320 ? 10 : 3); ++r) {
+                for (size_t i = 0; i < n; ++i) {
+                    uint64_t x = rng.rand64();
+                    base[i] = (x & 0xF) ? 0 : uint8_t(x >> 32); // ~94% zeros
+                }
+                check({base, n});
+            }
+        }
+    }
+    BOOST_CHECK(ncases > 0);
 }
 
 BOOST_AUTO_TEST_SUITE_END()
