@@ -166,8 +166,9 @@ namespace {
     }
     /// Returns true if all bytes are zero. Features 8x unrolled accumulated OR (128 bytes per iteration).
     bool IsAllZerosARM64(const std::span<const std::byte> &bytes) noexcept {
-        const uint8_t *p = reinterpret_cast<const uint8_t *>(bytes.data());
         const size_t n = bytes.size();
+        if (n < 16u) return detail::IsAllZerosPortable(bytes); /* below code requires n >= 16 */
+        const uint8_t *p = reinterpret_cast<const uint8_t *>(bytes.data());
         const uint8_t *end = p + n;
         while (end - p >= 128) {
             const uint8x16_t a = vorrq_u8(vld1q_u8(p), vld1q_u8(p + 16));
@@ -180,7 +181,7 @@ namespace {
         }
         uint8x16_t acc = vdupq_n_u8(0);
         while (end - p >= 16) { acc = vorrq_u8(acc, vld1q_u8(p)); p += 16; }
-        if (p < end) acc = vorrq_u8(acc, vld1q_u8(end - 16)); // overlap; safe: n >= 128
+        if (p < end) acc = vorrq_u8(acc, vld1q_u8(end - 16)); // overlap; safe: n >= 16
         return !neon_nonzero_maxv(acc);
     }
 #endif
@@ -191,7 +192,7 @@ bool IsAllZeros(std::span<const std::byte> bytes) noexcept {
     if (bytes.size() >= 128u) {
 #  if HAVE_X86_BUILTIN_CPU_SUPPORTS
         static const auto hwspecific = [] {
-            if (__builtin_cpu_supports("avx512f")) return &IsAllZerosAVX512;
+            if (__builtin_cpu_supports("avx512f") && __builtin_cpu_supports("avx2")) return &IsAllZerosAVX512;
             if (__builtin_cpu_supports("avx2")) return &IsAllZerosAVX2;
             if (__builtin_cpu_supports("sse2")) return &IsAllZerosSSE2;
             return &detail::IsAllZerosPortable;
