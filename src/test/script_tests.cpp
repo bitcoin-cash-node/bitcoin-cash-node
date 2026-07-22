@@ -3359,4 +3359,88 @@ BOOST_AUTO_TEST_CASE(interpreter_CastToBool) {
     BOOST_CHECK_GT(ncases, 0);
 }
 
+// Unit tests for class StackItem
+BOOST_AUTO_TEST_CASE(interpreter_StackItem) {
+    const std::vector<uint8_t> bytes{{0x00, 0x01, 0x02, 0x03}}; // just some bytes to use as the stack item data
+
+    {
+        // Default c'tor
+        StackItem empty;
+        BOOST_CHECK(empty.empty());
+        BOOST_CHECK(empty.size() == 0);
+        BOOST_CHECK(!empty.getCachedBool());
+    }
+    {
+        // Converting c'tor + cache invalidation on access of mutable vector
+        auto mutableBytes = bytes;
+        StackItem itemCopied(bytes);
+        BOOST_CHECK(itemCopied.vec() == bytes);
+        StackItem itemMoved(std::move(mutableBytes));
+        BOOST_CHECK(itemMoved.vec() == bytes);
+        mutableBytes = bytes; // restore bytes
+
+        // Check conversion from bytes with a preset bool
+        StackItem itemCopied2(bytes, false);
+        BOOST_CHECK(itemCopied2.vec() == bytes);
+        BOOST_REQUIRE(itemCopied2.getCachedBool());
+        BOOST_CHECK(*itemCopied2.getCachedBool() == false);
+        // Move conversion
+        StackItem itemMoved2(std::move(mutableBytes), true);
+        BOOST_CHECK(itemMoved2.vec() == bytes);
+        BOOST_REQUIRE(itemMoved2.getCachedBool());
+        BOOST_CHECK(*itemMoved2.getCachedBool() == true);
+
+        // Check that accessing the mutable vector invalidates caches.
+        itemCopied2.mutableVec(); // access mutableVec
+        BOOST_CHECK(!itemCopied2.getCachedBool());
+        BOOST_CHECK(&itemCopied2.mutableVec() == &itemCopied2.vec()); // paranoia: mutable vec and vec are same instance
+    }
+    {
+        // Test copy and move
+        const StackItem item1(bytes, true);
+        StackItem item2(item1);
+        BOOST_REQUIRE(item2 == item1);
+        BOOST_CHECK(item1.vec() == item2.vec());
+        BOOST_CHECK(item1.getCachedBool() == item2.getCachedBool()); // copy c'tor must transfer the cached value
+
+        StackItem itemCopyConstructed(item1);
+        BOOST_CHECK(itemCopyConstructed == item1);
+        BOOST_CHECK(itemCopyConstructed.vec() == item1.vec());
+        BOOST_CHECK(itemCopyConstructed.getCachedBool());
+        BOOST_CHECK(itemCopyConstructed.getCachedBool() == item1.getCachedBool());
+        StackItem itemMoveConstructed(std::move(item2));
+        BOOST_CHECK(itemMoveConstructed == item1);
+        BOOST_CHECK(itemMoveConstructed.getCachedBool()); // move c'tor must transfer the cached value
+        // Important check: moved-from `item2` has caches invalidated since it has *mutated* due to move
+        BOOST_CHECK(!item2.getCachedBool());
+
+        // Test copy-assign
+        StackItem item3;
+        BOOST_CHECK(item3.empty() && item3 != item1);
+        item3 = item1;
+        BOOST_CHECK(!item3.empty() && item3 == item1);
+        BOOST_CHECK(item3.getCachedBool() && *item3.getCachedBool() == true);
+        BOOST_CHECK(item3.vec() == bytes);
+
+        // Test move-assign
+        StackItem item4;
+        BOOST_CHECK(item4.empty() && item4 != item3 && item4 != item1);
+        item4 = std::move(item3);
+        BOOST_CHECK(!item3.getCachedBool()); // the cached bool for item3, which was moved-from, must be invalidated!
+        BOOST_CHECK(!item4.empty() && item4 == item1);
+        BOOST_CHECK(item4.getCachedBool() && *item4.getCachedBool() == true);
+        BOOST_CHECK(item4.vec() == bytes);
+
+        // Test reset/set of cached value
+        item4.setCachedBool(false);
+        BOOST_CHECK(item4.getCachedBool() && *item4.getCachedBool() == false);
+        item4.resetCachedBool();
+        BOOST_CHECK(!item4.getCachedBool());
+
+        // Test that equality doesn't depend on the cached bool value
+        BOOST_CHECK(item4.getCachedBool() != item1.getCachedBool());
+        BOOST_CHECK(item4 == item1);
+    }
+}
+
 BOOST_AUTO_TEST_SUITE_END()
