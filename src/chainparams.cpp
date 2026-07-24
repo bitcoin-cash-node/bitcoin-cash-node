@@ -1038,6 +1038,8 @@ public:
         vSeeds.clear();
         // Jason Dreyzehner
         vSeeds.emplace_back("chipnet.bitjson.com");
+        // Loping.net
+        vSeeds.emplace_back("seed.cbch.loping.net");
 
         base58Prefixes[PUBKEY_ADDRESS] = std::vector<uint8_t>(1, 111);
         base58Prefixes[SCRIPT_ADDRESS] = std::vector<uint8_t>(1, 196);
