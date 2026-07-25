@@ -116,7 +116,6 @@ apt-get -y install \
     npm \
     python3-dev \
     python3-pip \
-    python3-scipy \
     python3-venv \
     php-codesniffer \
     php-curl \
@@ -134,6 +133,7 @@ python3 -m pip install \
     mkdocs-material \
     packaging \
     pymdown-extensions \
+    scipy \
     && \
 echo && \
 echo && \
