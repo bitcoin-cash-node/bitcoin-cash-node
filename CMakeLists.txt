@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2025 The Bitcoin developers
+# Copyright (c) 2017-present The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,7 +9,7 @@ set(CMAKE_USER_MAKE_RULES_OVERRIDE
 )
 
 project(bitcoin-cash-node
-	VERSION 29.0.1
+	VERSION 29.1.0
 	DESCRIPTION "Bitcoin Cash Node is a full node implementation of the Bitcoin Cash protocol."
 	HOMEPAGE_URL "https://www.bitcoincashnode.org"
 )
@@ -18,7 +18,7 @@ project(bitcoin-cash-node
 set(PACKAGE_NAME "Bitcoin Cash Node")
 
 # Copyright
-set(COPYRIGHT_YEAR 2025)
+set(COPYRIGHT_YEAR 2026)
 set(COPYRIGHT_HOLDERS "The %s developers")
 set(COPYRIGHT_HOLDERS_SUBSTITUTION Bitcoin)
 string(REPLACE "%s" ${COPYRIGHT_HOLDERS_SUBSTITUTION} COPYRIGHT_HOLDERS_FINAL ${COPYRIGHT_HOLDERS})
