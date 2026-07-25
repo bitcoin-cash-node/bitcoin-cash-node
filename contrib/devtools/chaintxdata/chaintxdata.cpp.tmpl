@@ -1,0 +1,11 @@
+        // Data as of block {block_hash}
+        // (height {height}).
+        chainTxData = ChainTxData{{
+            // UNIX timestamp of last known number of transactions.
+            {timestamp},
+            // Total number of transactions between genesis and that timestamp
+            // (the tx=... number in the ChainStateFlushed debug.log lines)
+            {total_transactions},
+            // Estimated number of transactions per second after that timestamp.
+            {tx_rate:.4g},
+        }};
