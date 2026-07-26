@@ -30,6 +30,18 @@ public:
         : vch(vchIn), cachedBool(cachedBoolIn) {}
     StackItem(StackVec &&vchIn, std::optional<bool> cachedBoolIn = std::nullopt) noexcept
         : vch(std::move(vchIn)), cachedBool(cachedBoolIn) {}
+    // Copy and move
+    StackItem(const StackItem &) = default;
+    StackItem(StackItem &&o) noexcept { *this = std::move(o); }
+
+    StackItem &operator=(const StackItem &) = default;
+    StackItem &operator=(StackItem &&o) noexcept {
+        vch = std::move(o.vch);
+        cachedBool = std::move(o.cachedBool);
+        // explicitly clear and invalidate any caches `o` may have, to preserve class invariants, since `o` has mutated
+        o.resetCaches();
+        return *this;
+    }
 
     // Preferred getter when modification is not necessary; caches do not get invalidated
     const StackVec & vec() const { return vch; }
