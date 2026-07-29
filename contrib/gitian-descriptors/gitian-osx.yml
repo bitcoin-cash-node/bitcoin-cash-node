@@ -215,36 +215,18 @@ script: |
     ninja osx-deploydir
 
     OSX_VOLNAME="$(cat osx_volname)"
-    mkdir -p unsigned-app-${i}
-    cp osx_volname unsigned-app-${i}/
-    cp ../contrib/macdeploy/detached-sig-apply.sh unsigned-app-${i}
-    cp ../contrib/macdeploy/detached-sig-create.sh unsigned-app-${i}
-    cp ${BASEPREFIX}/${i}/native/bin/${i}-codesign_allocate unsigned-app-${i}/codesign_allocate
-    cp ${BASEPREFIX}/${i}/native/bin/${i}-pagestuff unsigned-app-${i}/pagestuff
-    mv dist unsigned-app-${i}
-    pushd unsigned-app-${i}
-    find . | sort | tar --no-recursion --mode='u+rw,go+r-w,a+X' --owner=0 --group=0 -c -T - | gzip -9n > ${OUTDIR}/${DISTNAME}-${i}-unsigned.tar.gz
-    popd
 
     ninja osx-dmg
     mv "${OSX_VOLNAME}.dmg" ${OUTDIR}/${DISTNAME}-${i}-unsigned.dmg
 
     cd installed
-    # The install/strip target should do exactly that. However there is a bug in
-    # in the Buster CMake version that causes strip to be called with the wrong
-    # parameters when an Apple strip tool is used. This is fixed starting with
-    # CMake versions >= 3.14, see:
-    # https://gitlab.kitware.com/cmake/cmake/merge_requests/2892
     find -path "*.app*" -type f -executable -exec mv {} ${DISTNAME}/bin/bitcoin-qt \;
-    find ${DISTNAME}/bin -type f -executable -exec ${i}-strip -u -r {} \;
-    find ${DISTNAME}/lib -type f -executable -exec ${i}-strip -x {} \;
-    find ${DISTNAME} -not -path "*.app*" | sort | tar --no-recursion --mode='u+rw,go+r-w,a+X' --owner=0 --group=0 -c -T - | gzip -9n > ${OUTDIR}/${DISTNAME}-${i}.tar.gz
+    find ${DISTNAME} -not -path "*.app*" | sort | tar --no-recursion --mode='u+rw,go+r-w,a+X' --owner=0 --group=0 -c \
+      -T - | gzip -9n > ${OUTDIR}/${DISTNAME}-${i}-unsigned.tar.gz
     cd ../../
   done
   mkdir -p $OUTDIR/src
   mv $SOURCEDIST $OUTDIR/src
-  mv ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin23.tar.gz           ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin.tar.gz
-  mv ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin23.tar.gz          ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin.tar.gz
   mv ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin23-unsigned.tar.gz  ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin-unsigned.tar.gz
   mv ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin23-unsigned.tar.gz ${OUTDIR}/${DISTNAME}-aarch64-apple-darwin-unsigned.tar.gz
   mv ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin23-unsigned.dmg     ${OUTDIR}/${DISTNAME}-x86_64-apple-darwin-unsigned.dmg
