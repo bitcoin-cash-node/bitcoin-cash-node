@@ -79,6 +79,8 @@ remove that setting before upgrading, otherwise bitcoind will refuse to start wi
 
 - A new REST endpoint has been introduced: `/rest/blockhashbyheight/<HEIGHT>.<bin|hex|json>`, which can be used to
   retrieve the block hash of a block in the active chain, given a block height.
+- `simulaterawtransaction` - Calculate the balance change resulting in the signing and broadcasting of the given
+   transaction(s). For more information see the RPC built-in help, e.g.: `bitcoin-cli help`.
 
 ## User interface changes
 
