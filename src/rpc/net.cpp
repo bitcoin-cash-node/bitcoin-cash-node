@@ -164,7 +164,7 @@ static UniValue getpeerinfo(const Config &, const JSONRPCRequest &request) {
         bool minping = stats.dMinPing < double(std::numeric_limits<int64_t>::max()) / 1e6;
         bool pingwait = stats.dPingWait > 0.0;
         UniValue::Object obj;
-        obj.reserve(25 + addrlocal + addrbind + pingtime + minping + pingwait + fStateStats * 4);
+        obj.reserve(25 + addrlocal + addrbind + (stats.m_mapped_as != 0) + pingtime + minping + pingwait + fStateStats * 4);
         obj.emplace_back("id", stats.nodeid);
         obj.emplace_back("addr", std::move(stats.addrName));
         if (addrlocal) {
@@ -564,7 +564,7 @@ static UniValue getnetworkinfo(const Config &config, const JSONRPCRequest &reque
 
     LOCK(cs_main);
     UniValue::Object obj;
-    obj.reserve(g_connman ? 14 : 10);
+    obj.reserve(g_connman ? 16 : 10);
     obj.emplace_back("version", CLIENT_VERSION);
     obj.emplace_back("subversion", userAgent(config));
     obj.emplace_back("protocolversion", PROTOCOL_VERSION);
