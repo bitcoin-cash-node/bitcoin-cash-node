@@ -202,7 +202,7 @@ static bool rest_headers(const std::any& context, Config &config, HTTPRequest *r
         }
         default: {
             return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: .bin, .hex)");
+                           "output format not found (available: " + AvailableDataFormatsString() + ")");
         }
     }
 }
@@ -383,8 +383,7 @@ static bool rest_block(const Config &config, HTTPRequest *req,
 
         default: {
             return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: " +
-                               AvailableDataFormatsString() + ")");
+                           "output format not found (available: " + AvailableDataFormatsString() + ")");
         }
     }
 }
@@ -426,8 +425,7 @@ static bool rest_chaininfo(const std::any& context, Config &config, HTTPRequest 
             return true;
         }
         default: {
-            return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: json)");
+            return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: json)");
         }
     }
 }
@@ -452,8 +450,7 @@ static bool rest_mempool_info(const std::any& context, Config &config, HTTPReque
             return true;
         }
         default: {
-            return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: json)");
+            return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: json)");
         }
     }
 }
@@ -478,8 +475,7 @@ static bool rest_mempool_contents(const std::any& context, Config &config, HTTPR
             return true;
         }
         default: {
-            return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: json)");
+            return RESTERR(req, HTTP_NOT_FOUND, "output format not found (available: json)");
         }
     }
 }
@@ -549,8 +545,7 @@ static bool rest_tx(const std::any& context, Config &config, HTTPRequest *req,
 
         default: {
             return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: " +
-                               AvailableDataFormatsString() + ")");
+                           "output format not found (available: " + AvailableDataFormatsString() + ")");
         }
     }
 }
@@ -651,8 +646,7 @@ static bool rest_getutxos(const std::any& context, Config &config, HTTPRequest *
         }
         default: {
             return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: " +
-                               AvailableDataFormatsString() + ")");
+                           "output format not found (available: " + AvailableDataFormatsString() + ")");
         }
     }
 
@@ -776,8 +770,7 @@ static bool rest_getutxos(const std::any& context, Config &config, HTTPRequest *
         }
         default: {
             return RESTERR(req, HTTP_NOT_FOUND,
-                           "output format not found (available: " +
-                               AvailableDataFormatsString() + ")");
+                           "output format not found (available: " + AvailableDataFormatsString() + ")");
         }
     }
 }
