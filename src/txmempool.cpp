@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2025 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -1142,7 +1142,7 @@ void DisconnectedBlockTransactions::addNoLimit(Span<const CTransactionRef> vtx, 
 
     // Do Kahn's algorithm
     std::vector<const Entry *> sorted; // ordered from parents -> children
-    sorted.reserve(vtx.size());
+    sorted.reserve(allTxns.size());
 
     // 1. Add all nodes with in-degree 0 to a queue (these are txns with no in-block or in-pool ancestors)
     std::deque<Entry *> queue;
@@ -1167,6 +1167,7 @@ void DisconnectedBlockTransactions::addNoLimit(Span<const CTransactionRef> vtx, 
     }
 
     // 3. Reverse insert `sorted` into `queuedTx` (which wants child -> parent ordering)
+    queuedTx.reserve(sorted.size());
     for (const auto &entry : reverse_iterate(sorted)) {
         addTransaction(entry->tx);
     }
