@@ -5552,6 +5552,14 @@ void CChainState::CheckBlockIndex(const Consensus::Params &consensusParams) {
                 }
             }
         }
+        if (pindex->HasCachedMTPValue()) {
+            // Cached MTP value sanity
+            const auto cachedVal = pindex->GetMedianTimePast();
+            // Force a recalc of the cached value, and check it. This check ensures that GetMedianTimePast() was never
+            // called before pindex was properly connected to its ancestors (doing so would violate cache correctness).
+            pindex->ClearCachedMTPValue();
+            assert(pindex->GetMedianTimePast() == cachedVal);
+        }
         // Perhaps too slow
         // assert(pindex->GetBlockHash() == pindex->GetBlockHeader().GetHash());
         // End: actual consistency checks.

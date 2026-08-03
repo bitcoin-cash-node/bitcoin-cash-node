@@ -281,6 +281,7 @@ public:
         return static_cast<int64_t>(*ret);
     }
 
+    bool HasCachedMTPValue() const { return cachedMTP.Get().has_value(); }
     void ClearCachedMTPValue() { cachedMTP.Clear(); }
 
     std::string ToString() const {
