@@ -33,7 +33,7 @@ BlockData::BlockData(int blockHeight) {
         GetBlock = benchmark::data::Get_block556034;
         GetCoinsSpent = benchmark::data::Get_coins_spent_556034;
     } else {
-        throw std::runtime_error("Unknown block height in BlockData::BlockData(). Expected one of: 413567, 556034"); 
+        throw std::runtime_error("Unknown block height in BlockData::BlockData(). Expected one of: 413567, 556034");
     }
     assert(bool(GetBlock) && bool(GetCoinsSpent));
     const std::vector<uint8_t> &data = GetBlock();

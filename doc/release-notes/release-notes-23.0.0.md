@@ -40,7 +40,7 @@ Bitcoin Cash network upgrade.
 
 ## About the CPFP & unconfirmed chain limit removal
 
-The CPFP (child-pays-for-parent) and the unconfirmed transaction chain limit will both be deactivated on May 15, 2021 when MTP of the chain tip reaches 12:00 UTC.  After that time, 
+The CPFP (child-pays-for-parent) and the unconfirmed transaction chain limit will both be deactivated on May 15, 2021 when MTP of the chain tip reaches 12:00 UTC.  After that time,
 it will be possible to "chain" unconfirmed transactions beyond the current limit of 50, in
 a limitless way, without any negative performance consequence for the node.
 

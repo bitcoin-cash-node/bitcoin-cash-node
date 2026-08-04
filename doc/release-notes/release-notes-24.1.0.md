@@ -79,15 +79,15 @@ Please use the `excessiveblocksize` configuration option together with a
 restart of the node if you want to adapt this parameter.
 
 An upgrade to Qt version 5.15.3 is planned for our next release.  As a result,
-compatibility of the release binary with some older Linux platforms will be 
+compatibility of the release binary with some older Linux platforms will be
 affected:
 
 - Support for glibc versions older than 2.27 is now deprecated
-  and may no longer be supported in a future release. This will impact older 
+  and may no longer be supported in a future release. This will impact older
   platforms like CentOS 7, Debian 9, Mint 19, and Ubuntu 14 & 16.
 - Support for platforms that lack the X protocol C-language Binding library
   (libxcb) is deprecated, and future releases may require this library.
-    - This library seems available on most major Linux distributions but we urge you 
+    - This library seems available on most major Linux distributions but we urge you
       to check your node platform and notify us via a GitLab issue or via a comment on [MR 1524](https://gitlab.com/bitcoin-cash-node/bitcoin-cash-node/-/merge_requests/1523)
       if you do not have this library.
 

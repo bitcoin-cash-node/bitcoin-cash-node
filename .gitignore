@@ -114,6 +114,7 @@ linux-build
 win32-build
 test/config.ini
 test/cache/*
+arcanist/.phutil_module_cache
 
 !src/leveldb*/Makefile
 src/leveldb/CONTRIBUTING.md

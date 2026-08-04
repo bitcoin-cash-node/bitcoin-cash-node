@@ -6,9 +6,10 @@
         "clang-format": {
             "type": "clang-format",
             "version": ">=8.0",
-            "bin": ["clang-format-8", "clang-format"],
+            "bin": ["clang-format-18", "clang-format"],
             "include": "(^src/.*\\.(h|c|cpp|mm)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(secp256k1|univalue|leveldb)/)"
             ]
         },
@@ -17,6 +18,7 @@
             "version": ">=1.3.4",
             "include": "(\\.py$)",
             "exclude": [
+                "(.*/)",
                 "(^contrib/gitian-builder/)"
             ],
             "flags": [
@@ -30,6 +32,7 @@
             "version": ">=3.0",
             "include": "(\\.py$)",
             "exclude": [
+                "(.*/)",
                 "(^contrib/gitian-builder/)"
             ],
             "flags": [
@@ -41,21 +44,29 @@
             "type": "lint-format-strings",
             "include": "(^src/.*\\.(h|c|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(secp256k1|univalue|leveldb)/)"
             ]
         },
         "check-doc": {
             "type": "check-doc",
-            "include": "(^src/.*\\.(h|c|cpp)$)"
+            "include": "(^src/.*\\.(h|c|cpp)$)",
+            "exclude": [
+                "(.*/)"
+            ]
         },
         "lint-tests": {
             "type": "lint-tests",
-            "include": "(^src/(seeder/|rpc/|wallet/)?test/.*\\.(cpp)$)"
+            "include": "(^src/(seeder/|rpc/|wallet/)?test/.*\\.(cpp)$)",
+            "exclude": [
+                "(.*/)"
+            ]
         },
         "lint-python-format": {
             "type": "lint-python-format",
             "include": "(\\.py$)",
             "exclude": [
+                "(.*/)",
                 "(^test/lint/lint-python-format\\.py$)",
                 "(^contrib/gitian-builder/)"
             ]
@@ -64,6 +75,7 @@
             "type": "phpcs",
             "include": "(\\.php$)",
             "exclude": [
+                "(.*/)",
                 "(^arcanist/__phutil_library_.+\\.php$)"
             ],
             "phpcs.standard": "arcanist/phpcs.xml"
@@ -72,6 +84,7 @@
             "type": "lint-locale-dependence",
             "include": "(^src/.*\\.(h|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(crypto/ctaes/|leveldb/|secp256k1/|seeder/|tinyformat.h|univalue/))"
             ]
         },
@@ -79,12 +92,14 @@
             "type": "lint-cheader",
             "include": "(^src/.*\\.(h|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(crypto/ctaes|secp256k1|univalue|leveldb)/)"
             ]
         },
         "spelling": {
             "type": "spelling",
             "exclude": [
+                "(.*/)",
                 "(^build-aux/m4/)",
                 "(^depends/)",
                 "(^doc/release-notes/)",
@@ -100,6 +115,7 @@
             "type": "lint-assert-with-side-effects",
             "include": "(^src/.*\\.(h|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(secp256k1|univalue|leveldb)/)"
             ]
         },
@@ -107,6 +123,7 @@
             "type": "lint-include-quotes",
             "include": "(^src/.*\\.(h|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(secp256k1|univalue|leveldb)/)"
             ]
         },
@@ -114,6 +131,7 @@
             "type": "lint-include-guard",
             "include": "(^src/.*\\.h$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(crypto/ctaes|secp256k1|univalue|leveldb)/)",
                 "(^src/tinyformat.h$)"
             ]
@@ -122,6 +140,7 @@
             "type": "lint-include-source",
             "include": "(^src/.*\\.(h|c|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(secp256k1|univalue|leveldb)/)"
             ]
         },
@@ -129,6 +148,7 @@
             "type": "lint-stdint",
             "include": "(^src/.*\\.(h|c|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(secp256k1|univalue|leveldb)/)",
                 "(^src/compat/assumptions.h$)"
             ]
@@ -137,17 +157,22 @@
             "type": "lint-source-filename",
             "include": "(^src/.*\\.(h|c|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(secp256k1|univalue|leveldb)/)"
             ]
         },
         "check-rpc-mappings": {
             "type": "check-rpc-mappings",
-            "include": "(^src/(rpc/|wallet/rpc).*\\.cpp$)"
+            "include": "(^src/(rpc/|wallet/rpc).*\\.cpp$)",
+            "exclude": [
+                "(.*/)"
+            ]
         },
         "lint-python-encoding": {
             "type": "lint-python-encoding",
             "include": "(\\.py$)",
             "exclude": [
+                "(.*/)",
                 "(^contrib/gitian-builder/)"
             ]
         },
@@ -155,6 +180,7 @@
             "type": "lint-python-shebang",
             "include": "(\\.py$)",
             "exclude": [
+                "(.*/)",
                 "(__init__\\.py$)",
                 "(^contrib/gitian-builder/)"
             ]
@@ -163,6 +189,7 @@
             "type": "lint-bash-shebang",
             "include": "(\\.sh$)",
             "exclude": [
+                "(.*/)",
                 "(^contrib/gitian-builder/)"
             ]
         },
@@ -170,6 +197,7 @@
             "type": "shellcheck",
             "include": "(\\.sh$)",
             "exclude": [
+                "(.*/)",
                 "(^contrib/gitian-builder/)",
                 "(^src/(secp256k1|univalue)/)"
             ]
@@ -178,6 +206,7 @@
             "type": "lint-shell-locale",
             "include": "(\\.sh$)",
             "exclude": [
+                "(.*/)",
                 "(^contrib/gitian-builder/)",
                 "(^src/(secp256k1|univalue)/)"
             ]
@@ -186,18 +215,23 @@
             "type": "lint-cpp-void-parameters",
             "include": "(^src/.*\\.(h|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(crypto/ctaes|secp256k1|univalue|leveldb)/)",
                 "(^src/compat/glibc_compat.cpp$)"
             ]
         },
         "lint-logs": {
             "type": "lint-logs",
-            "include": "(^src/.*\\.(h|cpp)$)"
+            "include": "(^src/.*\\.(h|cpp)$)",
+            "exclude": [
+                "(.*/)"
+            ]
         },
         "lint-qt": {
             "type": "lint-qt",
             "include": "(^src/qt/.*\\.(h|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/qt/(locale|forms|res)/)"
             ]
         },
@@ -205,22 +239,16 @@
             "type": "lint-doxygen",
             "include": "(^src/.*\\.(h|c|cpp)$)",
             "exclude": [
+                "(.*/)",
                 "(^src/(crypto/ctaes|secp256k1|univalue|leveldb)/)"
             ]
         },
         "lint-whitespace": {
             "type": "lint-whitespace",
-            "include": "(\\.(ac|am|cmake|conf|in|include|json|m4|md|openrc|php|pl|sh|txt|yml)$)",
+            "include": "(\\.(ac|am|cmake|conf|cpp|h|in|include|json|m4|md|openrc|php|pl|py|sh|txt|yml)$)",
             "exclude": [
                 "(^contrib/gitian-builder/)",
                 "(^src/(secp256k1|univalue|leveldb)/)"
-            ]
-        },
-        "lint-cppcheck": {
-            "type": "lint-cppcheck",
-            "include": "(^src/.*\\.(h|c|cpp)$)",
-            "exclude": [
-                "(^src/(crypto/ctaes|secp256k1|univalue|leveldb)/)"
             ]
         }
     }
