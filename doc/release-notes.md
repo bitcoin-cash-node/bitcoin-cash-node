@@ -26,8 +26,12 @@ None
 
 ## Modified functionality
 
-- The `scantxoutset` RPC adds a new key to its results, `coinbase`, which is a boolean to indicate whether this UTXO is
-  a coinbase tx output or not.
+- The `scantxoutset` RPC adds a few new keys to its results:
+  - `coinbase`, which is a boolean to indicate whether the UTXO is a coinbase tx output or not
+  - `blockhash`, which is the block hash of the unspent transaction output
+  - `confirmations`, which is the number of confirmations of the unspent transaction output when the scan was done
+  - `height`, which is the blockchain tip height when the scan was done
+  - `bestblock`, which is the blockchain tip hash against which the scan was done
 
 ## Removed functionality
 
