@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2022 The Bitcoin developers
+// Copyright (c) 2020-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -488,11 +488,16 @@ BOOST_AUTO_TEST_CASE(rpc_ban) {
         UniValue::Array& ar = r.get_array();
         UniValue::Object& o1 = ar.at(0).get_obj();
         UniValue& adr = o1.at("address");
-        UniValue& banned_until = o1.at("banned_until");
+        const int64_t banned_until = o1.at("banned_until").get_int64();
         BOOST_CHECK_EQUAL(adr.get_str(), "127.0.0.0/24");
-        int64_t now = GetTime();
-        BOOST_CHECK(banned_until.get_int64() > now);
-        BOOST_CHECK(banned_until.get_int64() - now <= 200);
+        const int64_t now = GetTime();
+        const int64_t ban_created = o1.at("ban_created").get_int64();
+        const int64_t ban_duration = o1.at("ban_duration").get_int64();
+        const int64_t time_remaining = o1.at("time_remaining").get_int64();
+        BOOST_CHECK(banned_until > now);
+        BOOST_CHECK(banned_until - now <= 200);
+        BOOST_CHECK_EQUAL(ban_duration, banned_until - ban_created);
+        BOOST_CHECK_GE(time_remaining, banned_until - now);
     }
 
     // must throw an exception because 127.0.0.1 is in already banned subnet

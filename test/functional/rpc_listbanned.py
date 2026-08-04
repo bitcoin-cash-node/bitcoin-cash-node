@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2022 The Bitcoin developers
+# Copyright (c) 2022-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test deserialization of banlist.dat using the listbanned RPC call."""
@@ -40,12 +40,19 @@ class DeserializeBanlistTest(BitcoinTestFramework):
         self.node_banlist_dat = os.path.join(chain_data_dir, 'banlist.dat')
         os.makedirs(chain_data_dir, exist_ok=False)
 
-    def check_banlist(self, banlist_name, empty=False):
+    def check_banlist(self, banlist_name, empty=False, time_elapsed=0):
         test_banlist_dat = os.path.join(TESTSDIR, 'data', f'{banlist_name}.dat')
         test_banlist_json = os.path.join(TESTSDIR, 'data', f'{banlist_name}.json')
 
         with open(test_banlist_json, encoding='utf8') as jsonbans:
             test_banned = json.load(jsonbans)
+
+        # In order to properly test the "time_remaining" key, apply time_elapsed to each dict in the list
+        if time_elapsed:
+            for item in test_banned:
+                tr = item["time_remaining"]
+                tr -= time_elapsed
+                item["time_remaining"] = tr
 
         shutil.copyfile(test_banlist_dat, self.node_banlist_dat)
 
@@ -70,7 +77,7 @@ class DeserializeBanlistTest(BitcoinTestFramework):
         # Just before the ban expires
         self.extra_args = [['-mocktime=1643339167']]
         for banlist in banlists:
-            self.check_banlist(banlist)
+            self.check_banlist(banlist, time_elapsed=86400)
 
         # Just when the ban expired, check the list is empty
         self.extra_args = [['-mocktime=1643339168']]
