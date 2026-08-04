@@ -2626,8 +2626,7 @@ static std::optional<token::Id> ParseTokenScanObject(std::string_view sv) {
     return ret;
 }
 
-static UniValue scantxoutset(const Config &config,
-                             const JSONRPCRequest &request) {
+static UniValue scantxoutset(const Config &, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() < 1 ||
         request.params.size() > 2) {
         throw std::runtime_error(
@@ -2673,12 +2672,9 @@ static UniValue scantxoutset(const Config &config,
             "id\n"
             "    \"vout\": n,                    (numeric) the vout value\n"
             "    \"scriptPubKey\" : \"script\",    (string) the script key\n"
-            "    \"amount\" : x.xxx,             (numeric) The total amount "
-            "in " +
-            CURRENCY_UNIT +
-            " of the unspent output\n"
-            "    \"height\" : n,                 (numeric) Height of the "
-            "unspent transaction output\n"
+            "    \"amount\" : x.xxx,             (numeric) The total amount in " + CURRENCY_UNIT + " of the unspent output\n"
+            "    \"coinbase\" : b,               (boolean) Whether this is a coinbase output\n"
+            "    \"height\" : n,                 (numeric) Height of the unspent transaction output\n"
             "    \"tokenData\" : {               (json object optional)\n"
             "      \"category\" : \"hex\",         (string) token id\n"
             "      \"amount\" : \"xxx\",           (string) fungible amount (is a string to support >53-bit amounts)\n"
@@ -2689,10 +2685,8 @@ static UniValue scantxoutset(const Config &config,
             "    }\n"
             "  }\n"
             "  ,...],\n"
-            "  \"total_amount\" : x.xxx,         (numeric) The total amount of "
-            "all found unspent outputs in " + CURRENCY_UNIT + "\n"
-            "  \"token_total_amount\" : {...},   (json object optional) The total amount of each fungible token, "
-            "by category id\n"
+            "  \"total_amount\" : x.xxx,         (numeric) The total amount of all found unspent outputs in " + CURRENCY_UNIT + "\n"
+            "  \"token_total_amount\" : {...},   (json object optional) The total amount of each fungible token, by category id\n"
             "]\n");
     }
 
@@ -2815,11 +2809,12 @@ static UniValue scantxoutset(const Config &config,
             total_in += txo.nValue;
 
             UniValue::Object unspent;
-            unspent.reserve(5u + bool(txo.tokenDataPtr));
+            unspent.reserve(6u + bool(txo.tokenDataPtr));
             unspent.emplace_back("txid", outpoint.GetTxId().GetHex());
             unspent.emplace_back("vout", outpoint.GetN());
             unspent.emplace_back("scriptPubKey", HexStr(txo.scriptPubKey));
             unspent.emplace_back("amount", ValueFromAmount(txo.nValue));
+            unspent.emplace_back("coinbase", coin.IsCoinBase());
             unspent.emplace_back("height", coin.GetHeight());
             if (txo.tokenDataPtr) {
                 unspent.emplace_back("tokenData", TokenDataToUniv(*txo.tokenDataPtr));

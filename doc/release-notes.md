@@ -26,7 +26,8 @@ None
 
 ## Modified functionality
 
-None
+- The `scantxoutset` RPC adds a new key to its results, `coinbase`, which is a boolean to indicate whether this UTXO is
+  a coinbase tx output or not.
 
 ## Removed functionality
 

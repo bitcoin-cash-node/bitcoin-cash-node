@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2018 The Bitcoin Core developers
+# Copyright (c) 2018-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the scantxoutset rpc call."""
@@ -72,6 +73,10 @@ class ScantxoutsetTest(BitcoinTestFramework):
         shutil.rmtree(os.path.join(self.nodes[0].datadir, self.chain, 'wallets'))
         self.start_node(0)
         self.generate(self.nodes[0], 110)
+        # Grab the coinbase script for the blocks we have just generated
+        my_coinbase_script = sorted(
+            self.nodes[0].listunspent(0, 999999, None, True),  key=lambda x: x['amount']
+        )[-1]['scriptPubKey']
 
         self.restart_node(0, ['-nowallet'])
         self.log.info("Test if we have found the non HD unspent outputs.")
@@ -83,6 +88,14 @@ class ScantxoutsetTest(BitcoinTestFramework):
             "start", ["addr(" + addr + ")"])['total_amount'], Decimal("0.002"))
         assert_equal(self.nodes[0].scantxoutset(
             "start", ["addr(" + addr + ")"])['total_amount'], Decimal("0.002"))
+
+        self.log.info("Test coinbase flag is as expected.")
+        # Coinbase flag should be false for a non-coinbase tx
+        res = self.nodes[0].scantxoutset("start", [f"addr({addr})"])
+        assert_equal(sum(u["coinbase"]==False for u in res["unspents"]), 1)
+        # Coinbase flag should be true for a mined coinbase tx
+        res2 = self.nodes[0].scantxoutset("start", [f"raw({my_coinbase_script})"])
+        assert_equal(sum(u["coinbase"]==True for u in res2["unspents"]), 110)
 
         self.log.info("Test extended key derivation.")
         # Run various scans, and verify that the sum of the amounts of the matches corresponds to the expected subset.
