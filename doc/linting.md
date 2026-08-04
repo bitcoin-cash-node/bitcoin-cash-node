@@ -17,11 +17,12 @@ If the linter requires external tools to be install, such as for example
 
 The following external tools are required to run all linters
 
-| Linter        | Tool          | Install command        |
-| ------------- | ------------- | ---------------------- |
-| lint-python   | flake8        | `pip3 install flake8`  |
-| lint-python   | mypy          | `pip3 install mypy`    |
-| lint-yaml     | yamllint      | `apt install yamllint` |
+| Linter        | Tool          | Install command               |
+| ------------- | ------------- | ----------------------------- |
+| lint-arcanist | arc           | `contrib/arcanist/install.sh` |
+| lint-python   | flake8        | `pip3 install flake8`         |
+| lint-python   | mypy          | `pip3 install mypy`           |
+| lint-yaml     | yamllint      | `apt install yamllint`        |
 
 ## Adding a linter
 

@@ -2839,7 +2839,7 @@ BOOST_AUTO_TEST_CASE(op_invert_tests) {
     {
         auto TestByteWiseIndependence = [](const BigInt &a) {
             auto aser = a.serialize();
-            auto WithN = [&](const BigInt &n) { 
+            auto WithN = [&](const BigInt &n) {
                 StackT stack = {n.serialize(), aser};
                 CScript script = CScript() << OP_DUP << OP_ROT << OP_SPLIT << OP_INVERT << OP_SWAP << OP_INVERT << OP_SWAP << OP_CAT << OP_SWAP << OP_INVERT << OP_EQUAL;
                 CHECK_MESSAGE(TestScript(script, stack, ScriptError::OK), "TestByteWiseIndependence failed (expected to pass)" << " for a = " << a.ToString() << ", n = " << n.ToString());

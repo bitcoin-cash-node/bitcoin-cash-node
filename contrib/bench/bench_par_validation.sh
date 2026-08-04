@@ -1,10 +1,10 @@
 #!/usr/bin/env bash
 #
 # This script is intended to support users in setting the best `-par` option on their system
-# 
-# If you already have cloned and built the project, 
+#
+# If you already have cloned and built the project,
 # you can simply run the last three lines from your `build` directory
-# Otherwise, if you're starting from a clean system 
+# Otherwise, if you're starting from a clean system
 # (for example testing cloud server performance)
 # uncomment the first lines before running.
 #
@@ -17,7 +17,7 @@ export LC_ALL=C
 #sudo apt-get -y install build-essential cmake git libboost-chrono-dev libboost-filesystem-dev libboost-test-dev libboost-thread-dev libevent-dev libminiupnpc-dev libssl-dev libzmq3-dev help2man ninja-build python3
 #sudo apt-get -y install libdb-dev libdb++-dev
 #git clone https://gitlab.com/bitcoin-cash-node/bitcoin-cash-node.git
-#cd bitcoin-cash-node 
+#cd bitcoin-cash-node
 #git checkout v26.0.0 # Should you run into any errors, check out the latest release tag and try again
 
 #mkdir build

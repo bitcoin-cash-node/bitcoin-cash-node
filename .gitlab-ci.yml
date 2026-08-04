@@ -23,7 +23,7 @@ code_quality:
     artifacts:
         paths: [gl-code-quality-report.json]
 
-image: bitcoincashnode/buildenv:debian-v5
+image: docker.io/bitcoincashnode/buildenv@sha256:f4ebe3d250eebbff0a78d078199ef58f161da3a1a2c5d0d2d0609898242ab9ce # debian-v7
 
 stages:
     - static_checks
@@ -43,79 +43,13 @@ cache: &global_cache_settings
         - ccache/
         - .cache/pip
 
-## Static checking stages:
-
-# - Two jobs:
-#   - One only for master (lint everything)
-#   - One for non-master branches incl. merge requests
-# - These jobs are set not to fail, but to produce artifacts & reports
-
-static-checks-master:
-    stage: static_checks
-    rules:
-        - if: $CI_COMMIT_BRANCH == "master"
-    allow_failure: true
-    variables:
-        GIT_STRATEGY: clone
-        GIT_LFS_SKIP_SMUDGE: 1
-    script:
-        - pip3 install --break-system-packages -r .static-checks-python-requirements.txt
-        - git clone https://github.com/ekho/checkstyle2junit.git --branch master --single-branch --depth=1 build-aux/checkstyle2junit
-        - echo "running static checks for CI_COMMIT_REF_NAME $CI_COMMIT_REF_NAME"
-        - arc lint --outfile $CI_PROJECT_DIR/arc_lint-checkstyle.xml --output xml --everything && true; arc_lint_exit_code=$?
-        - if [ $arc_lint_exit_code -ne 0 ]; then echo "arc lint command returned non-zero - please inspect the linting report / artifacts"; fi;
-        - php build-aux/checkstyle2junit/checkstyle2junit.php $CI_PROJECT_DIR/arc_lint-checkstyle.xml | xmlstarlet fo > $CI_PROJECT_DIR/arc_lint-junit.xml && true; convert_exit_code=$?
-        - if [ $convert_exit_code -ne 0 ]; then echo "Error while attempting to convert Checkstyle XML to JUnit XML. Please inspect the linting report / artifacts"; fi;
-    artifacts:
-        paths:
-            - $CI_PROJECT_DIR/arc_lint-checkstyle.xml
-            - $CI_PROJECT_DIR/arc_lint-junit.xml
-        expire_in: 30 days
-        reports:
-            junit: $CI_PROJECT_DIR/arc_lint-junit.xml
-    cache:
-        <<: *global_cache_settings
-        key: static_checks_cache
-        paths:
-            - .cache/pip
-
-static-checks-branch:
-    stage: static_checks
-    rules:
-        - if: $CI_COMMIT_BRANCH != "master"
-    allow_failure: true
-    variables:
-        GIT_STRATEGY: clone
-        GIT_LFS_SKIP_SMUDGE: 1
-    script:
-        - export GIT_DIR=$CI_PROJECT_DIR/.git
-        # Last merge commit is used as reference for branch starts.
-        # MR's should not have merges within them.
-        - export MR_START=`git show :/^Merge --format=format:%H`
-        - pip3 install --break-system-packages -r .static-checks-python-requirements.txt
-        - git clone https://github.com/ekho/checkstyle2junit.git --branch master --single-branch --depth=1 build-aux/checkstyle2junit
-        - echo "running static checks for CI_COMMIT_REF_NAME $CI_COMMIT_REF_NAME from $MR_START"
-        - arc lint --outfile $CI_PROJECT_DIR/arc_lint-checkstyle.xml --output xml --rev $MR_START^ && true; arc_lint_exit_code=$?
-        - if [ $arc_lint_exit_code -ne 0 ]; then echo "arc lint command returned non-zero - please inspect the linting report / artifacts"; fi;
-        - php build-aux/checkstyle2junit/checkstyle2junit.php $CI_PROJECT_DIR/arc_lint-checkstyle.xml | xmlstarlet fo > $CI_PROJECT_DIR/arc_lint-junit.xml && true; convert_exit_code=$?
-        - if [ $convert_exit_code -ne 0 ]; then echo "Error while attempting to convert Checkstyle XML to JUnit XML. Please inspect the linting report / artifacts"; fi;
-    artifacts:
-        paths:
-            - $CI_PROJECT_DIR/arc_lint-checkstyle.xml
-            - $CI_PROJECT_DIR/arc_lint-junit.xml
-        expire_in: 30 days
-        reports:
-            junit: $CI_PROJECT_DIR/arc_lint-junit.xml
-    cache:
-        <<: *global_cache_settings
-        key: static_checks_cache
-        paths:
-            - .cache/pip
-
 static-run-linters:
     stage: static_checks
     needs: []
     cache: {}
+    before_script:
+        - . "/opt/venv/bin/activate"
+        - python -m pip freeze
     script:
         - mkdir build
         - (cd build; cmake -GNinja -DENABLE_MAN=OFF ..)
@@ -133,12 +67,15 @@ static-run-linters:
         - export CCACHE_DIR=${PWD}/ccache
         - export CCACHE_COMPILERCHECK=content
         - ccache --zero-stats || true
+        - sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' /opt/venv/pyvenv.cfg
+        - . "/opt/venv/bin/activate"
+        - python -m pip freeze
 
         # Limit ccache to 3 GB (from default 5 GB).
         # 'ninja all check bench_bitcoin' produces ~2.1GB cache (Jan 2021)
         - ccache -M 3G
     after_script:
-        # after_script somehow loses CCACHE environent variables.
+        # after_script somehow loses CCACHE environment variables.
         - export CCACHE_BASEDIR=${PWD}
         - export CCACHE_DIR=${PWD}/ccache
         - ccache --show-stats
@@ -212,6 +149,9 @@ static-run-linters:
         UBSAN_OPTIONS: log_path=stdout
     before_script:
         - mkdir build
+        - sed -i 's/include-system-site-packages = false/include-system-site-packages = true/' /opt/venv/pyvenv.cfg
+        - . "/opt/venv/bin/activate"
+        - python -m pip freeze
 
     artifacts:
         when: on_failure
@@ -761,10 +701,6 @@ pages:
         key: docs
         paths:
             - .cache/pip
-    before_script:
-        - pip3 install --break-system-packages wheel
-        - pip3 install --break-system-packages jinja2==3.1.6 mkdocs==1.6.1 pymdown-extensions==10.21.2 mkdocs-material==9.6.12
-        - pip3 freeze
     script:
         - (cd build; ninja -t restat)
         - (cd build; ninja doc-html)

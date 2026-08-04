@@ -497,7 +497,7 @@ No changes.
 - 1b902d1c1eb5c16dd9e856cf723c0a91f7700af2 ABC: D6303 Wrap nChainTx into GetChainTxCount
 - 25bd4ebb15adad3178e3d585ff06b910747b1b04 ABC: D6304 Core: PR#15623 [backport#15623] refactor: Expose UndoReadFromDisk in header
 - 7a036b91b59ddfdba9484011077a8b962bda9d18 ABC: D6317 Core: PR#13116 Merge #13116: Add Clang thread safety annotations for variables guarded by cs_{rpcWarmup,nTimeOffset,warnings}
-- d6a0ac2672fe57e9f484486bc39f65126591caa5 ABC: D6313 [CMAKE] Rename secp256k1 test targets 
+- d6a0ac2672fe57e9f484486bc39f65126591caa5 ABC: D6313 [CMAKE] Rename secp256k1 test targets
 - 968218eb490360982374dda04c95ddd6f53284ce ABC: D6312 [CMAKE] BOOST_TEST_DYN_LINK is defined twice
 - 5e11f6b934f53978cc078e15eed6027f99e7c32c ABC: D6321 Core: PR#13160 Merge #13160: wallet: Unlock spent outputs
 - 3cc62139d6d25314817403c73328fede00002b40 ABC: D6319 Core: PR#13535 Merge #13535: [qa] wallet_basic: Specify minimum required amount for listunspent

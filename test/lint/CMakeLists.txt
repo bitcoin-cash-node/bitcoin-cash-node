@@ -18,6 +18,7 @@ add_lint_script_tests_to_suite(lint
 TESTS
 	check-doc.py
 	check-rpc-mappings.py
+	lint-arcanist.sh
 	lint-assertions.sh
 	lint-circular-dependencies.sh
 	lint-cpp.sh

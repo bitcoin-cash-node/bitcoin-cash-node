@@ -261,7 +261,7 @@ None.
 - cc4d85c30afebc5584bae7da0fcd4c1c5efcfcd0 bench: Benchmark CCheckQueue using real block data
 - bac0a4ec477db07841bfe0899e5d8956622d8d12 Added CLI args to bench: -par and -maxsigcachesize
 - aff593f106ad7742b8c08466a4fe191e11898696 bench: Add CheckTxInputs bench
-    
+
 #### Seeds / seeder software
 
 - a20b80e2e61fe2f296a54a55f3037ea6eb4528f2 Add Bitcoin Unlimited operated seeder for testnet3

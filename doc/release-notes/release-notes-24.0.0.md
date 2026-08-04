@@ -291,7 +291,7 @@ None.
 #### Benchmarks
 
 - e4912e6fe5a3aee9e49f299f40dfc3ae6b57f3fd bench: Added real-world benchmarking of VerifyScript
-    
+
 #### Seeds / seeder software
 
 - f12548a94588b526851da9fcf927f0444f8bb524 [seeder] Fix stats display issues (garbled text)

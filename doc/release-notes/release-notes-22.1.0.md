@@ -58,7 +58,7 @@ Removed the defunct seeder entry deadalnix.me.
 ## Added functionality
 
 ### extversion
-    
+
 This release implements the 'extversion' extended versioning handshake
 protocol (ref. BCHN merge requests !558 and !753), previously implemented
 by Bitcoin Unlimited. We thank Greg Griffith and the Bitcoin Unlimited
@@ -84,7 +84,7 @@ under which the leveldb 'index' folder is stored.
 
 The use case for this new option is to store the index on a separate volume
 of faster access media while the blocks can be stored on slower media.
-    
+
 If the argument is not specified, the index is stored in the usual place
 (in the `blocks/index/` folder).
 
@@ -139,7 +139,7 @@ improved coin selection performance).
 
 ## Low-level RPC changes
 
-An optional coin selection ('coinsel') argument has been added to the 
+An optional coin selection ('coinsel') argument has been added to the
 `sendtoaddress` RPC method.
 
 An alias `blockhash` has been added for the `hash_or_height` parameter of
