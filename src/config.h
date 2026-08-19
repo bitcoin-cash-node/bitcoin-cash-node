@@ -1,5 +1,5 @@
 // Copyright (c) 2017 Amaury SÉCHET
-// Copyright (c) 2020-2023 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,10 +25,13 @@ class CChainParams;
 
 class Config : public NonCopyable {
 public:
-    /** The largest block size this node will accept pre-upgrade 10.
-        Post-upgrade 10 it is the ABLA minimum max block size. */
-    virtual bool SetConfiguredMaxBlockSize(uint64_t maxBlockSize) = 0;
-    virtual uint64_t GetConfiguredMaxBlockSize() const = 0;
+    /** Convenience. Returns the consensus max block size as configured by Consensus::Params for the current chain.
+        Note: If ABLA is enabled, this is the max block size floor for ABLA.
+        Note2: May return the value (if any) set by SetBlockSizeOverride() (functional tests only). */
+    virtual uint64_t GetDefaultConsensusBlockSize() const = 0;
+
+    /** Functional tests only: corresponds to the hidden CLI arg: -forceblocksize */
+    virtual bool SetBlockSizeOverride(std::optional<uint64_t> overrideBlockSize) = 0;
 
     /** Look-ahead "guess" for the max blocksize (actual blocksize limit is guaranteed to be <= this value for
         blocks within the block download window). This value gets updated by validation.cpp when the tip changes.
@@ -36,15 +39,14 @@ public:
     virtual uint64_t GetMaxBlockSizeLookAheadGuess() const = 0;
     virtual void NotifyMaxBlockSizeLookAheadGuessChanged(uint64_t) const = 0;
 
-    /** Set the largest block size this node will generate (mine) in bytes.
-        Returns false if `blockSize` exceeds GetConfiguredMaxBlockSize(). */
-    virtual bool SetGeneratedBlockSizeBytes(uint64_t blockSize) = 0;
+    /** Set the largest block size this node will generate (mine) in bytes. */
+    virtual void SetGeneratedBlockSizeBytes(uint64_t blockSize) = 0;
     /** Set the largest block size this node will generate (mine), in terms of
-        percentage of GetConfiguredMaxBlockSize().
+        percentage of the current block size as determined by ABLA.
         Returns false if `percent` is not in the range [0.0, 100.0]. */
     virtual bool SetGeneratedBlockSizePercent(double percent) = 0;
-    /** Returns the maximum mined block size in bytes, which is always <= GetConfiguredMaxBlockSize(). */
-    virtual uint64_t GetGeneratedBlockSize(std::optional<uint64_t> currentMaxBlockSize) const = 0;
+    /** Returns the maximum mined block size in bytes, which is always <= `currentMaxBlockSize`. */
+    virtual uint64_t GetGeneratedBlockSize(uint64_t currentMaxBlockSize) const = 0;
     /** The maximum amount of RAM to be used in the mempool before TrimToSize is called. */
     virtual void SetMaxMemPoolSize(uint64_t maxMemPoolSize) = 0;
     virtual uint64_t GetMaxMemPoolSize() const = 0;
@@ -72,14 +74,13 @@ public:
 class GlobalConfig final : public Config {
 public:
     GlobalConfig();
-    //! Note: `maxBlockSize` must not be smaller than 1MB and cannot exceed 2GB
-    bool SetConfiguredMaxBlockSize(uint64_t maxBlockSize) override;
-    uint64_t GetConfiguredMaxBlockSize() const override;
+    uint64_t GetDefaultConsensusBlockSize() const override;
+    bool SetBlockSizeOverride(std::optional<uint64_t> blockSize) override;
     uint64_t GetMaxBlockSizeLookAheadGuess() const override;
     void NotifyMaxBlockSizeLookAheadGuessChanged(uint64_t) const override;
-    bool SetGeneratedBlockSizeBytes(uint64_t blockSize) override;
+    void SetGeneratedBlockSizeBytes(uint64_t blockSize) override;
     bool SetGeneratedBlockSizePercent(double percent) override;
-    uint64_t GetGeneratedBlockSize(std::optional<uint64_t> currentMaxBlockSize) const override;
+    uint64_t GetGeneratedBlockSize(uint64_t currentMaxBlockSize) const override;
     void SetMaxMemPoolSize(uint64_t maxMemPoolSize) override { nMaxMemPoolSize = maxMemPoolSize; }
     uint64_t GetMaxMemPoolSize() const override { return nMaxMemPoolSize; }
     //! Note: `rate` may not exceed MAX_INV_BROADCAST_RATE (1 million)
@@ -113,9 +114,8 @@ private:
     uint64_t nInvBroadcastRate;
     uint64_t nInvBroadcastInterval;
 
-    /** The largest block size this node will accept, pre-upgrade 10.
-        Post-upgrade 10 it is the ABLA minimum max block size. */
-    uint64_t nConfMaxBlockSize;
+    /** Override for the blockSize for functional tests */
+    std::optional<uint64_t> blockSizeOverride;
 
     /** The largest block size this node will generate. Stores either a size in bytes or a percentage (double). */
     std::variant<uint64_t, double> varGeneratedBlockSizeParam;
@@ -136,13 +136,13 @@ public:
     DummyConfig();
     DummyConfig(const std::string &net);
     DummyConfig(std::unique_ptr<CChainParams> chainParamsIn);
-    bool SetConfiguredMaxBlockSize(uint64_t) override { return false; }
-    uint64_t GetConfiguredMaxBlockSize() const override { return 0; }
+    uint64_t GetDefaultConsensusBlockSize() const override { return 0; }
+    bool SetBlockSizeOverride(std::optional<uint64_t>) override { return false; }
     uint64_t GetMaxBlockSizeLookAheadGuess() const override { return 0; }
     void NotifyMaxBlockSizeLookAheadGuessChanged(uint64_t) const override {}
-    bool SetGeneratedBlockSizeBytes(uint64_t) override { return false; }
+    void SetGeneratedBlockSizeBytes(uint64_t) override {}
     bool SetGeneratedBlockSizePercent(double) override { return false; }
-    uint64_t GetGeneratedBlockSize(std::optional<uint64_t>) const override { return 0; }
+    uint64_t GetGeneratedBlockSize(uint64_t) const override { return 0; }
     void SetMaxMemPoolSize(uint64_t) override {}
     uint64_t GetMaxMemPoolSize() const override { return 0; }
     bool SetInvBroadcastRate(uint64_t) override { return false; }

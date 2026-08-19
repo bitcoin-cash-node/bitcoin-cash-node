@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2026 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -191,9 +191,9 @@ UniValue::Object ablaStateToJSON(const Config &config, const abla::State &state)
     ret.emplace_back("epsilon", state.GetControlBlockSize());
     ret.emplace_back("beta", state.GetElasticBufferSize());
     ret.emplace_back("blocksize", state.GetBlockSize());
-    // Note that consensus rules are that the max block size is always at least the configured max block size,
+    // Note that consensus rules are that the max block size is always at least the default consensus max block size,
     // or what ABLA says, whichever is greater.
-    const auto cmbs = config.GetConfiguredMaxBlockSize();
+    const auto cmbs = config.GetDefaultConsensusBlockSize();
     ret.emplace_back("blocksizelimit", std::max(cmbs, state.GetBlockSizeLimit()));
     ret.emplace_back("nextblocksizelimit", std::max(cmbs, state.GetNextBlockSizeLimit(
                                                               config.GetChainParams().GetConsensus().ablaConfig)));

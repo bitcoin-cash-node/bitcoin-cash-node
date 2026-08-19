@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,13 +14,18 @@
 GlobalConfig::GlobalConfig()
     : useCashAddr(DEFAULT_USE_CASHADDR), gbtCheckValidity(DEFAULT_GBT_CHECK_VALIDITY),
       allowUnconnectedMining(DEFAULT_ALLOW_UNCONNECTED_MINING),
-      nConfMaxBlockSize(DEFAULT_CONSENSUS_BLOCK_SIZE),
       // NB: The generated block size is normally set in init.cpp to use chain-specific
       //     defaults which are often smaller than the DEFAULT_CONSENSUS_BLOCK_SIZE.
-      varGeneratedBlockSizeParam(DEFAULT_CONSENSUS_BLOCK_SIZE),
+      varGeneratedBlockSizeParam(100.0),
       nMaxMemPoolSize(DEFAULT_CONSENSUS_BLOCK_SIZE * DEFAULT_MAX_MEMPOOL_SIZE_PER_MB) {}
 
-bool GlobalConfig::SetConfiguredMaxBlockSize(uint64_t blockSize) {
+bool GlobalConfig::SetBlockSizeOverride(std::optional<uint64_t> optBlockSize) {
+    if (!optBlockSize) {
+        blockSizeOverride.reset();
+        return true;
+    }
+    const uint64_t &blockSize = *optBlockSize;
+
     // Do not allow maxBlockSize to be set below historic 1MB limit
     // It cannot be equal either because of the "must be big" UAHF rule.
     if (blockSize <= LEGACY_MAX_BLOCK_SIZE) {
@@ -32,7 +37,7 @@ bool GlobalConfig::SetConfiguredMaxBlockSize(uint64_t blockSize) {
         return false;
     }
 
-    nConfMaxBlockSize = blockSize;
+    blockSizeOverride = blockSize;
 
     return true;
 }
@@ -42,21 +47,15 @@ void GlobalConfig::NotifyMaxBlockSizeLookAheadGuessChanged(uint64_t nSize) const
 }
 
 uint64_t GlobalConfig::GetMaxBlockSizeLookAheadGuess() const {
-    return std::clamp(nMaxBlockSizeWorstCaseGuess.load(), nConfMaxBlockSize, MAX_CONSENSUS_BLOCK_SIZE);
+    return std::clamp(nMaxBlockSizeWorstCaseGuess.load(), GetDefaultConsensusBlockSize(), MAX_CONSENSUS_BLOCK_SIZE);
 }
 
-uint64_t GlobalConfig::GetConfiguredMaxBlockSize() const {
-    return nConfMaxBlockSize;
+uint64_t GlobalConfig::GetDefaultConsensusBlockSize() const {
+    return blockSizeOverride.value_or(GetChainParams().GetConsensus().nDefaultConsensusBlockSize);
 }
 
-bool GlobalConfig::SetGeneratedBlockSizeBytes(uint64_t blockSize) {
-    // Do not allow generated blocks to exceed the size of blocks we accept.
-    if (blockSize > GetConfiguredMaxBlockSize()) {
-        return false;
-    }
-
+void  GlobalConfig::SetGeneratedBlockSizeBytes(uint64_t blockSize) {
     varGeneratedBlockSizeParam = blockSize;
-    return true;
 }
 
 bool GlobalConfig::SetGeneratedBlockSizePercent(double percent) {
@@ -80,13 +79,14 @@ bool GlobalConfig::SetInvBroadcastInterval(uint64_t interval) {
     return true;
 }
 
-uint64_t GlobalConfig::GetGeneratedBlockSize(std::optional<uint64_t> currentMaxBlockSize) const {
+uint64_t GlobalConfig::GetGeneratedBlockSize(const uint64_t maxBlockSize) const {
     uint64_t blockSize;
-    const uint64_t maxBlockSize = currentMaxBlockSize.value_or(nConfMaxBlockSize);
 
     std::visit(
         util::Overloaded{
-            [&blockSize](uint64_t val) { blockSize = val; },
+            [&blockSize](uint64_t val) {
+                blockSize = val;
+            },
             [&blockSize, maxBlockSize](double percent) {
                 blockSize = static_cast<uint64_t>(maxBlockSize * (percent / 100.0));
             }

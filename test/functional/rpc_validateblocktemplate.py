@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Copyright (c) 2014-2015 The Bitcoin Core developers
 # Copyright (c) 2015-2017 The Bitcoin Unlimited developers
-# Copyright (c) 2020-2022 The Bitcoin developers
+# Copyright (c) 2020-present The Bitcoin developers
 #
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -337,7 +337,7 @@ class ValidateblocktemplateTest(BitcoinTestFramework):
             n.validateblocktemplate(hexblk)
 
         # Note: BCHN does not have RPC method like BU's 'setminingmaxblocksize' yet,
-        # therefore we omit some test cases related to excessiveblock size when
+        # therefore we omit some test cases related to excessive block size when
         # modifying that setting on the fly.
         #
         # The related BU error messages that we do not test for here are:

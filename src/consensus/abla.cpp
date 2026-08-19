@@ -1,4 +1,4 @@
-// Copyright (c) 2023 The Bitcoin developers
+// Copyright (c) 2023-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -142,7 +142,7 @@ State State::NextBlockState(const Config &config, const uint64_t nextBlockSize) 
     // control function
 
     // For safety: we clamp this current block's blocksize to the maximum value this algorithm expects. Normally this
-    // won't happen unless the node is run with some -excessiveblocksize parameter that permits larger blocks than this
+    // won't happen unless the node is run with some -forceblocksize parameter that permits larger blocks than this
     // algo's current state expects.
     const uint64_t clampedBlockSize = std::min(this->blockSize, this->controlBlockSize + this->elasticBufferSize);
 

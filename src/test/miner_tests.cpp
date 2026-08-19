@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -28,6 +28,7 @@
 
 #include <cassert>
 #include <memory>
+#include <string_view>
 #include <optional>
 
 BOOST_FIXTURE_TEST_SUITE(miner_tests, TestingSetup)
@@ -167,9 +168,9 @@ static void TestPackageSelection(const Config &config,
     }
 }
 
-static void TestCoinbaseMessageEB(uint64_t eb, const std::string &cbmsg) {
+// Coinbase scriptSig has to contain the /ABLA/ string
+BOOST_AUTO_TEST_CASE(CheckCoinbase_ABLA) {
     GlobalConfig config;
-    config.SetConfiguredMaxBlockSize(eb);
 
     CScript scriptPubKey =
         CScript() << ParseHex("04678afdb0fe5548271967f1a67130b7105cd6a828e03909"
@@ -187,19 +188,12 @@ static void TestCoinbaseMessageEB(uint64_t eb, const std::string &cbmsg) {
     unsigned int extraNonce = 0;
     IncrementExtraNonce(pblock, pindexMinedTip, config, extraNonce);
     unsigned int nHeight = pindexMinedTip->nHeight + 1;
+
+    constexpr std::string_view cbmsg{"/ABLA/"};
     std::vector<uint8_t> vec(cbmsg.begin(), cbmsg.end());
     BOOST_CHECK(pblock->vtx[0]->vin[0].scriptSig ==
                 ((CScript() << ScriptInt::fromIntUnchecked(nHeight) << CScriptNum::fromIntUnchecked(extraNonce) << vec) +
                  COINBASE_FLAGS));
-}
-
-// Coinbase scriptSig has to contains the correct EB value
-// converted to MB, rounded down to the first decimal
-BOOST_AUTO_TEST_CASE(CheckCoinbase_EB) {
-    TestCoinbaseMessageEB(1000001, "/EB1.0/");
-    TestCoinbaseMessageEB(2000000, "/EB2.0/");
-    TestCoinbaseMessageEB(8000000, "/EB8.0/");
-    TestCoinbaseMessageEB(8320000, "/EB8.3/");
 }
 
 // NOTE: These tests rely on CreateNewBlock doing its own self-validation!
@@ -620,7 +614,7 @@ static void CallCreateNewBlockOnceToFullyInit(BlockAssembler &ba) {
 }
 
 static void CheckBlockMaxSize(Config &config, uint64_t size, uint64_t expected) {
-    BOOST_CHECK(config.SetGeneratedBlockSizeBytes(size));
+    config.SetGeneratedBlockSizeBytes(size);
 
     BlockAssembler ba(config, g_mempool);
     BOOST_CHECK_EQUAL(ba.GetMaxGeneratedBlockSize(), 0); // freshly-constructed class always has 0 here
@@ -642,63 +636,52 @@ static void CheckBlockMaxSizePercent(Config &config, std::optional<double> optPe
 BOOST_AUTO_TEST_CASE(BlockAssembler_construction) {
     GlobalConfig config;
 
-    // check that generated block size can never exceed conf. max block size
+    // check that generated block size can never exceed default max block size
     {
-        const auto cmbs = config.GetConfiguredMaxBlockSize();
-        BOOST_CHECK_LE(config.GetGeneratedBlockSize(cmbs), cmbs);
-        const size_t prevVal = config.GetGeneratedBlockSize(cmbs),
-                     badVal = cmbs + 1;
-        BOOST_CHECK_NE(prevVal, badVal); // ensure not equal for thoroughness
+        const auto defbs = config.GetDefaultConsensusBlockSize();
+        BOOST_CHECK_LE(config.GetGeneratedBlockSize(defbs), defbs);
+        const size_t prevVal = config.GetGeneratedBlockSize(defbs),
+                     largerVal = defbs + 100;
+        BOOST_CHECK_NE(prevVal, largerVal); // ensure not equal for thoroughness
         // try and set generated block size beyond the conf. max block size (should fail)
-        BOOST_CHECK(!config.SetGeneratedBlockSizeBytes(badVal));
-        // check that the failure really did not set the value
-        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(cmbs), prevVal);
+        config.SetGeneratedBlockSizeBytes(largerVal);
+        // check that we really did not raise the value until we actually grow the maxBlockSize
+        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(defbs), prevVal);
+        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(defbs + 1), prevVal + 1);
+        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(defbs + 2), prevVal + 2);
+        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(largerVal), largerVal);
+        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(largerVal + 1), largerVal);
+        // reset back
+        config.SetGeneratedBlockSizeBytes(prevVal);
         // check bad percentages
         BOOST_CHECK(!config.SetGeneratedBlockSizePercent(101.0));
         BOOST_CHECK(!config.SetGeneratedBlockSizePercent(100.1));
         BOOST_CHECK(!config.SetGeneratedBlockSizePercent(-0.001));
         // check that the failure really did not set the value
-        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(cmbs), prevVal);
+        BOOST_CHECK_EQUAL(config.GetGeneratedBlockSize(defbs), prevVal);
     }
 
     // We are working on a fake chain and need to protect ourselves.
     LOCK(cs_main);
 
-    // Test around historical 1MB (plus one byte because that's mandatory)
-    config.SetConfiguredMaxBlockSize(ONE_MEGABYTE + 1);
+    // Test around low values
     CheckBlockMaxSize(config, 0, 1000);
     CheckBlockMaxSize(config, 1000, 1000);
     CheckBlockMaxSize(config, 1001, 1001);
     CheckBlockMaxSize(config, 12345, 12345);
 
+    // Test around one megabyte
     CheckBlockMaxSize(config, ONE_MEGABYTE - 1001, ONE_MEGABYTE - 1001);
     CheckBlockMaxSize(config, ONE_MEGABYTE - 1000, ONE_MEGABYTE - 1000);
     CheckBlockMaxSize(config, ONE_MEGABYTE - 999, ONE_MEGABYTE - 999);
-    CheckBlockMaxSize(config, ONE_MEGABYTE, ONE_MEGABYTE - 999);
+    CheckBlockMaxSize(config, ONE_MEGABYTE, ONE_MEGABYTE);
 
-    // Test percent mode
-    CheckBlockMaxSizePercent(config, 100.0, ONE_MEGABYTE - 999);
-    CheckBlockMaxSizePercent(config, 50.0, ONE_MEGABYTE / 2);
-    CheckBlockMaxSizePercent(config, 10.0, ONE_MEGABYTE / 10);
-    CheckBlockMaxSizePercent(config, 1.0, ONE_MEGABYTE / 100);
-    CheckBlockMaxSizePercent(config, 0.25, ONE_MEGABYTE / 400);
-    CheckBlockMaxSizePercent(config, 25.0, ONE_MEGABYTE / 4);
-    // Modifying the conf. max block size should preserve the previous percentage setting (25%)
-    config.SetConfiguredMaxBlockSize(2 * ONE_MEGABYTE);
-    CheckBlockMaxSizePercent(config, std::nullopt, (2 * ONE_MEGABYTE) / 4);
-
-    // Test around default cap
-    config.SetConfiguredMaxBlockSize(DEFAULT_CONSENSUS_BLOCK_SIZE);
-
-    // Now we can use the default max block size.
-    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE - 1001,
-                      DEFAULT_CONSENSUS_BLOCK_SIZE - 1001);
-    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE - 1000,
-                      DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
-    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE - 999,
-                      DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
-    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE,
-                      DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
+    // Now we can test the default max block size.
+    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE - 1001, DEFAULT_CONSENSUS_BLOCK_SIZE - 1001);
+    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE - 1000, DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
+    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE - 998, DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
+    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE - 999, DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
+    CheckBlockMaxSize(config, DEFAULT_CONSENSUS_BLOCK_SIZE, DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
 
     // Test percent mode
     CheckBlockMaxSizePercent(config, 100.0, DEFAULT_CONSENSUS_BLOCK_SIZE - 1000);
@@ -707,11 +690,8 @@ BOOST_AUTO_TEST_CASE(BlockAssembler_construction) {
     CheckBlockMaxSizePercent(config, 1.0, DEFAULT_CONSENSUS_BLOCK_SIZE / 100);
     CheckBlockMaxSizePercent(config, 0.25, DEFAULT_CONSENSUS_BLOCK_SIZE / 400);
     CheckBlockMaxSizePercent(config, 25.0, DEFAULT_CONSENSUS_BLOCK_SIZE / 4);
-    // Modifying the conf. max block size should preserve the previous percentage setting (25%)
-    config.SetConfiguredMaxBlockSize(2 * DEFAULT_CONSENSUS_BLOCK_SIZE);
-    CheckBlockMaxSizePercent(config, std::nullopt, (2 * DEFAULT_CONSENSUS_BLOCK_SIZE) / 4);
 
-    // NB: If the generated block size parameter is not specified, the config object just defaults it to the conf. max
+    // NB: If the generated block size parameter is not specified, the config object just defaults it to the default max
     // block size. But in that case the BlockAssembler ends up unconditionally reserving 1000 bytes of space for the
     // coinbase tx.
     constexpr size_t hardCodedCoinbaseReserved = 1000;
@@ -720,19 +700,8 @@ BOOST_AUTO_TEST_CASE(BlockAssembler_construction) {
         BlockAssembler ba(freshConfig, g_mempool);
         BOOST_CHECK_EQUAL(ba.GetMaxGeneratedBlockSize(), 0);
         CallCreateNewBlockOnceToFullyInit(ba);
-        auto cmbs = freshConfig.GetConfiguredMaxBlockSize();
-        BOOST_CHECK_EQUAL(ba.GetMaxGeneratedBlockSize(), cmbs - hardCodedCoinbaseReserved);
-
-        // next, ensure that invariants are maintained -- setting conf. max block size should pull down generatedblocksize
-        const auto prevVal = freshConfig.GetGeneratedBlockSize(cmbs);
-        BOOST_CHECK(freshConfig.SetConfiguredMaxBlockSize(prevVal / 2));
-        cmbs = freshConfig.GetConfiguredMaxBlockSize();
-        BOOST_CHECK_EQUAL(cmbs, freshConfig.GetGeneratedBlockSize(cmbs));
-        BOOST_CHECK_LT(freshConfig.GetGeneratedBlockSize(cmbs), prevVal);
-        BlockAssembler ba2(freshConfig, g_mempool);
-        BOOST_CHECK_EQUAL(ba2.GetMaxGeneratedBlockSize(), 0);
-        CallCreateNewBlockOnceToFullyInit(ba2);
-        BOOST_CHECK_EQUAL(ba2.GetMaxGeneratedBlockSize(), freshConfig.GetConfiguredMaxBlockSize() - hardCodedCoinbaseReserved);
+        auto defbs = freshConfig.GetDefaultConsensusBlockSize();
+        BOOST_CHECK_EQUAL(ba.GetMaxGeneratedBlockSize(), defbs - hardCodedCoinbaseReserved);
     }
 }
 

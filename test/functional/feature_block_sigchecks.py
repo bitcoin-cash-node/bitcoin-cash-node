@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2024 The Bitcoin Developers
+# Copyright (c) 2020-present The Bitcoin Developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
@@ -38,8 +38,8 @@ from collections import deque
 # We are going to use a tiny block size so we don't need to waste too much
 # time with making transactions. (note -- minimum block size is 1000000)
 # (just below a multiple, to test edge case)
-EXCESSIVEBLOCKSIZE = 8000 * BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO - 1
-assert EXCESSIVEBLOCKSIZE == 1127999
+FORCEBLOCKSIZE = 8000 * BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO - 1
+assert FORCEBLOCKSIZE == 1127999
 MAXGENERATEDBLOCKSIZE = 1000000
 
 # Blocks with too many sigchecks from cache give this error in log file:
@@ -107,11 +107,10 @@ class BlockSigChecksTest(BitcoinTestFramework):
         self.setup_clean_chain = True
         self.num_nodes = 1
         self.block_heights = {}
-        # Note that for this test, since we want to control the blocksize, we turn ABLA off (no upgrade 10). This test
-        # is still valid, however, since it tests that sigchecks are what we expect given a particular max block size.
-        self.base_extra_args = ['-acceptnonstdtxn=1', '-upgrade10activationheight=2147483647']
+        self.base_extra_args = ['-acceptnonstdtxn=1']
+        # Note that -forceblocksize also disables ABLA
         self.extra_args = [self.base_extra_args +
-                           ["-excessiveblocksize={}".format(EXCESSIVEBLOCKSIZE),
+                           ["-forceblocksize={}".format(FORCEBLOCKSIZE),
                             "-blockmaxsize={}".format(MAXGENERATEDBLOCKSIZE)]]
 
     def getbestblock(self, node):
@@ -233,9 +232,9 @@ class BlockSigChecksTest(BitcoinTestFramework):
         # Send block with all these txes (too much sigchecks)
         badblock = self.build_block(tip, submittxes_1)
         blocksize = len(badblock.serialize())
-        assert blocksize < EXCESSIVEBLOCKSIZE
+        assert blocksize < FORCEBLOCKSIZE
         self.log.info("Try sending {}-byte, 10000-sigcheck blocks (limit: {}, {})".format(
-            blocksize, EXCESSIVEBLOCKSIZE, EXCESSIVEBLOCKSIZE // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
+            blocksize, FORCEBLOCKSIZE, FORCEBLOCKSIZE // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
         check_for_ban_on_rejected_block(
             node, badblock, reject_reason=BLOCK_SIGCHECKS_CACHED_ERROR)
 
@@ -247,7 +246,7 @@ class BlockSigChecksTest(BitcoinTestFramework):
         assert_equal(len(node.getrawmempool()), 11)
 
         self.log.info("Try sending 10000-sigcheck block with fresh transactions (limit: {})".format(
-            EXCESSIVEBLOCKSIZE // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
+            FORCEBLOCKSIZE // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
         # Note: in the following tests we'll be bumping timestamp in order
         # to bypass any kind of 'bad block' cache on the node, and get a
         # fresh evaluation each time.
@@ -275,17 +274,17 @@ class BlockSigChecksTest(BitcoinTestFramework):
             node, badblock, reject_reason=BLOCK_SIGCHECKS_CACHED_ERROR)
 
         self.log.info("Try sending 8000-sigcheck block (limit: {})".format(
-            EXCESSIVEBLOCKSIZE // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
+            FORCEBLOCKSIZE // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
         badblock = self.build_block(
             tip, submittxes_2[:40], nTime=tip.nTime + 8)
         check_for_ban_on_rejected_block(
             node, badblock, reject_reason=BLOCK_SIGCHECKS_CACHED_ERROR)
 
-        self.log.info("Bump the excessiveblocksize limit by 1 byte, and send another block with same txes (new sigchecks limit: {})".format(
-            (EXCESSIVEBLOCKSIZE + 1) // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
+        self.log.info("Bump the forceblocksize limit by 1 byte, and send another block with same txes (new sigchecks limit: {})".format(
+            (FORCEBLOCKSIZE + 1) // BLOCK_MAXBYTES_MAXSIGCHECKS_RATIO))
         self.stop_node(0)
         self.extra_args = [self.base_extra_args +
-                           ["-excessiveblocksize={}".format(EXCESSIVEBLOCKSIZE + 1),
+                           ["-forceblocksize={}".format(FORCEBLOCKSIZE + 1),
                             "-blockmaxsize={}".format(MAXGENERATEDBLOCKSIZE)]]
         self.start_node(0)
         node.add_p2p_connection(P2PDataStore())

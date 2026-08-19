@@ -37,9 +37,6 @@ QT_TRANSLATE_NOOP("bitcoin-cash-node", ""
 "Invalid amount for -maxtxfee=<amount>: '%s' (must be at least the minrelay "
 "fee of %s to prevent stuck transactions)"),
 QT_TRANSLATE_NOOP("bitcoin-cash-node", ""
-"Max generated block size (blockmaxsize) cannot exceed the excessive block "
-"size (excessiveblocksize)"),
-QT_TRANSLATE_NOOP("bitcoin-cash-node", ""
 "Please check that your computer's date and time are correct! If your clock "
 "is wrong, %s will not work properly."),
 QT_TRANSLATE_NOOP("bitcoin-cash-node", ""

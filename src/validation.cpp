@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2021 The Bitcoin Core developers
-// Copyright (c) 2017-2026 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -2212,7 +2212,7 @@ static void TipChanged(const ::Config &config, const CBlockIndex *pindexNew) {
         // the current block's size, etc (tolerating failure of ReadBlockSizeFromDisk() for defensive programming).
         return abla::State(consensusParams.ablaConfig,
                            ReadBlockSizeFromDisk(pindexNew, params)
-                               .value_or(config.GetConfiguredMaxBlockSize()));
+                               .value_or(config.GetDefaultConsensusBlockSize()));
     });
 
     // This is a worst-case guess as to how much the max blocksize can grow in the next 2048 blocks. Note we only
@@ -5979,7 +5979,7 @@ ActivationBlockTracker::GetActivationBlock(const CBlockIndex *pindex, const Cons
 
 uint64_t GetNextBlockSizeLimit(const Config &config, const CBlockIndex *pindexPrev) {
     const auto &params = config.GetChainParams().GetConsensus();
-    const uint64_t confMaxBlockSize = config.GetConfiguredMaxBlockSize();
+    const uint64_t confMaxBlockSize = config.GetDefaultConsensusBlockSize();
     if (!IsUpgrade10Enabled(params, pindexPrev)) {
         return confMaxBlockSize;
     }

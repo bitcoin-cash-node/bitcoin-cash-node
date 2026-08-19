@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2026 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -126,7 +126,7 @@ static void benchRemoveForBlock(const Config& config, benchmark::State& state,
 
     BlockAssembler::Options opts;
     opts.blockMinFeeRate = CFeeRate{Amount::zero()};
-    opts.nConsensusCurrentBlockSizeLimit = config.GetConfiguredMaxBlockSize();
+    opts.nConsensusCurrentBlockSizeLimit = config.GetDefaultConsensusBlockSize();
     opts.nMaxGeneratedBlockSize = blockMB * ONE_MEGABYTE;
     const auto pblktemplate = BlockAssembler{config, ::g_mempool, opts}.CreateNewBlock(SCRIPT_PUB_KEY);
     const auto &block = pblktemplate->block;

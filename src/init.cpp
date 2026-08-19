@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -395,7 +395,7 @@ void SetupServerArgs() {
 
     // Hidden Options
     std::vector<std::string> hidden_args = {
-        "-dbcrashratio", "-forcecompactdb", "-expirerpc",
+        "-dbcrashratio", "-forcecompactdb", "-expirerpc", "-forceblocksize",
         // GUI args. These will be overwritten by SetupUIArgs for the GUI
         "-choosedatadir", "-lang=<lang>",
         "-min", "-resetguisettings", "-splash",
@@ -474,18 +474,6 @@ void SetupServerArgs() {
                            "will be prefixed by a net-specific datadir "
                            "location. (0 to disable, default: %s)",
                            DEFAULT_DEBUGLOGFILE),
-                 ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
-    gArgs.AddArg("-excessiveblocksize=<n>",
-                 strprintf("Before upgrade 10 activates: Do not accept blocks larger than this limit, in bytes."
-                           " After upgrade 10 activates: The minimum (floor) maximum block size used by the adaptive"
-                           " blocksize limit algorithm, in bytes. (default: %u, testnet: %u, testnet4: %u,"
-                           " scalenet: %u, chipnet: %u, regtest: %u)",
-                           defaultChainParams->GetConsensus().nDefaultConsensusBlockSize,
-                           testnetChainParams->GetConsensus().nDefaultConsensusBlockSize,
-                           testnet4ChainParams->GetConsensus().nDefaultConsensusBlockSize,
-                           scalenetChainParams->GetConsensus().nDefaultConsensusBlockSize,
-                           chipnetChainParams->GetConsensus().nDefaultConsensusBlockSize,
-                           regtestChainParams->GetConsensus().nDefaultConsensusBlockSize),
                  ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
     gArgs.AddArg("-feefilter",
                  strprintf("Tell other nodes to filter invs to us by our "
@@ -1150,7 +1138,7 @@ void SetupServerArgs() {
                            regtestChainParams->GetConsensus().GetDefaultGeneratedBlockSizeBytes()),
                  ArgsManager::ALLOW_ANY, OptionsCategory::BLOCK_CREATION);
     gArgs.AddArg("-percentblockmaxsize=<percent>",
-                 strprintf("Set maximum mined block size as a floating-point percentage of the excessive block size."
+                 strprintf("Set maximum mined block size as a floating-point percentage of the current max block size."
                            " This is an alternative to -blockmaxsize. This option and -blockmaxsize cannot both be"
                            " specified at the same time. (default: %.1f, testnet: %.1f, testnet4: %.1f,"
                            " scalenet: %.3f, chipnet: %.1f, regtest: %.1f)",
@@ -1795,12 +1783,19 @@ bool AppInitParameterInteraction(Config &config) {
                   chainparams.GetConsensus().nMinimumChainWork.GetHex());
     }
 
-    // Configure maximum block size.
-    const uint64_t nProposedMaxBlockSize =
-        gArgs.GetArg("-excessiveblocksize", chainparams.GetConsensus().nDefaultConsensusBlockSize);
-    if (!config.SetConfiguredMaxBlockSize(nProposedMaxBlockSize)) {
-        return InitError(
-            _("Excessive block size must be > 1,000,000 bytes (1MB) and <= 2,000,000,000 bytes (2GB)."));
+    // Apply the regtest-only -forceblocksize param (if any); this arg also disables ABLA (upgrade 10)
+    if (gArgs.IsArgSet("-forceblocksize")) {
+        if (!chainparams.GetConsensus().fPowNoRetargeting) {
+            return InitError("-forceblocksize argument is only for regtest");
+        }
+        const auto oldVal = config.GetDefaultConsensusBlockSize();
+        const auto val = gArgs.GetArg("-forceblocksize", -1);
+        if (val < 0 || !config.SetBlockSizeOverride(static_cast<uint64_t>(val))) {
+            return InitError("-forceblocksize: bad value specified");
+        }
+        g_Upgrade10HeightOverride = std::numeric_limits<int32_t>::max(); // disable
+        LogPrintf("Block size has been overridden: %u -> %u; ABLA (upgrade 10) has been disabled\n",
+                  oldVal, val);
     }
 
     // Pick one of -blockmaxsize or -percentblockmaxsize, but not both. If neither specified, default to the
@@ -1815,10 +1810,14 @@ bool AppInitParameterInteraction(Config &config) {
             if (nProposedMaxGeneratedBlockSize < 0) {
                 return InitError(_("Invalid value specified for -blockmaxsize"));
             }
-            // Check blockmaxsize does not exceed maximum accepted block size.
-            if (!config.SetGeneratedBlockSizeBytes(nProposedMaxGeneratedBlockSize)) {
-                return InitError(_("Max generated block size (blockmaxsize) cannot exceed "
-                                   "the excessive block size (excessiveblocksize)"));
+            // Warn if blockmaxsize does exceed the default block size.
+            config.SetGeneratedBlockSizeBytes(nProposedMaxGeneratedBlockSize);
+            if (auto def = config.GetDefaultConsensusBlockSize(); uint64_t(nProposedMaxGeneratedBlockSize) > def) {
+                LogPrintf("Warning: Max generated block size (blockmaxsize) specified (%d) exceeds the chain default of"
+                          " %u. Blocks will be mined with the default %u limit unless ABLA raises the max block size"
+                          " beyond the default (based on demand), at which time block sizes will be capped at the"
+                          " specified value of %d. Consider using the -percentblockmaxsize option instead.\n",
+                          nProposedMaxGeneratedBlockSize, def, def, nProposedMaxGeneratedBlockSize);
             }
         } else if (has_pbms && !has_bms) {
             const auto argStr = gArgs.GetArg("-percentblockmaxsize", "");
@@ -1835,7 +1834,7 @@ bool AppInitParameterInteraction(Config &config) {
 
     // mempool limits
     const int64_t nMempoolSizeMax =
-        ONE_MEGABYTE * gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE_PER_MB * config.GetConfiguredMaxBlockSize()
+        ONE_MEGABYTE * gArgs.GetArg("-maxmempool", DEFAULT_MAX_MEMPOOL_SIZE_PER_MB * config.GetDefaultConsensusBlockSize()
                                                    / ONE_MEGABYTE);
     if (nMempoolSizeMax < 0) {
         return InitError("-maxmempool must be at least 0 MB");
