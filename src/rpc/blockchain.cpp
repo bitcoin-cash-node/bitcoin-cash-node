@@ -2514,13 +2514,18 @@ static UniValue getblockstats(const Config &config,
     return ret; // compiler will invoke Univalue(Univalue::Object &&) move-constructor.
 }
 
-static UniValue savemempool(const Config &config,
-                            const JSONRPCRequest &request) {
+static UniValue savemempool(const Config &, const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() != 0) {
         throw std::runtime_error(
-            RPCHelpMan{"savemempool",
-                "\nDumps the mempool to disk. It will fail until the previous dump is fully loaded.\n", {}}
-                .ToString() +
+            RPCHelpMan{
+                "savemempool",
+                "\nDumps the mempool to disk. It will fail until the previous dump is fully loaded.\n",
+                {},
+                RPCResult{"{\n"
+                          "  \"filename\": \"xxx\"    (string) the directory and file where the mempool was saved\n"
+                          "}\n"},
+                {}
+            }.ToStringWithResultsAndExamples() +
             "\nExamples:\n"
             + HelpExampleCli("savemempool", "")
             + HelpExampleRpc("savemempool", "")
@@ -2535,7 +2540,11 @@ static UniValue savemempool(const Config &config,
         throw JSONRPCError(RPC_MISC_ERROR, "Unable to dump mempool to disk");
     }
 
-    return UniValue();
+    UniValue::Object result;
+    result.reserve(1);
+    result.emplace_back("filename", (::GetDataDir(true) / "mempool.dat").string());
+
+    return result;
 }
 
 //! Search for a given set of pubkey scripts and tokens
