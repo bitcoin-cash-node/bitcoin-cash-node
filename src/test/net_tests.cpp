@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <net.h>
@@ -63,18 +63,6 @@ public:
         CAddrInfo info = CAddrInfo(addr, resolved);
         s << info;
     }
-};
-
-class NetTestConfig : public DummyConfig {
-public:
-    bool SetConfiguredMaxBlockSize(uint64_t maxBlockSize) override {
-        nMaxBlockSize = maxBlockSize;
-        return true;
-    }
-    uint64_t GetConfiguredMaxBlockSize() const override { return nMaxBlockSize; }
-
-private:
-    uint64_t nMaxBlockSize;
 };
 
 static CDataStream AddrmanToStream(CAddrManSerializationMock &_addrman) {
@@ -573,17 +561,6 @@ BOOST_AUTO_TEST_CASE(cnetaddr_unserialize_v2) {
     BOOST_REQUIRE(s.empty());
 }
 
-BOOST_AUTO_TEST_CASE(test_getSubVersionEB) {
-    BOOST_CHECK_EQUAL(getSubVersionEB(13800000000), "13800.0");
-    BOOST_CHECK_EQUAL(getSubVersionEB(3800000000), "3800.0");
-    BOOST_CHECK_EQUAL(getSubVersionEB(14000000), "14.0");
-    BOOST_CHECK_EQUAL(getSubVersionEB(1540000), "1.5");
-    BOOST_CHECK_EQUAL(getSubVersionEB(1560000), "1.5");
-    BOOST_CHECK_EQUAL(getSubVersionEB(210000), "0.2");
-    BOOST_CHECK_EQUAL(getSubVersionEB(10000), "0.0");
-    BOOST_CHECK_EQUAL(getSubVersionEB(0), "0.0");
-}
-
 BOOST_AUTO_TEST_CASE(test_FormatSubVersion) {
     BOOST_CHECK_EQUAL(FormatSubVersion("Test", 1, std::vector<std::string>{"comment1", "comment2", "comment3"}), "/Test:0.0.0.1(comment1; comment2; comment3)/");
     BOOST_CHECK_EQUAL(FormatSubVersion("Test 2", 12, std::vector<std::string>{"comment1"}), "/Test 2:0.0.0.12(comment1)/");
@@ -594,19 +571,21 @@ BOOST_AUTO_TEST_CASE(test_FormatSubVersion) {
 }
 
 BOOST_AUTO_TEST_CASE(test_userAgent) {
-    NetTestConfig config;
+    DummyConfig config;
 
-    config.SetConfiguredMaxBlockSize(8000000);
-    const std::string uacomment = "A very nice comment";
-    gArgs.ForceSetMultiArg("-uacomment", uacomment);
+    const std::string uacomment1 = "A very nice comment",
+                      uacomment2 = "An even nicer comment";
+    gArgs.ForceSetMultiArg("-uacomment", uacomment1);
+    gArgs.ForceSetMultiArg("-uacomment", uacomment2);
 
     const std::string versionMessage =
         "/Bitcoin Cash Node:" + std::to_string(CLIENT_VERSION_MAJOR) + "." +
         std::to_string(CLIENT_VERSION_MINOR) + "." +
-        std::to_string(CLIENT_VERSION_REVISION) + "(EB8.0; " + uacomment + ")/";
+        std::to_string(CLIENT_VERSION_REVISION) + "(" + uacomment1 + "; " + uacomment2 + ")/";
 
     const std::string versionMessage_strprintf =
-        strprintf("/Bitcoin Cash Node:%d.%d.%d(EB8.0; %s)/", CLIENT_VERSION_MAJOR, CLIENT_VERSION_MINOR, CLIENT_VERSION_REVISION, uacomment);
+        strprintf("/Bitcoin Cash Node:%d.%d.%d(%s; %s)/", CLIENT_VERSION_MAJOR, CLIENT_VERSION_MINOR, CLIENT_VERSION_REVISION,
+                  uacomment1, uacomment2);
 
     BOOST_CHECK_EQUAL(versionMessage, versionMessage_strprintf); // verify our test methodology is sound - std::to_string is locale-dependent
     BOOST_CHECK_EQUAL(userAgent(config), versionMessage);

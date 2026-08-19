@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2024 The Bitcoin Cash Node developers
+# Copyright (c) 2020-present The Bitcoin Cash Node developers
 # Author matricz
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
@@ -44,7 +44,7 @@ class TxBroadcastIntervalTest(BitcoinTestFramework):
     # A third disconnected node is used only to create signed transactions
 
     # The nodes are configured with "-txbroadcastrate=1" and
-    # "-excessiveblocksize=2000000" so that they relay at most one tx per inv
+    # "-forceblocksize=2000000" so that they relay at most one tx per inv
     # It's convenient, because we can now define the exact number of invs
     # (== sample size -1) that we want to send
     # This holds true only for interval values <= 500 ms
@@ -82,14 +82,12 @@ class TxBroadcastIntervalTest(BitcoinTestFramework):
         self.scale = self.options.interval / 1000
         self.num_nodes = 3
         self.setup_clean_chain = True
-        # Note that for this test, since we want to control the blocksize, we turn ABLA off (no upgrade 10).
+        # Note that -forceblocksize also disables ABLA
         args = [
             ["-txbroadcastinterval={}".format(self.options.interval),
-                "-txbroadcastrate=1", "-excessiveblocksize=2000000",
-                "-blockmaxsize=2000000", "-upgrade10activationheight=2147483647"],
+                "-txbroadcastrate=1", "-forceblocksize=2000000", "-blockmaxsize=2000000"],
             ["-txbroadcastinterval=1",
-                "-txbroadcastrate=1", "-excessiveblocksize=2000000",
-                "-blockmaxsize=2000000", "-upgrade10activationheight=2147483647"],
+                "-txbroadcastrate=1", "-forceblocksize=2000000", "-blockmaxsize=2000000"],
             ["-persistmempool=0"],
         ]
         self.extra_args = args

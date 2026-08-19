@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2023 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -22,6 +22,7 @@
 #include <pow.h>
 #include <primitives/transaction.h>
 #include <script/standard.h>
+#include <span.h>
 #include <threadsafety.h>
 #include <timedata.h>
 #include <txmempool.h>
@@ -33,6 +34,7 @@
 
 #include <algorithm>
 #include <queue>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -432,15 +434,13 @@ void BlockAssembler::addTxs(int64_t nLimitTimePoint) {
     }
 }
 
-static
-std::vector<uint8_t> getEBSig(uint64_t nConsensusMaxBlockSize) {
-    std::string cbmsg = "/EB" + getSubVersionEB(nConsensusMaxBlockSize) + "/";
-    return std::vector<uint8_t>(cbmsg.begin(), cbmsg.end());
+static ByteView getSigExtra() {
+    using namespace std::string_view_literals;
+    return MakeUInt8Span("/ABLA/"sv); // NB: this used to be EB32.0 or somesuch, but we got rid of EB strings
 }
 
 void IncrementExtraNonce(CBlock *pblock, const CBlockIndex *pindexPrev, const Config &config,
                          unsigned int &nExtraNonce) {
-    const uint64_t nConsensusCurrentBlockSizeLimit = GetNextBlockSizeLimit(config, pindexPrev);
     const uint64_t minTxSize = GetMinimumTxSize(config.GetChainParams().GetConsensus(), pindexPrev);
 
     ++nExtraNonce;
@@ -450,8 +450,8 @@ void IncrementExtraNonce(CBlock *pblock, const CBlockIndex *pindexPrev, const Co
     txCoinbase.vin[0].scriptSig =
         (CScript() << ScriptInt::fromIntUnchecked(nHeight)
                    << CScriptNum::fromIntUnchecked(nExtraNonce)
-                   << getEBSig(nConsensusCurrentBlockSizeLimit)) +
-        COINBASE_FLAGS;
+                   << getSigExtra())
+        + COINBASE_FLAGS;
 
     // Make sure the coinbase is big enough.
     if (minTxSize) {

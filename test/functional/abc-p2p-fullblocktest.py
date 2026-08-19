@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2015-2016 The Bitcoin Core developers
-# Copyright (c) 2017-2022 The Bitcoin developers
+# Copyright (c) 2017-present The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
@@ -58,9 +58,9 @@ class FullBlockTest(BitcoinTestFramework):
         self.block_heights = {}
         self.tip = None
         self.blocks = {}
-        self.excessive_block_size = 100 * ONE_MEGABYTE
-        self.extra_args = [['-whitelist=127.0.0.1',
-                            "-excessiveblocksize={}".format(self.excessive_block_size)]]
+        self.force_block_size = 100 * ONE_MEGABYTE
+        # Note that -forceblocksize also disables ABLA
+        self.extra_args = [['-whitelist=127.0.0.1', f"-forceblocksize={self.force_block_size}"]]
 
     def add_options(self, parser):
         super().add_options(parser)
@@ -247,11 +247,11 @@ class FullBlockTest(BitcoinTestFramework):
             node.p2p.send_blocks_and_test([self.tip], node)
 
         # block of maximal size
-        block(17, spend=out[16], block_size=self.excessive_block_size)
+        block(17, spend=out[16], block_size=self.force_block_size)
         node.p2p.send_blocks_and_test([self.tip], node)
 
         # Reject oversized blocks with bad-blk-length error
-        block(18, spend=out[17], block_size=self.excessive_block_size + 1)
+        block(18, spend=out[17], block_size=self.force_block_size + 1)
         node.p2p.send_blocks_and_test(
             [self.tip], node, success=False, reject_reason='bad-blk-length')
 
@@ -260,7 +260,7 @@ class FullBlockTest(BitcoinTestFramework):
 
         # Submit a very large block via RPC
         large_block = block(
-            33, spend=out[17], block_size=self.excessive_block_size)
+            33, spend=out[17], block_size=self.force_block_size)
         assert_equal(node.submitblock(ToHex(large_block)), None)
 
 

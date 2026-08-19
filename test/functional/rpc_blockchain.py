@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2014-2019 The Bitcoin Core developers
-# Copyright (c) 2021-2025 The Bitcoin developers
+# Copyright (c) 2021-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -485,7 +485,7 @@ class BlockchainTest(BitcoinTestFramework):
         assert_equal(blockinfo['height'], blockheaderinfo['height'])
         assert_equal(blockinfo['versionHex'], blockheaderinfo['versionHex'])
         assert_equal(blockinfo['version'], blockheaderinfo['version'])
-        assert_equal(blockinfo['size'], 178)
+        assert_equal(blockinfo['size'], 176)
         assert_equal(blockinfo['merkleroot'], blockheaderinfo['merkleroot'])
         # Verify transaction data by check the hex values
         for tx in blockinfo['tx']:

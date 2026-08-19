@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2015-2016 The Bitcoin Core developers
-# Copyright (c) 2017-2022 The Bitcoin developers
+# Copyright (c) 2017-present The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """
@@ -93,13 +93,12 @@ class FullBlockTest(BitcoinTestFramework):
         self.block_heights = {}
         self.tip = None
         self.blocks = {}
-        self.excessive_block_size = 16 * ONE_MEGABYTE
+        self.force_block_size = 16 * ONE_MEGABYTE
         self.extra_args = [['-whitelist=127.0.0.1',
                             '-maxmempool=99999',
-                            '-blockmaxsize={}'.format(
-                                self.excessive_block_size),
-                            '-excessiveblocksize={}'.format(
-                                self.excessive_block_size),
+                            f'-blockmaxsize={self.force_block_size}',
+                            # Note that -forceblocksize also disables ABLA
+                            f'-forceblocksize={self.force_block_size}',
                             '-acceptnonstdtxn=1']]
         # UBSAN will cause this test to timeout without this.
         self.rpc_timeout = 180
@@ -322,7 +321,7 @@ class FullBlockTest(BitcoinTestFramework):
         # Send a large block with numerous transactions.
         test_p2p.clear_block_data()
         b2 = block(2, spend=out[1], extra_txns=70000,
-                   block_size=self.excessive_block_size - 1000)
+                   block_size=self.force_block_size - 1000)
         default_p2p.send_blocks_and_test([self.tip], node)
 
         # Checks the node forwards it via compact block

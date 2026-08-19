@@ -1,4 +1,4 @@
-# Copyright (c) 2017-2026 The Bitcoin developers
+# Copyright (c) 2017-present The Bitcoin developers
 
 project(bitcoind)
 
@@ -608,7 +608,6 @@ add_library(server
   policy/policy.cpp
   pow.cpp
   rest.cpp
-  rpc/abc.cpp
   rpc/blockchain.cpp
   rpc/command.cpp
   rpc/dsproof.cpp

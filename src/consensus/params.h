@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2026 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -60,14 +60,13 @@ struct Params {
     /** (Tentative) Unix time used for MTP activation of 15 May 2027 12:00:00 UTC upgrade */
     int64_t upgrade2027ActivationTime;
 
-    /** Default blocksize limit -- can be overridden with the -excessiveblocksize= command-line switch.
-        After activation of upgrade 10, this is the minimum max block size, since the ABLA algorithm allows for
-        growing the limit based on demand.*/
+    /** Default blocksize limit for this chain. After activation of upgrade 10, this is the max block size floor, since
+     *  the ABLA algorithm allows for growing the limit based on demand. */
     uint64_t nDefaultConsensusBlockSize;
     /**
      * Chain-specific default for -percentblockmaxsize, which controls the maximum size of blocks that the
      * mining code will create. This value is stored as a double precision percentage to support scalenet's
-     * 8 MB default which is 3.125% of 256 MB. Valid values [0.0, 100.0].
+     * 16 MB default which is 6.25% of 256 MB. Valid values [0.0, 100.0].
      */
     double nDefaultGeneratedBlockSizePercent;
 

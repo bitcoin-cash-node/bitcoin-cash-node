@@ -14,7 +14,10 @@ Users who are running v29.1.0 or older are encouraged to upgrade to v29.1.1.
 
 ## Network changes
 
-None
+- Bitcoin Cash Node clients no longer advertise their P2P protocol user agent strings with the "(EB32.0)" suffix.
+  This is because the "excessive block" concept has been removed from the codebase entirely (it was a holdover from
+  pre-ABLA days). ABLA now manages all block size limit growth, based on demand, and so this user agent suffix is no
+  longer needed.
 
 ## Added functionality
 
@@ -37,10 +40,21 @@ None
   both in seconds. Additionally, the `ban_created` field is repositioned to come before `banned_until`.
 - The `gettransaction`, `listtransactions`, and `listsinceblock` RPCs now return an additional optional key,
   `blockheight`, which is the height of the block that contains the wallet transaction.
+- The `-blockmaxsize` argument (used for mining) now has slightly changed behavior. If it is set to a value larger
+  than the consensus default block size (32000000 on mainnet), it will no longer error-out on startup. Instead, the cap
+  used for mining will be the lesser of: the current blocksize limit and this specified value.
 
 ## Removed functionality
 
-None
+- The `-excessiveblocksize` argument has been removed. It was previously used to signal support for larger blocks than
+  the default. However, since 2024, ABLA has activated (adaptive block-size limit algorithm), thus this argument is no
+  longer necessary. Block size limits grow with demand as part of consensus, so this argument isn't helpful anymore.
+  - Correspondingly, the RPC method `getexcessiveblock` has been removed.
+  - Additonally, the user agent string for the P2P protocol no longer appends the "(EBnn.n)" e.g. "(EB32.0)" suffix.
+
+Upgrade note: users with `excessiveblocksize=X` set in bitcoin.conf (or passed via CLI wrappers/systemd units) must
+remove that setting before upgrading, otherwise bitcoind will refuse to start with
+`Error reading configuration file: Invalid configuration value excessiveblocksize`.
 
 ## New RPC methods
 

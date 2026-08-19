@@ -1,5 +1,5 @@
 // Copyright (c) 2013-2015 The Bitcoin Core developers
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -52,10 +52,7 @@ static COutPoint InsecureRandOutPoint() {
 
 BOOST_AUTO_TEST_CASE(blockfail) {
     SelectParams(CBaseChainParams::MAIN);
-
-    // Set max blocksize to default in case other tests left it dirty
     GlobalConfig config;
-    config.SetConfiguredMaxBlockSize(DEFAULT_CONSENSUS_BLOCK_SIZE);
 
     CBlock block;
     RunCheckOnBlock(config, block, "bad-cb-missing");

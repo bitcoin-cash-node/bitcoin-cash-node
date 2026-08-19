@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2021-2025 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -2949,40 +2949,8 @@ uint64_t CConnman::CalculateKeyedNetGroup(const CAddress &ad) const {
         .Finalize();
 }
 
-/**
- * This function convert MaxBlockSize from byte to
- * MB with a decimal precision one digit rounded down
- * E.g.
- * 1660000 -> 1.6
- * 2010000 -> 2.0
- * 1000000 -> 1.0
- * 230000  -> 0.2
- * 50000   -> 0.0
- *
- *  NB behavior for EB<1MB not standardized yet still
- *  the function applies the same algo used for
- *  EB greater or equal to 1MB
- */
-std::string getSubVersionEB(uint64_t MaxBlockSize) {
-    // Prepare EB string we are going to add to SubVer:
-    // 1) translate from byte to MB and convert to string
-    // 2) limit the EB string to the first decimal digit (floored)
-    std::stringstream ebMBs;
-    ebMBs.imbue(std::locale::classic());
-    ebMBs << (MaxBlockSize / (ONE_MEGABYTE / 10));
-    std::string eb = ebMBs.str();
-    eb.insert(eb.size() - 1, ".", 1);
-    if (eb.substr(0, 1) == ".") {
-        eb = "0" + eb;
-    }
-    return eb;
-}
-
-std::string userAgent(const Config &config) {
-    // format excessive blocksize value
-    std::string eb = getSubVersionEB(config.GetConfiguredMaxBlockSize());
+std::string userAgent(const Config &) {
     std::vector<std::string> uacomments;
-    uacomments.push_back("EB" + eb);
 
     // Comments are checked for char compliance at startup, it is safe to add
     // them to the user agent string

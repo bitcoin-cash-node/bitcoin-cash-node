@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020 The Bitcoin Cash Node developers
+# Copyright (c) 2020-present The Bitcoin Cash Node developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the command-line setting of the -maxmempool setting."""
@@ -23,26 +23,26 @@ class MaxMempoolSizeTest(BitcoinTestFramework):
         # Check that the -maxmempool setting defaults work correctly
         assert_equal(self.get_mempool_size(), DEFAULT_CONSENSUS_BLOCK_SIZE * 10)
 
-        # 2 MB excessive block size should give a 20 MB max mempool size
-        self.restart_node(0, ['-blockmaxsize=2000000', '-excessiveblocksize=2000000'])
+        # 2 MB forced block size should give a 20 MB max mempool size
+        self.restart_node(0, ['-blockmaxsize=2000000', '-forceblocksize=2000000'])
         assert_equal(self.get_mempool_size(), 2000000 * 10)
 
-        # 256 MB excessive block size should give a 2560 MB max mempool size
-        self.restart_node(0, ['-excessiveblocksize=256000000'])
+        # 256 MB force block size should give a 2560 MB max mempool size
+        self.restart_node(0, ['-forceblocksize=256000000'])
         assert_equal(self.get_mempool_size(), 256000000 * 10)
 
         # mempool size values are floored to the next 1 MB boundary
-        self.restart_node(0, ['-excessiveblocksize=255999999'])
+        self.restart_node(0, ['-forceblocksize=255999999'])
         assert_equal(self.get_mempool_size(), 255900000 * 10)
 
-        self.restart_node(0, ['-excessiveblocksize=256099999'])
+        self.restart_node(0, ['-forceblocksize=256099999'])
         assert_equal(self.get_mempool_size(), 256000000 * 10)
 
-        self.restart_node(0, ['-excessiveblocksize=256100000'])
+        self.restart_node(0, ['-forceblocksize=256100000'])
         assert_equal(self.get_mempool_size(), 256100000 * 10)
 
-        # excessive block size should be ignored if -maxmempool is given
-        self.restart_node(0, ['-blockmaxsize=2000000', '-excessiveblocksize=2000000', '-maxmempool=300'])
+        # forced block size should be ignored if -maxmempool is given
+        self.restart_node(0, ['-blockmaxsize=2000000', '-forceblocksize=2000000', '-maxmempool=300'])
         assert_equal(self.get_mempool_size(), 300 * 1000000)
 
         # -maxmempool setting should also be used if it is given alone
