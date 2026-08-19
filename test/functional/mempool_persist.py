@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2014-2017 The Bitcoin Core developers
+# Copyright (c) 2017-2026 The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test mempool persistence.
@@ -134,8 +135,9 @@ class MempoolPersistTest(BitcoinTestFramework):
         self.log.debug(
             "Remove the mempool.dat file. Verify that savemempool to disk via RPC re-creates it")
         os.remove(mempooldat0)
-        self.nodes[0].savemempool()
+        result0 = self.nodes[0].savemempool()
         assert os.path.isfile(mempooldat0)
+        assert_equal(result0['filename'], mempooldat0)
 
         self.log.debug(
             "Stop nodes, make node1 use mempool.dat from node0. Verify it has 5 transactions")
