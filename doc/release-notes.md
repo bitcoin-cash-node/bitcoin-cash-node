@@ -44,6 +44,8 @@ None
   than the consensus default block size (32000000 on mainnet), it will no longer error-out on startup. Instead, the cap
   used for mining will be the lesser of: the current blocksize limit and this specified value.
 - The `savemempool` RPC command now returns the full path and name of the file to which the mempool was saved.
+- The `listunspent` RPC now has a new argument `include_immature_coinbase` to include coinbase UTXOs that don't meet the
+  minimum spendability depth requirement (which before were silently skipped).
 
 ## Removed functionality
 

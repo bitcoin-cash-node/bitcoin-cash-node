@@ -2582,7 +2582,8 @@ void CWallet::AvailableCoins(interfaces::Chain::Lock &locked_chain,
                              const Amount nMaximumAmount,
                              const Amount nMinimumSumAmount,
                              const uint64_t nMaximumCount, const int nMinDepth,
-                             const int nMaxDepth, const CFeeRate nFeeRate) const {
+                             const int nMaxDepth, const CFeeRate nFeeRate,
+                             const bool fIncludeImmatureCoinbase) const {
     AssertLockHeld(cs_main);
     AssertLockHeld(cs_wallet);
 
@@ -2602,7 +2603,7 @@ void CWallet::AvailableCoins(interfaces::Chain::Lock &locked_chain,
             continue;
         }
 
-        if (pcoin->IsImmatureCoinBase(locked_chain)) {
+        if (!fIncludeImmatureCoinbase && pcoin->IsImmatureCoinBase(locked_chain)) {
             continue;
         }
 
