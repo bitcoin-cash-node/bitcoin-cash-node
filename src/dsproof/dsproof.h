@@ -1,6 +1,6 @@
 // Copyright (C) 2019-2020 Tom Zander <tomz@freedommail.ch>
 // Copyright (C) 2020-2021 Calin Culianu <calin.culianu@gmail.com>
-// Copyright (c) 2021-2024 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #pragma once
@@ -19,12 +19,6 @@ class CTxMemPool;
 class DoubleSpendProof
 {
 public:
-    //! Limit for the size of a `pushData` vector below
-    static constexpr size_t DetermineMaxPushDataSize(uint32_t scriptFlags) {
-        return (scriptFlags & SCRIPT_ENABLE_MAY2025) ? may2025::MAX_SCRIPT_ELEMENT_SIZE
-                                                     : MAX_SCRIPT_ELEMENT_SIZE_LEGACY;
-    }
-
     //! Creates an empty DoubleSpendProof
     DoubleSpendProof() = default;
 
@@ -164,7 +158,8 @@ private:
     /// Throws std::runtime_error if the proof breaks the sanity of:
     /// - isEmpty()
     /// - does not have exactly 1 pushData per spender vector
-    /// - any pushData size >520 bytes
+    /// - any pushData that is not a valid-looking signature
+    /// - any pushData that uses SIGHASH_UTXOs
     /// Called from: `create()` and `validate()` (`validate()` won't throw but will return Invalid)
     void checkSanityOrThrow(uint32_t scriptFlags) const;
 
