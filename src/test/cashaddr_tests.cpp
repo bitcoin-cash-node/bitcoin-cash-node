@@ -1,5 +1,5 @@
 // Copyright (c) 2017 Pieter Wuille
-// Copyright (c) 2017-2020 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -69,6 +69,20 @@ BOOST_AUTO_TEST_CASE(cashaddr_testvectors_invalid) {
         "bchreg:555555555555555555555555555555551555555555555udxmlmrz",
         "pre:fix:x32nx6hz",
         "prefixx64nx6hz",
+        "",
+        ":",
+        "p",
+        "p:",
+        "p:g",
+        "p:gp",
+        "p:gpf",
+        "p:gpf8",
+        "p:gpf8m",
+        "p:gpf8m4",
+        "p:gpf8m4h",
+        "rpzrrzpr:",
+        "rqiqkqiqr:",
+        "c:qvdy2z3",
     };
 
     for (const std::string &str : CASES) {
