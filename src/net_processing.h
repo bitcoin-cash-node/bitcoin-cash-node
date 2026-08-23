@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -39,6 +39,7 @@ static constexpr unsigned int DEFAULT_INV_BROADCAST_RATE = 7;
 
 
 class BlockTransactionsRequest;
+class CBlockHeaderAndShortTxIDs;
 class Config;
 class CRollingBloomFilter;
 
@@ -67,6 +68,14 @@ class PeerLogicValidation final : public CValidationInterface, public NetEventsI
     TxOrphanage m_orphanage GUARDED_BY(cs_main);
     size_t m_vExtraTxnForCompactIt GUARDED_BY(cs_main) = 0;
     std::vector<std::pair<TxHash, CTransactionRef>> m_vExtraTxnForCompact GUARDED_BY(cs_main);
+
+    // All of the following cache a recent block, and are protected by cs_most_recent_block
+    mutable RecursiveMutex cs_most_recent_block;
+    std::shared_ptr<const CBlock> most_recent_block GUARDED_BY(cs_most_recent_block);
+    std::shared_ptr<const CBlockHeaderAndShortTxIDs> most_recent_compact_block GUARDED_BY(cs_most_recent_block);
+    BlockHash most_recent_block_hash GUARDED_BY(cs_most_recent_block);
+    // Related to the above -- the highest block height we have for compact blocks (see: NewPoWValidBlock())
+    int32_t nHighestFastAnnounce GUARDED_BY(cs_main) = 0;
 
     /**
      * Filter for transactions that were recently rejected by AcceptToMemoryPool.

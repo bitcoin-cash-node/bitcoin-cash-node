@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
 // Copyright (C) 2019-2020 Tom Zander <tomz@freedommail.ch>
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -993,15 +993,6 @@ void PeerLogicValidation::BlockConnected(const std::shared_ptr<const CBlock> &pb
     g_last_tip_update = GetTime();
 }
 
-// All of the following cache a recent block, and are protected by
-// cs_most_recent_block
-static RecursiveMutex cs_most_recent_block;
-static std::shared_ptr<const CBlock>
-    most_recent_block GUARDED_BY(cs_most_recent_block);
-static std::shared_ptr<const CBlockHeaderAndShortTxIDs>
-    most_recent_compact_block GUARDED_BY(cs_most_recent_block);
-static uint256 most_recent_block_hash GUARDED_BY(cs_most_recent_block);
-
 /**
  * Maintain state about the best-seen block and fast-announce a compact block
  * to compatible peers.
@@ -1014,13 +1005,12 @@ void PeerLogicValidation::NewPoWValidBlock(
 
     LOCK(cs_main);
 
-    static int nHighestFastAnnounce = 0;
     if (pindex->nHeight <= nHighestFastAnnounce) {
         return;
     }
     nHighestFastAnnounce = pindex->nHeight;
 
-    uint256 hashBlock(pblock->GetHash());
+    const BlockHash hashBlock(pblock->GetHash());
 
     {
         LOCK(cs_most_recent_block);
