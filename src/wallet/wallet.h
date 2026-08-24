@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
 // Copyright (c) 2018-2023 The Bitcoin developers
-// Copyright (c) 2024 The Bitcoin Cash Node developers
+// Copyright (c) 2024-present The Bitcoin Cash Node developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -75,7 +75,7 @@ bool HasWallets();
 std::vector<std::shared_ptr<CWallet>> GetWallets();
 std::shared_ptr<CWallet> GetWallet(const std::string &name);
 
-enum WalletCreationStatus {
+enum class WalletCreationStatus {
     SUCCESS,
     CREATION_FAILED,
     ENCRYPTION_FAILED
