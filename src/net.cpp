@@ -721,9 +721,9 @@ const uint256 &CNetMessage::GetMessageHash() const {
     return data_hash;
 }
 
-size_t CConnman::SocketSendData(const NodeRef &pnode) const
+uint64_t CConnman::SocketSendData(const NodeRef &pnode) const
     EXCLUSIVE_LOCKS_REQUIRED(pnode->cs_vSend) {
-    size_t nSentSize = 0;
+    uint64_t nSentSize = 0;
     size_t nMsgCount = 0;
     // Note that on win32 the send() function takes and returns 32-bit int lengths, even on a 64-bit build, whereas on
     // Unix it takes and returns a ssize_t. We abstract these differences away here, in order to have this code support
@@ -1529,7 +1529,7 @@ void CConnman::SocketHandler()
         //
         if (sendSet) {
             LOCK(pnode->cs_vSend);
-            size_t nBytes = SocketSendData(pnode);
+            const uint64_t nBytes = SocketSendData(pnode);
             if (nBytes) {
                 if (auto rule = RecordBytesSent(nBytes, pnode)) {
                     nodesToBan.emplace_back(pnode, rule.value());
@@ -2880,7 +2880,7 @@ void CConnman::PushMessage(const NodeRef &pnode, CSerializedNetMsg &&msg) {
 
     CVectorWriter{SER_NETWORK, INIT_PROTO_VERSION, serializedHeader, 0, hdr};
 
-    size_t nBytesSent = 0;
+    uint64_t nBytesSent = 0;
     {
         LOCK(pnode->cs_vSend);
         bool optimisticSend(pnode->vSendMsg.empty());

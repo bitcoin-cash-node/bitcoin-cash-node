@@ -395,7 +395,7 @@ private:
 
     NodeId GetNewNodeId();
 
-    size_t SocketSendData(const NodeRef &pnode) const;
+    uint64_t SocketSendData(const NodeRef &pnode) const;
     void DumpAddresses();
 
     // Network stats
