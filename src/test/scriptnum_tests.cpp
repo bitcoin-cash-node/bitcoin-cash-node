@@ -1340,4 +1340,40 @@ BOOST_AUTO_TEST_CASE(check_fast_big_num_uses_correct_backing) {
     BOOST_CHECK(notZeroCt > 0u);
 }
 
+BOOST_AUTO_TEST_CASE(check_fast_big_num_at_consensus_limit) {
+    const auto &bi_min = ScriptBigInt::bigIntConsensusMin();
+    const auto &bi_max = ScriptBigInt::bigIntConsensusMax();
+
+    const FastBigNum fbn_min{ScriptBigInt::fromInt(bi_min).value().getvch(), true, ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT};
+    const FastBigNum fbn_max{ScriptBigInt::fromInt(bi_max).value().getvch(), true, ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT};
+
+    // Test behavior at consensus minimum
+    auto fbn = fbn_min;
+    BOOST_CHECK(!fbn.usesNative());
+    BOOST_CHECK_EQUAL(fbn.getvch().size(), ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT);
+    BOOST_CHECK(!fbn.safeDecr()); // decrementing a value already at bigint min should fail
+    BOOST_CHECK(fbn == fbn_min); // value should be unchanged
+    BOOST_CHECK(!fbn.safeSubInPlace(FastBigNum::fromIntUnchecked(10))); // similarly, safeSub should fail
+    BOOST_CHECK(fbn == fbn_min); // value should be unchanged
+    // However, incr should succeed
+    BOOST_CHECK(fbn.safeIncr());
+    BOOST_CHECK(fbn > fbn_min);
+    BOOST_CHECK(fbn.safeDecr());
+    BOOST_CHECK(fbn == fbn_min); // value should return to original bigint min
+
+    // Test behavior at consensus maximum
+    fbn = fbn_max;
+    BOOST_CHECK(!fbn.usesNative());
+    BOOST_CHECK_EQUAL(fbn.getvch().size(), ScriptBigInt::MAXIMUM_ELEMENT_SIZE_BIG_INT);
+    BOOST_CHECK(!fbn.safeIncr()); // incrementing a value already at bigint max should fail
+    BOOST_CHECK(fbn == fbn_max); // value should be unchanged
+    BOOST_CHECK(!fbn.safeAddInPlace(FastBigNum::fromIntUnchecked(10))); // similarly, safeAdd should fail
+    BOOST_CHECK(fbn == fbn_max); // value should be unchanged
+    // However, decr should succeed
+    BOOST_CHECK(fbn.safeDecr());
+    BOOST_CHECK(fbn < fbn_max);
+    BOOST_CHECK(fbn.safeIncr());
+    BOOST_CHECK(fbn == fbn_max); // value should return to original bigint max
+}
+
 BOOST_AUTO_TEST_SUITE_END()

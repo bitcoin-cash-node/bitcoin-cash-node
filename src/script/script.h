@@ -967,7 +967,7 @@ class FastBigNum : public ScriptNumEncoding {
     // Switches `var` to use ScriptBigInt (if it is not already doing so), preserving the stored value.
     ScriptBigInt &ensureScriptBigInt();
 
-    // Member function pointer to: CScriptNum that accepts a CScriptNum and returns an optonal
+    // Member function pointer to: CScriptNum that accepts a CScriptNum and returns an optional
     using CSN_Mem_Fn = std::optional<CScriptNum> (CScriptNum::*)(const CScriptNum &) const;
     // Member function pointer to: ScriptBigInt that accepts a BigInt and returns a bool
     using SBI_Mem_Fn = bool (ScriptBigInt::*)(const BigInt &);
@@ -990,8 +990,8 @@ class FastBigNum : public ScriptNumEncoding {
 
 public:
     // Construct from a serialized byte vector as would come in from the script interpreter. Auto-selects the correct
-    // size based on the size of the input vch and `maxIntegerSize`. Throws on error (as do the underlying CScriptNum
-    // and ScriptBigInt classes).
+    // underlying type based on the size of the input vch and `maxIntegerSize`. Throws on error (as do the underlying
+    // CScriptNum and ScriptBigInt classes).
     FastBigNum(const std::vector<uint8_t> &vch, bool fRequireMinimal, size_t maxIntegerSize);
 
     static FastBigNum fromIntUnchecked(int64_t x) {
