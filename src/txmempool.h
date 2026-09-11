@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -450,6 +450,8 @@ public:
     //!     associated with the result (if there is a non-orphan result), including the result TxId itself.
     //! @throws std::runtime_error on internal error
     std::optional<DspTxIdPair> getDoubleSpendProof(const COutPoint &outpoint, DspDescendants *descendants = nullptr) const;
+    //! Faster than the above -- use this to query if an outpoint or a tx spending an outpoint already has a proof.
+    bool hasDoubleSpendProof(const COutPoint &outpoint) const;
 
     //! Thrown by recursiveDSProofSearch below if the search exceeded 1,000 ancestors deep, or 20,000 ancestors total.
     struct RecursionLimitReached : std::runtime_error {
