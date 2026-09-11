@@ -3626,8 +3626,18 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         CTransactionRef addedForTx; // if !nullptr, the proof validated and we should broadcast the inv
         // whitelisted peers are marked with -1 so they do not get punished for invalid proofs
         const auto bannablePeerId = pfrom->HasPermission(PF_NOBAN) ? -1 : pfrom->GetId();
+        std::optional<std::string> failureReason;
         try {
             vRecv >> dsp;
+            if (g_mempool.hasDoubleSpendProof(dsp.outPoint())) {
+                // Don't bother doing any more work below if we already have a relevant proof.
+                // Note that even if this branch is not taken, it's possible for another proof for this outpoint to
+                // arrive in another subsystem in the meantime, hence the `addedForTx` check at the end.
+                LogPrint(BCLog::DSPROOF, "  Ignoring; a DSP already exists for this outpoint or for a tx spending this"
+                                         " outpoint (dspId: %s  outpoint: %s)\n",
+                         dsp.GetId().ToString(), dsp.outPoint().ToString());
+                return true;
+            }
             // NOTE: We must hold cs_main and pool.cs here to get a "transactional"
             // and consistent view of the mempool while we perform the validation
             // operation & add operations.
@@ -3644,11 +3654,14 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
                 g_mempool.doubleSpendProofStorage()->addOrphan(dsp, bannablePeerId);
                 break;
             case DoubleSpendProof::Invalid:
-            default:
-                throw std::runtime_error(strprintf("Proof didn't validate (%s)", dsp.GetId().ToString()));
+                failureReason = strprintf("Proof didn't validate (%s)", dsp.GetId().ToString());
+                break;
             }
         } catch (const std::exception &e) {
-            LogPrint(BCLog::DSPROOF, "Failure handling double spend proof. Peer: %d Reason: %s\n", pfrom->GetId(), e.what());
+            failureReason = e.what();
+        }
+        if (failureReason) {
+            LogPrint(BCLog::DSPROOF, "Failure handling double spend proof. Peer: %d Reason: %s\n", pfrom->GetId(), *failureReason);
             if (!dsp.GetId().IsNull())
                 g_mempool.doubleSpendProofStorage()->markProofRejected(dsp.GetId());
             if (bannablePeerId > -1) {

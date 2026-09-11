@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2020-2021 The Bitcoin Cash Node developers
+# Copyright (c) 2020-present The Bitcoin Cash Node developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """ Test for the DoubleSpend Proof facility """
@@ -10,7 +10,7 @@ from decimal import Decimal
 from test_framework.address import base58_to_byte
 from test_framework.blocktools import create_raw_transaction, create_tx_with_script
 from test_framework.key import ECKey
-from test_framework.messages import CTransaction, FromHex, ToHex, COIN, msg_mempool
+from test_framework.messages import CTransaction, FromHex, ToHex, COIN, msg_mempool, msg_dsproof
 from test_framework.p2p import P2PInterface, p2p_lock
 from test_framework.script import CScript, OP_TRUE, OP_FALSE, SignatureHashForkIdFromValues
 from test_framework.test_framework import BitcoinTestFramework
@@ -129,6 +129,9 @@ class DoubleSpendProofTest(BitcoinTestFramework):
         dsp = dspReceiver.last_message["dsproof-beta"].dsproof
         dsp_other = dspReceiver2.last_message["dsproof-beta"].dsproof
         assert_equal(dsp.serialize().hex(), dsp_other.serialize().hex())
+        # Check that the node complains in the log if given a dsp it already knows about
+        with self.nodes[0].assert_debug_log(expected_msgs=["a DSP already exists for this outpoint"], timeout=10):
+            dspReceiver.send_message(msg_dsproof(dsp))
         dsps = set()
         dsps.add(dsp.serialize())
 

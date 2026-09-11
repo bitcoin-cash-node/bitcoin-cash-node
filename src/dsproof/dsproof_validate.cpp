@@ -2,7 +2,7 @@
 // Copyright (C) 2020 Calin Culianu <calin.culianu@gmail.com>
 // Copyright (C) 2021 Fernando Pelliccioni <fpelliccioni@gmail.com>
 // Copyright (C) 2022 The Bitcoin developers
-// Copyright (c) 2021-2024 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -116,6 +116,14 @@ auto DoubleSpendProof::validate(const CTxMemPool &mempool, CTransactionRef spend
     const CTxOut &txOut = coin.GetTxOut();
     const CScript &prevOutScript = coin.GetTxOut().scriptPubKey;
 
+    if (!prevOutScript.IsPayToPubKeyHash()) {
+        /*
+         * TomZ: At this point (2019-07) we only support P2PKH payments.
+         */
+        LogPrint(BCLog::DSPROOF, "DoubleSpendProof failed validation: not a P2PKH input\n");
+        return Invalid;
+    }
+
     /*
      * Find the matching transaction spending this. Possibly identical to one
      * of the sides of this DSP.
@@ -129,15 +137,6 @@ auto DoubleSpendProof::validate(const CTxMemPool &mempool, CTransactionRef spend
         spendingTx = mempool.get(it->second->GetId());
     }
     assert(bool(spendingTx));
-
-    /*
-     * TomZ: At this point (2019-07) we only support P2PKH payments.
-     *
-     * Since we have an actually spending tx, we could trivially support various other
-     * types of scripts because all we need to do is replace the signature from our 'tx'
-     * with the one that comes from the DSP.
-     */
-    const txnouttype scriptType = TX_PUBKEYHASH; // FUTURE: look at prevTx to find out script-type
 
     std::vector<uint8_t> pubkey;
     for (const auto &vin : spendingTx->vin) {
@@ -156,10 +155,8 @@ auto DoubleSpendProof::validate(const CTxMemPool &mempool, CTransactionRef spend
         return Invalid;
 
     CScript inScript;
-    if (scriptType == TX_PUBKEYHASH) {
-        inScript << m_spender1.pushData.front();
-        inScript << pubkey;
-    }
+    inScript << m_spender1.pushData.front();
+    inScript << pubkey;
     DSPSignatureChecker checker1(this, m_spender1, txOut);
     ScriptError error;
     ScriptExecutionMetrics metrics; // dummy
@@ -170,10 +167,8 @@ auto DoubleSpendProof::validate(const CTxMemPool &mempool, CTransactionRef spend
     }
 
     inScript.clear();
-    if (scriptType == TX_PUBKEYHASH) {
-        inScript << m_spender2.pushData.front();
-        inScript << pubkey;
-    }
+    inScript << m_spender2.pushData.front();
+    inScript << pubkey;
     DSPSignatureChecker checker2(this, m_spender2, txOut);
     if ( ! VerifyScript(inScript, prevOutScript, scriptFlags, checker2, metrics, &error)) {
         LogPrint(BCLog::DSPROOF, "DoubleSpendProof failed validating second tx due to %s\n", ScriptErrorString(error));

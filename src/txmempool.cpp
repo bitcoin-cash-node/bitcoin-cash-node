@@ -987,6 +987,18 @@ auto CTxMemPool::getDoubleSpendProof(const COutPoint &outpoint, DspDescendants *
     return ret;
 }
 
+bool CTxMemPool::hasDoubleSpendProof(const COutPoint &outpoint) const {
+    LOCK(cs);
+    if (auto it = mapNextTx.find(outpoint); it != mapNextTx.end()) {
+        // Outpoint is spent by a tx we have, see if it has a proof
+        const auto &txId = it->second->GetId();
+        auto it2 = mapTx.find(txId);
+        assert(it2 != mapTx.end());
+        return it2->HasDsp();
+    }
+    // else, we lack a spending tx so no proof
+    return false;
+}
 
 CFeeRate CTxMemPool::GetMinFee(size_t sizelimit) const {
     LOCK(cs);
