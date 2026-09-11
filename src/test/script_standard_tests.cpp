@@ -51,7 +51,7 @@ BOOST_FIXTURE_TEST_SUITE(script_standard_tests, BasicTestingSetup)
 
 BOOST_AUTO_TEST_CASE(script_standard_Solver_success) {
     using P = std::pair<bool, bool>;
-    for (const auto [enable_p2sh_32, enable_p2s] : {P{false, false}, P{false, true}, P{true, false}, P{true, true}}) {
+    for (const auto & [enable_p2sh_32, enable_p2s] : {P{false, false}, P{false, true}, P{true, false}, P{true, true}}) {
         uint32_t flags = enable_p2sh_32 ? STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32
                                         : STANDARD_SCRIPT_VERIFY_FLAGS & ~SCRIPT_ENABLE_P2SH_32;
         if (enable_p2s) {
