@@ -4,13 +4,20 @@
 
 #include <blockvalidity.h>
 #include <chain.h>
+#include <consensus/abla.h>
+#include <streams.h>
 #include <uint256.h>
+#include <util/strencodings.h>
 
 #include <test/setup_common.h>
 
 #include <boost/test/unit_test.hpp>
 
+#include <algorithm>
+#include <cstdint>
 #include <limits>
+#include <optional>
+#include <vector>
 
 BOOST_FIXTURE_TEST_SUITE(blockindex_tests, BasicTestingSetup)
 
@@ -418,6 +425,135 @@ BOOST_AUTO_TEST_CASE(index_ancestors) {
             BOOST_CHECK(ancestor->nHeight == (indexes[i].nHeight - 37));
         }
     }
+}
+
+BOOST_AUTO_TEST_CASE(abla_state_packing) {
+    const auto u64max = std::numeric_limits<uint64_t>::max();
+    const uint64_t maxPackable = u64max >> 1;
+
+    CBlockIndex index;
+    BOOST_CHECK(!index.GetAblaStateOpt());
+
+    // A state survives the packed representation unchanged. blockSize gets one bit fewer than
+    // the other two members, since the engaged flag steals one. Descending order so that a
+    // store which fails to clear bits set by the previous one is visible here.
+    for (const uint64_t blockSize : {maxPackable, uint64_t(1000), uint64_t(0)}) {
+        const auto state = abla::State::FromTuple({blockSize, u64max, u64max});
+        index.SetAblaStateOpt(state);
+        const auto readBack = index.GetAblaStateOpt();
+        BOOST_REQUIRE(readBack);
+        BOOST_CHECK_EQUAL(readBack->GetBlockSize(), blockSize);
+        BOOST_CHECK_EQUAL(readBack->GetControlBlockSize(), u64max);
+        BOOST_CHECK_EQUAL(readBack->GetElasticBufferSize(), u64max);
+        BOOST_CHECK(*readBack == state);
+    }
+
+    // The engaged flag is distinct from a zeroed state: both must be representable.
+    index.SetAblaStateOpt(abla::State{});
+    BOOST_REQUIRE(index.GetAblaStateOpt());
+    BOOST_CHECK(*index.GetAblaStateOpt() == abla::State{});
+    index.SetAblaStateOpt(std::nullopt);
+    BOOST_CHECK(!index.GetAblaStateOpt());
+
+    // GetAblaStateOr must not evaluate the fallback when a state is present: its only caller
+    // reads a block from disk in that lambda.
+    const auto fallback = abla::State::FromTuple({7, 7, 7});
+    size_t calls = 0;
+    const auto countingFallback = [&] { ++calls; return fallback; };
+    BOOST_CHECK(index.GetAblaStateOr(countingFallback) == fallback);
+    BOOST_CHECK_EQUAL(calls, 1u);
+    const auto real = abla::State::FromTuple({1, 2, 3});
+    index.SetAblaStateOpt(real);
+    BOOST_CHECK(index.GetAblaStateOr(countingFallback) == real);
+    BOOST_CHECK_EQUAL(calls, 1u);
+
+    // CanPack is the boundary the serialization code relies on.
+    BOOST_CHECK(AblaStateMixin::CanPack(std::nullopt));
+    BOOST_CHECK(AblaStateMixin::CanPack(abla::State::FromTuple({maxPackable, 0, 0})));
+    BOOST_CHECK(!AblaStateMixin::CanPack(abla::State::FromTuple({maxPackable + 1, 0, 0})));
+}
+
+BOOST_AUTO_TEST_CASE(abla_state_disk_serialization) {
+    CBlockIndex index;
+    index.nHeight = 700000;
+    index.nStatus = index.nStatus.withData().withUndo();
+    index.nTx = 5;
+    index.nFile = 1;
+    index.nDataPos = 123;
+    index.nUndoPos = 456;
+    index.nVersion = 4;
+    index.nTime = 1700000000;
+    index.nBits = 0x1d00ffff;
+    index.nNonce = 42;
+    const auto state = abla::State::FromTuple({1000, 32000000, 1000000});
+    index.SetAblaStateOpt(state);
+
+    CDataStream ss(SER_DISK, CLIENT_VERSION);
+    ss << CDiskBlockIndex(&index);
+
+    // Sanity: a well-formed record round-trips.
+    {
+        CDataStream in(ss);
+        CDiskBlockIndex read;
+        in >> read;
+        BOOST_REQUIRE(read.GetAblaStateOpt());
+        BOOST_CHECK(*read.GetAblaStateOpt() == state);
+    }
+
+    // Splice in a state whose blockSize does not fit the packed representation, as disk
+    // corruption could produce. Serializing it directly is fine: only the CBlockIndex setter
+    // packs. This assumes the abla state is the last thing CDiskBlockIndex writes; if a field
+    // is ever appended after it, the tail check below is what will complain.
+    const auto unpackable = abla::State::FromTuple({uint64_t(1) << 63, 32000000, 1000000});
+    BOOST_REQUIRE(!AblaStateMixin::CanPack(unpackable));
+    CDataStream goodTailStream(SER_DISK, CLIENT_VERSION), badTailStream(SER_DISK, CLIENT_VERSION);
+    goodTailStream << std::optional<abla::State>{state};
+    badTailStream << std::optional<abla::State>{unpackable};
+    const std::vector<uint8_t> goodTail(goodTailStream.begin(), goodTailStream.end());
+    const std::vector<uint8_t> badTail(badTailStream.begin(), badTailStream.end());
+
+    std::vector<uint8_t> bytes(ss.begin(), ss.end());
+    BOOST_REQUIRE_GT(bytes.size(), goodTail.size());
+    const auto tailBegin = bytes.end() - goodTail.size();
+    BOOST_TEST_INFO("record tail " << HexStr(tailBegin, bytes.end())
+                    << ", expected abla state " << HexStr(goodTail));
+    BOOST_REQUIRE_MESSAGE(std::equal(goodTail.begin(), goodTail.end(), tailBegin),
+                          "the abla state is no longer the last field of CDiskBlockIndex");
+    bytes.resize(bytes.size() - goodTail.size());
+    bytes.insert(bytes.end(), badTail.begin(), badTail.end());
+
+    // Must be reported as a stream failure, which callers turn into "Error loading block
+    // database", rather than tripping an assert or silently truncating blockSize.
+    CDataStream corrupt(bytes, SER_DISK, CLIENT_VERSION);
+    CDiskBlockIndex read;
+    BOOST_CHECK_EXCEPTION(corrupt >> read, std::ios_base::failure,
+                          HasReason("exceeds packed representation"));
+}
+
+BOOST_AUTO_TEST_CASE(abla_state_truncated_record) {
+    // A record that ends before the abla state is tolerated and read as "no state", which is
+    // how block indices written before the field existed are loaded.
+    CBlockIndex index;
+    index.nHeight = 42;
+    index.nTx = 1;
+    index.nVersion = 4;
+    index.nTime = 1700000000;
+    index.nBits = 0x1d00ffff;
+    index.SetAblaStateOpt(abla::State::FromTuple({1000, 32000000, 1000000}));
+
+    CDataStream ss(SER_DISK, CLIENT_VERSION);
+    ss << CDiskBlockIndex(&index);
+
+    CDataStream tailStream(SER_DISK, CLIENT_VERSION);
+    tailStream << index.GetAblaStateOpt();
+    std::vector<uint8_t> bytes(ss.begin(), ss.end());
+    BOOST_REQUIRE_GT(bytes.size(), tailStream.size());
+    bytes.resize(bytes.size() - tailStream.size());
+
+    CDataStream truncated(bytes, SER_DISK, CLIENT_VERSION);
+    CDiskBlockIndex read;
+    BOOST_CHECK_NO_THROW(truncated >> read);
+    BOOST_CHECK(!read.GetAblaStateOpt());
 }
 
 BOOST_AUTO_TEST_SUITE_END()
