@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -20,6 +20,7 @@
 #include <uint256.h>
 
 #include <atomic>
+#include <cassert>
 #include <ios>
 #include <string_view>
 #include <type_traits>
@@ -55,7 +56,7 @@ static constexpr int64_t MAX_BLOCK_TIME_GAP = 90 * 60;
  */
 class AblaStateMixin {
     struct PackedState {
-        bool engaged : 1;
+        uint64_t engaged : 1; ///< this should be `bool` but on win32 you lose the packing if types change
         uint64_t blockSize : 63; ///< 2^63 is more than we will ever need, since consensus clamps at ~2^31
         uint64_t controlBlockSize;
         uint64_t elasticBufferSize;
@@ -74,13 +75,17 @@ class AblaStateMixin {
             return ret;
         }
 
+        /// Returns false iff state.GetBlockSize() has bit 63 (highest order bit) set, true otherwise
+        static bool canPack(const abla::State &state) noexcept {
+            return 0 == state.GetBlockSize() >> 63;
+        }
+
         static PackedState pack(const std::optional<abla::State> &o) noexcept {
             PackedState r;
             if (o.has_value()) {
+                assert(canPack(*o) && "INTERNAL ERROR: blockSize has bit 63 set"); /* detect truncation */
                 r.engaged = true;
-                const uint64_t blockSize = o->GetBlockSize();
-                assert(0 == (blockSize >> 63) && "INTERNAL ERROR: blockSize has bit 64 set"); /* detect truncation */
-                r.blockSize = blockSize;
+                r.blockSize = o->GetBlockSize();
                 r.controlBlockSize = o->GetControlBlockSize();
                 r.elasticBufferSize = o->GetElasticBufferSize();
             } else {
@@ -91,6 +96,8 @@ class AblaStateMixin {
     };
     static_assert(std::is_trivially_default_constructible_v<PackedState> && std::is_trivially_copyable_v<PackedState>,
                   "Paranoia extra constraints for std::atomic to guarantee POD-ness");
+    // this assert needed to catch regressions when building for win32
+    static_assert(sizeof(PackedState) == 24, "PackedState must be exactly 3 64-bit words");
 
     std::atomic<PackedState> atomicPacked;
 
@@ -118,6 +125,10 @@ public:
 
     void SetAblaStateOpt(const std::optional<abla::State> &s) {
         atomicPacked.store(PackedState::pack(s));
+    }
+
+    static bool CanPack(const std::optional<abla::State> &o) noexcept {
+        return !o || PackedState::canPack(*o);
     }
 };
 
@@ -459,7 +470,13 @@ public:
                 // otherwise, tolerate end-of-data on reading; reset the optional
                 ablaStateOpt.reset();
             }
-            SER_READ(obj, obj.SetAblaStateOpt(ablaStateOpt));
+            SER_READ(obj, {
+                if (!AblaStateMixin::CanPack(ablaStateOpt)) [[unlikely]] {
+                    // Paranoia: Branch can only be taken if there is some unlikely leveldb bitrot on blockSize bit 63
+                    throw std::ios_base::failure("abla::State::blockSize exceeds packed representation");
+                }
+                obj.SetAblaStateOpt(ablaStateOpt);
+            });
         } else {
             // old serialized data, indicate missing data.
             SER_READ(obj, obj.SetAblaStateOpt(std::nullopt));
