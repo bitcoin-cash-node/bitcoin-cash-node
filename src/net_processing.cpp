@@ -1240,10 +1240,12 @@ void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRe
     bool send = false;
     std::shared_ptr<const CBlock> a_recent_block;
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> a_recent_compact_block;
+    BlockHash a_recent_block_hash{BlockHash::Uninitialized};
     {
         LOCK(cs_most_recent_block);
         a_recent_block = most_recent_block;
         a_recent_compact_block = most_recent_compact_block;
+        a_recent_block_hash = most_recent_block_hash;
     }
 
     bool need_activate_chain = false;
@@ -1323,8 +1325,7 @@ void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRe
     // before trying to send.
     if (send && pindex->nStatus.hasData()) {
         std::shared_ptr<const CBlock> pblock;
-        if (a_recent_block &&
-            a_recent_block->GetHash() == pindex->GetBlockHash()) {
+        if (a_recent_block && a_recent_block_hash == pindex->GetBlockHash()) {
             pblock = a_recent_block;
         }
 
