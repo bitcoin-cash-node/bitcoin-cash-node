@@ -645,6 +645,10 @@ target_link_libraries(server
   memenv
 )
 
+# Server lib may require -latomic on GCC (on clang nothing is added here)
+find_package(Atomic REQUIRED)
+target_link_libraries(server ${ATOMIC_LIBRARIES})
+
 if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   find_package(Event ${EVENT_MIN_VERSION} REQUIRED COMPONENTS pthreads)
   target_link_libraries(server Event::pthreads)
