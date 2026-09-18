@@ -171,7 +171,8 @@ public:
     bool ConnectBlock(const CBlock &block, CValidationState &state,
                       CBlockIndex *pindex, CCoinsViewCache &view,
                       const CChainParams &params,
-                      BlockValidationOptions options, bool fJustCheck = false)
+                      BlockValidationOptions options, bool fJustCheck = false,
+                      uint64_t *pBlockSize = nullptr)
         EXCLUSIVE_LOCKS_REQUIRED(cs_main);
 
     // Block disconnection on our pcoinsTip:
@@ -1643,11 +1644,9 @@ static int64_t nBlocksTotal = 0;
  * done; ConnectBlock() can fail if those validity checks fail (among other
  * reasons).
  */
-bool CChainState::ConnectBlock(const CBlock &block, CValidationState &state,
-                               CBlockIndex *pindex, CCoinsViewCache &view,
-                               const CChainParams &params,
-                               BlockValidationOptions options,
-                               bool fJustCheck) {
+bool CChainState::ConnectBlock(const CBlock &block, CValidationState &state, CBlockIndex *pindex, CCoinsViewCache &view,
+                               const CChainParams &params, BlockValidationOptions options, bool fJustCheck,
+                               uint64_t *pBlockSize) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     AssertLockHeld(cs_main);
     assert(pindex);
     assert(*pindex->phashBlock == block.GetHash());
@@ -1688,6 +1687,9 @@ bool CChainState::ConnectBlock(const CBlock &block, CValidationState &state,
         return error("%s: CheckBlockSize: %s", __func__, FormatStateMessage(state));
     }
     assert(nThisBlockSize != 0);
+    if (pBlockSize) {
+        *pBlockSize = nThisBlockSize;
+    }
 
     // Verify that the view's current state corresponds to the previous block
     BlockHash hashPrevBlock =
@@ -2194,7 +2196,7 @@ void PruneAndFlush() {
 }
 
 /// Does some book-keeping when a tip changes and calls config.NotifyMaxBlockSizeLookAheadGuessChanged()
-static void TipChanged(const ::Config &config, const CBlockIndex *pindexNew) {
+static void TipChanged(const ::Config &config, const CBlockIndex *pindexNew, uint64_t blockSize = 0) {
     Tic t0;
     if (!pindexNew) {
         // NB: This branch is normally only taken by UnloadBlockIndex()
@@ -2210,9 +2212,10 @@ static void TipChanged(const ::Config &config, const CBlockIndex *pindexNew) {
     const abla::State ablaState = pindexNew->GetAblaStateOr([&]{
         // If this lambda is called, no ABLA state for this tip (not activated yet). Build a default ABLA state based on
         // the current block's size, etc (tolerating failure of ReadBlockSizeFromDisk() for defensive programming).
-        return abla::State(consensusParams.ablaConfig,
-                           ReadBlockSizeFromDisk(pindexNew, params)
-                               .value_or(config.GetDefaultConsensusBlockSize()));
+        if (!blockSize) {
+            blockSize = ReadBlockSizeFromDisk(pindexNew, params).value_or(config.GetDefaultConsensusBlockSize());
+        }
+        return abla::State(consensusParams.ablaConfig, blockSize);
     });
 
     // This is a worst-case guess as to how much the max blocksize can grow in the next 2048 blocks. Note we only
@@ -2230,13 +2233,13 @@ static void TipChanged(const ::Config &config, const CBlockIndex *pindexNew) {
 }
 
 /** Check warning conditions and do some notifications on new chain tip set. */
-static void UpdateTip(const Config &config, CBlockIndex *pindexNew)
+static void UpdateTip(const Config &config, CBlockIndex *pindexNew, uint64_t blockSizeIfKnown = 0)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
 
     const CChainParams &params = config.GetChainParams();
 
     // Tell rest of codebase (in particular ABLA) about new tip
-    TipChanged(config, pindexNew);
+    TipChanged(config, pindexNew, blockSizeIfKnown);
 
     // New best block
     g_mempool.AddTransactionsUpdated(1);
@@ -2545,10 +2548,11 @@ bool CChainState::ConnectTip(const Config &config, CValidationState &state,
     int64_t nTime3;
     LogPrint(BCLog::BENCH, "  - Load block from disk: %.2fms [%.2fs]\n",
              (nTime2 - nTime1) * MILLI, nTimeReadFromDisk * MICRO);
+    uint64_t blockSize = 0;
     {
         CCoinsViewCache view(pcoinsTip.get());
-        bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, params,
-                               BlockValidationOptions(config));
+        bool rv = ConnectBlock(blockConnecting, state, pindexNew, view, params, BlockValidationOptions(config),
+                               /* fJustCheck = */ false, &blockSize);
         GetMainSignals().BlockChecked(blockConnecting, state);
         if (!rv) {
             if (state.IsInvalid()) {
@@ -2624,7 +2628,7 @@ bool CChainState::ConnectTip(const Config &config, CValidationState &state,
 
     // Update m_chain & related variables.
     m_chain.SetTip(pindexNew);
-    UpdateTip(config, pindexNew);
+    UpdateTip(config, pindexNew, blockSize);
 
     int64_t nTime6 = GetTimeMicros();
     nTimePostConnect += nTime6 - nTime5;
