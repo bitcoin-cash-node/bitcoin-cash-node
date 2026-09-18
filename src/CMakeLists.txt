@@ -645,9 +645,12 @@ target_link_libraries(server
   memenv
 )
 
-# Server lib may require -latomic on GCC (on clang nothing is added here)
+# std::atomic<PackedState> in chain.h is not lock-free, so GCC needs libatomic.
+# Nothing is required on clang, in which case no target is defined.
 find_package(Atomic REQUIRED)
-target_link_libraries(server ${ATOMIC_LIBRARIES})
+if(TARGET Atomic::Atomic)
+  target_link_libraries(server Atomic::Atomic)
+endif()
 
 if(NOT ${CMAKE_SYSTEM_NAME} MATCHES "Windows")
   find_package(Event ${EVENT_MIN_VERSION} REQUIRED COMPONENTS pthreads)
