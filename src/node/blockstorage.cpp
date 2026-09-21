@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2021 The Bitcoin Core developers
-// Copyright (c) 2024-2025 The Bitcoin developers
+// Copyright (c) 2024-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -24,6 +24,7 @@
 #include <validation.h>
 
 #include <limits>
+#include <utility>
 
 std::atomic_bool fImporting(false);
 std::atomic_bool fReindex(false);
@@ -111,8 +112,18 @@ CBlockFileInfo *GetBlockFileInfo(size_t n) {
     return &vinfoBlockFile.at(n);
 }
 
+namespace {
+// Constants needed later in this file but appearing here to be close to the logic they represent (in UndoWriteToDisk())
+namespace detail {
+constexpr size_t kUndoHeaderSize = CMessageHeader::MessageMagic{}.size() + sizeof(unsigned);
+constexpr size_t kUndoFooterSize = uint256::size();
+} // detail
+constexpr size_t kUndoExtraSpaceNeeded = detail::kUndoHeaderSize + detail::kUndoFooterSize;
+static_assert(kUndoExtraSpaceNeeded == 40, "Unexpected undo file format change");
+} // namespace
+
 static bool UndoWriteToDisk(const CBlockUndo &blockundo, FlatFilePos &pos,
-                            const BlockHash &hashBlock,
+                            const BlockHash &hashBlock, const unsigned nSize,
                             const CMessageHeader::MessageMagic &messageStart) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     // Open history file to append
     CAutoFile fileout(OpenUndoFile(pos), SER_DISK, CLIENT_VERSION);
@@ -121,9 +132,6 @@ static bool UndoWriteToDisk(const CBlockUndo &blockundo, FlatFilePos &pos,
     }
 
     // Write index header
-    size_t zSize;
-    unsigned int nSize = zSize = GetSerializeSize(blockundo, fileout.GetVersion());
-    assert(zSize == nSize && "Overflow check failed");
     fileout << messageStart << nSize;
 
     // Write undo data
@@ -318,7 +326,13 @@ static bool FindUndoPos(CValidationState &state, int nFile, FlatFilePos &pos,
     return true;
 }
 
-static bool WriteBlockToDisk(const CBlock &block, FlatFilePos &pos,
+namespace {
+// Constant needed later in this file but appearing here to be close to the logic it represents (in WriteBlockToDisk())
+constexpr size_t kBlockExtraSpaceNeeded = CMessageHeader::MessageMagic{}.size() + sizeof(unsigned);
+static_assert(kBlockExtraSpaceNeeded == 8, "Unexpected block file format change");
+} // namespace
+
+static bool WriteBlockToDisk(const CBlock &block, FlatFilePos &pos, const unsigned nSize,
                              const CMessageHeader::MessageMagic &messageStart) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     // Open history file to append
     CAutoFile fileout(OpenBlockFile(pos), SER_DISK, CLIENT_VERSION);
@@ -327,9 +341,6 @@ static bool WriteBlockToDisk(const CBlock &block, FlatFilePos &pos,
     }
 
     // Write index header
-    size_t zSize;
-    unsigned int nSize = zSize = GetSerializeSize(block, fileout.GetVersion());
-    assert(zSize == nSize && "Overflow check failed");
     fileout << messageStart << nSize;
 
     // Write block
@@ -353,18 +364,21 @@ bool WriteUndoDataForBlock(const CBlockUndo &blockundo, CValidationState &state,
                            const CChainParams &chainparams) EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
     // Write undo information to disk
     if (pindex->GetUndoPos().IsNull()) {
-        FlatFilePos _pos;
-        if (!FindUndoPos(state, pindex->nFile, _pos,
-                         ::GetSerializeSize(blockundo, CLIENT_VERSION) + 40)) {
+        const size_t nSize = ::GetSerializeSize(blockundo, CLIENT_VERSION);
+        const size_t spaceNeeded = nSize + kUndoExtraSpaceNeeded;
+        // Must assert the below to prevent overflow for both FindUndoPos() and UndoWriteToDisk() which use unsigned int
+        assert(std::in_range<unsigned>(spaceNeeded) && spaceNeeded >= nSize && "Overflow check failed");
+
+        FlatFilePos pos;
+        if (!FindUndoPos(state, pindex->nFile, pos, spaceNeeded)) {
             return error("ConnectBlock(): FindUndoPos failed");
         }
-        if (!UndoWriteToDisk(blockundo, _pos, pindex->pprev->GetBlockHash(),
-                             chainparams.DiskMagic())) {
+        if (!UndoWriteToDisk(blockundo, pos, pindex->pprev->GetBlockHash(), nSize, chainparams.DiskMagic())) {
             return AbortNode(state, "Failed to write undo data");
         }
 
         // update nUndoPos in block index
-        pindex->nUndoPos = _pos.nPos;
+        pindex->nUndoPos = pos.nPos;
         pindex->nStatus = pindex->nStatus.withUndo();
         setDirtyBlockIndex.insert(pindex);
     }
@@ -543,20 +557,20 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t> &rawBlock, const CBlockIndex *pin
 
 FlatFilePos SaveBlockToDisk(const CBlock &block, int nHeight, const CChainParams &chainparams, const FlatFilePos *dbp)
     EXCLUSIVE_LOCKS_REQUIRED(cs_main) {
-    size_t zBlockSize;
-    unsigned int nBlockSize = zBlockSize = ::GetSerializeSize(block, CLIENT_VERSION);
-    assert(zBlockSize == nBlockSize && "Overflow check failed");
+    const size_t blockSize = ::GetSerializeSize(block, CLIENT_VERSION);
+    const size_t spaceNeeded = blockSize + kBlockExtraSpaceNeeded;
+    // Must assert the below to prevent overflow for both FindBlockPos() and WriteBlockToDisk() which use unsigned int
+    assert(std::in_range<unsigned>(spaceNeeded) && spaceNeeded >= blockSize && "Overflow check failed");
     FlatFilePos blockPos;
     if (dbp != nullptr) {
         blockPos = *dbp;
     }
-    if (!FindBlockPos(blockPos, nBlockSize + 8, nHeight, block.GetBlockTime(),
-                      dbp != nullptr)) {
+    if (!FindBlockPos(blockPos, spaceNeeded, nHeight, block.GetBlockTime(), dbp != nullptr)) {
         error("%s: FindBlockPos failed", __func__);
         return FlatFilePos();
     }
     if (dbp == nullptr) {
-        if (!WriteBlockToDisk(block, blockPos, chainparams.DiskMagic())) {
+        if (!WriteBlockToDisk(block, blockPos, blockSize, chainparams.DiskMagic())) {
             AbortNode("Failed to write block");
             return FlatFilePos();
         }
