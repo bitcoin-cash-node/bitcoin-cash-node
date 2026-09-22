@@ -69,7 +69,9 @@ class PeerLogicValidation final : public CValidationInterface, public NetEventsI
     size_t m_vExtraTxnForCompactIt GUARDED_BY(cs_main) = 0;
     std::vector<std::pair<TxHash, CTransactionRef>> m_vExtraTxnForCompact GUARDED_BY(cs_main);
 
-    // All of the following cache a recent block, and are protected by cs_most_recent_block
+    // All of the following cache a recent block, and are protected by cs_most_recent_block.
+    // They are written together in NewPoWValidBlock and are always mutually consistent: a non-null
+    // most_recent_compact_block always describes most_recent_block and most_recent_block_hash.
     mutable RecursiveMutex cs_most_recent_block;
     std::shared_ptr<const CBlock> most_recent_block GUARDED_BY(cs_most_recent_block);
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> most_recent_compact_block GUARDED_BY(cs_most_recent_block);
