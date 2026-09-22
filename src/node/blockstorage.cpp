@@ -219,10 +219,20 @@ uint64_t CalculateCurrentUsage() {
 
 void UnlinkPrunedFiles(const std::set<int> &setFilesToPrune) {
     for (const int i : setFilesToPrune) {
-        FlatFilePos pos(i, 0);
-        fs::remove(BlockFileSeq().FileName(pos));
-        fs::remove(UndoFileSeq().FileName(pos));
-        LogPrintf("Prune: %s deleted blk/rev (%05u)\n", __func__, i);
+        try {
+            FlatFilePos pos(i, 0);
+            fs::remove(BlockFileSeq().FileName(pos));
+            fs::remove(UndoFileSeq().FileName(pos));
+            LogPrintf("Prune: %s deleted blk/rev (%05u)\n", __func__, i);
+        } catch (const std::exception &e) {
+            // This can happen on win32, where if another proces (or this process!) has one of these files open without
+            // the FILE_SHARE_DELETE flag, in which case deletion is forbidden and so boost and/or std filesystem may
+            // throw here.  Also can happen on Unix in the unlikely event that the user chmod'ed the files in question.
+            // Won't ever happen if the files do not exist. We tolerate this error but log the situation, since if we
+            // didn't catch this exception here, it would abort the node, which is a worse condition.
+            LogPrintf("Prune: %s failed to delete blk/rev (%05u), please delete these files manually. Error: %s\n",
+                      __func__, i, e.what());
+        }
     }
 }
 
