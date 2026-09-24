@@ -1406,10 +1406,18 @@ void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRe
                 if (CanDirectFetch(consensusParams) &&
                     pindex->nHeight >=
                         ::ChainActive().Height() - MAX_CMPCTBLOCK_DEPTH) {
-                    CBlockHeaderAndShortTxIDs cmpctblock(ensure_pblock());
-                    connman->PushMessage(
-                        pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK,
-                                            cmpctblock));
+                    if (a_recent_compact_block && a_recent_block_hash == pindex->GetBlockHash()) {
+                        // The requested block is the one we cached on arrival, so reuse
+                        // its short txids rather than recomputing them per peer.
+                        connman->PushMessage(
+                            pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK,
+                                                 *a_recent_compact_block));
+                    } else {
+                        CBlockHeaderAndShortTxIDs cmpctblock(ensure_pblock());
+                        connman->PushMessage(
+                            pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK,
+                                                 cmpctblock));
+                    }
                 } else {
                     connman->PushMessage(pfrom, make_raw_block_message());
                 }
@@ -4328,13 +4336,11 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
                 bool fGotBlockFromCache = false;
                 {
                     LOCK(cs_most_recent_block);
-                    if (most_recent_block_hash == pBestIndex->GetBlockHash()) {
-                        CBlockHeaderAndShortTxIDs cmpctblock(
-                            *most_recent_block);
+                    if (most_recent_compact_block && most_recent_block_hash == pBestIndex->GetBlockHash()) {
                         connman->PushMessage(
                             pto,
                             msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK,
-                                          cmpctblock));
+                                          *most_recent_compact_block));
                         fGotBlockFromCache = true;
                     }
                 }

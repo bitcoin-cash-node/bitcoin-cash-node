@@ -351,6 +351,7 @@ class CompactBlocksTest(BitcoinTestFramework):
             # Convert the on-the-wire representation to absolute indexes
             header_and_shortids = HeaderAndShortIDs(
                 test_node.last_message["cmpctblock"].header_and_shortids)
+        announced_nonce = header_and_shortids.nonce
         self.check_compactblock_construction_from_block(
             header_and_shortids, block_hash, block)
 
@@ -370,6 +371,9 @@ class CompactBlocksTest(BitcoinTestFramework):
             # Convert the on-the-wire representation to absolute indexes
             header_and_shortids = HeaderAndShortIDs(
                 test_node.last_message["cmpctblock"].header_and_shortids)
+        # The getdata response must be the very object announced earlier, not a
+        # freshly built one: same block, same nonce.
+        assert_equal(header_and_shortids.nonce, announced_nonce)
         self.check_compactblock_construction_from_block(
             header_and_shortids, block_hash, block)
 
@@ -699,6 +703,12 @@ class CompactBlocksTest(BitcoinTestFramework):
         test_node.send_message(msg_getdata([CInv(MSG_CMPCT_BLOCK, int(new_blocks[0], 16))]))
         wait_until(lambda: "cmpctblock" in test_node.last_message,
                    timeout=30, lock=p2p_lock)
+        # The cache holds the tip, so this in-window request must miss it and be
+        # built from the block actually asked for.
+        with p2p_lock:
+            served = test_node.last_message["cmpctblock"].header_and_shortids.header
+        served.calc_sha256()
+        assert_equal(served.sha256, int(new_blocks[0], 16))
 
         test_node.clear_block_announcement()
         self.generate(node, 1)
