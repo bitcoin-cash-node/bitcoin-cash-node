@@ -35,6 +35,7 @@
 
 #include <univalue.h>
 
+#include <algorithm>
 #include <map>
 #include <string>
 
@@ -344,7 +345,8 @@ static void CreateCreditAndSpend(const CKeyStore &keystore,
                                  const CScript &outscript,
                                  CTransactionRef &output,
                                  CMutableTransaction &input,
-                                 bool success = true) {
+                                 bool success = true,
+                                 bool schnorr = false) {
     CMutableTransaction outputm;
     outputm.nVersion = 1;
     outputm.vin.resize(1);
@@ -371,7 +373,7 @@ static void CreateCreditAndSpend(const CKeyStore &keystore,
 
     auto const context = std::nullopt;
     bool ret = SignSignature(keystore, *output, inputm, 0, SigHashType().withFork(), STANDARD_SCRIPT_VERIFY_FLAGS,
-                             context);
+                             context, schnorr);
 
     BOOST_CHECK_EQUAL(ret, success);
     CDataStream ssin(SER_NETWORK, PROTOCOL_VERSION);
@@ -436,18 +438,18 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
     key.MakeNewKey(false);
     CBasicKeyStore keystore;
     BOOST_CHECK(keystore.AddKeyPubKey(key, key.GetPubKey()));
-    CScript scriptPubKey = CScript()
-                           << key.GetPubKey() << OP_CHECKSIG;
+    CScript scriptPubKey = CScript() << key.GetPubKey() << OP_CHECKSIG;
 
     std::vector<SigHashType> sigHashes;
     sigHashes.emplace_back(SIGHASH_NONE | SIGHASH_FORKID);
     sigHashes.emplace_back(SIGHASH_SINGLE | SIGHASH_FORKID);
     sigHashes.emplace_back(SIGHASH_ALL | SIGHASH_FORKID);
-    sigHashes.emplace_back(SIGHASH_NONE | SIGHASH_FORKID |
-                           SIGHASH_ANYONECANPAY);
-    sigHashes.emplace_back(SIGHASH_SINGLE | SIGHASH_FORKID |
-                           SIGHASH_ANYONECANPAY);
+    sigHashes.emplace_back(SIGHASH_NONE | SIGHASH_FORKID | SIGHASH_ANYONECANPAY);
+    sigHashes.emplace_back(SIGHASH_SINGLE | SIGHASH_FORKID | SIGHASH_ANYONECANPAY);
     sigHashes.emplace_back(SIGHASH_ALL | SIGHASH_FORKID | SIGHASH_ANYONECANPAY);
+    sigHashes.emplace_back(SIGHASH_NONE | SIGHASH_FORKID | SIGHASH_UTXOS);
+    sigHashes.emplace_back(SIGHASH_SINGLE | SIGHASH_FORKID | SIGHASH_UTXOS);
+    sigHashes.emplace_back(SIGHASH_ALL | SIGHASH_FORKID | SIGHASH_UTXOS);
 
     CMutableTransaction mtx;
     mtx.nVersion = 1;
@@ -464,8 +466,7 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
 
     for (size_t ij = 0; ij < OUTPUT_COUNT; ij++) {
         size_t i = mtx.vin.size();
-        TxId prevId(uint256S("0000000000000000000000000000000000000000000000000"
-                             "000000000000100"));
+        TxId prevId(uint256S("0000000000000000000000000000000000000000000000000000000000000100"));
         const COutPoint outpoint(prevId, i);
 
         mtx.vin.emplace_back(outpoint, CScript());
@@ -474,17 +475,32 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
         mtx.vout.emplace_back(inOutAmt, CScript() << OP_1);
     }
 
+    const uint32_t scriptFlags = STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_TOKENS /* to enable SIGHASH_UTXOS */;
+
     auto contexts = ScriptExecutionContext::createForAllInputs(mtx, coins);
 
-    // sign all inputs
+    // Sign all inputs; exercising signing using either schnorr or ecdsa, and also cycling through various sighash types
+    std::map<uint32_t, size_t> ensureSigHashTypeCoverage;
+    std::map<bool, size_t> ensureSchnorrCoverage;
     for (size_t i = 0; i < mtx.vin.size(); ++i) {
-        bool hashSigned = SignSignature(keystore, scriptPubKey, mtx, i, CTxOut{inOutAmt, scriptPubKey},
-                                        sigHashes.at(i % sigHashes.size()), STANDARD_SCRIPT_VERIFY_FLAGS,
-                                        contexts.at(i));
-        BOOST_CHECK_MESSAGE(hashSigned, "Failed to sign test transaction");
+        const auto sigHashType = sigHashes.at(i % sigHashes.size());
+        const bool signSchnorr = InsecureRandBool();
+        const bool signedOk = SignSignature(keystore, scriptPubKey, mtx, i, CTxOut{inOutAmt, scriptPubKey},
+                                            sigHashType, scriptFlags, contexts.at(i), signSchnorr);
+        ++ensureSigHashTypeCoverage[sigHashType.getRawSigHashType()];
+        ++ensureSchnorrCoverage[signSchnorr];
+        BOOST_CHECK_MESSAGE(signedOk, "Failed to sign test transaction");
     }
+    // Sanity check -- check that the above loop covered all possibilities
+    BOOST_CHECK(ensureSchnorrCoverage.size() == 2);
+    BOOST_CHECK(std::all_of(ensureSchnorrCoverage.begin(), ensureSchnorrCoverage.end(),
+                            [](const auto &pair) { return pair.second > 0; }));
+    BOOST_CHECK(std::all_of(sigHashes.begin(), sigHashes.end(),
+                            [&ensureSigHashTypeCoverage](const SigHashType &sht){
+                                return ensureSigHashTypeCoverage[sht.getRawSigHashType()] > 0;
+                            }));
 
-    CTransaction tx(mtx);
+    const CTransaction tx{std::move(mtx)};
     contexts = ScriptExecutionContext::createForAllInputs(tx, coins); // generate contexts for this constant tx
     for (const auto& inp : tx.vin) {
         // ensure all coins present
@@ -501,11 +517,11 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
     for (size_t i = 0; i < tx.vin.size(); ++i) {
         if (!txdata.populated) txdata.PopulateFromContext(contexts.at(i));
         std::vector<CScriptCheck> vChecks;
-        vChecks.emplace_back(contexts.at(i), STANDARD_SCRIPT_VERIFY_FLAGS, false, txdata);
+        vChecks.emplace_back(contexts.at(i), scriptFlags, false, txdata);
         control.Add(vChecks);
     }
 
-    bool controlCheck = control.Wait();
+    const bool controlCheck = control.Wait();
     BOOST_CHECK(controlCheck);
 
     scriptcheckqueue.StopWorkerThreads();
@@ -513,7 +529,8 @@ BOOST_AUTO_TEST_CASE(test_big_transaction) {
 
 SignatureData CombineSignatures(const CMutableTransaction &input1,
                                 const CMutableTransaction &input2,
-                                const CTransactionRef tx, ScriptExecutionContextOpt context = {}) {
+                                const CTransactionRef tx, ScriptExecutionContextOpt context,
+                                const bool signSchnorr) {
     SignatureData sigdata;
     sigdata = DataFromTransaction(ScriptExecutionContext{0, tx->vout[0], input1}, STANDARD_SCRIPT_VERIFY_FLAGS);
     sigdata.MergeSignatureData(DataFromTransaction(ScriptExecutionContext{0, tx->vout[0], input2},
@@ -521,12 +538,13 @@ SignatureData CombineSignatures(const CMutableTransaction &input1,
 
     ProduceSignature(
         DUMMY_SIGNING_PROVIDER,
-        TransactionSignatureCreator(context.value_or(ScriptExecutionContext{0, tx->vout[0], input1})),
+        TransactionSignatureCreator(context.value_or(ScriptExecutionContext{0, tx->vout[0], input1}),
+                                    SigHashType{}, signSchnorr),
         tx->vout[0].scriptPubKey, sigdata, STANDARD_SCRIPT_VERIFY_FLAGS);
     return sigdata;
 }
 
-BOOST_AUTO_TEST_CASE(test_witness) {
+static void test_witness_inner(const bool schnorr) {
     CBasicKeyStore keystore, keystore2;
     CKey key1, key2, key3, key1L, key2L;
     CPubKey pubkey1, pubkey2, pubkey3, pubkey1L, pubkey2L;
@@ -544,8 +562,7 @@ BOOST_AUTO_TEST_CASE(test_witness) {
     BOOST_CHECK(keystore.AddKeyPubKey(key2, pubkey2));
     BOOST_CHECK(keystore.AddKeyPubKey(key1L, pubkey1L));
     BOOST_CHECK(keystore.AddKeyPubKey(key2L, pubkey2L));
-    CScript scriptPubkey1, scriptPubkey2, scriptPubkey1L, scriptPubkey2L,
-        scriptMulti;
+    CScript scriptPubkey1, scriptPubkey2, scriptPubkey1L, scriptPubkey2L, scriptMulti;
     scriptPubkey1 << pubkey1 << OP_CHECKSIG;
     scriptPubkey2 << pubkey2 << OP_CHECKSIG;
     scriptPubkey1L << pubkey1L << OP_CHECKSIG;
@@ -565,80 +582,88 @@ BOOST_AUTO_TEST_CASE(test_witness) {
     CTransactionRef output1, output2;
     CMutableTransaction input1, input2;
 
+    const uint32_t flags_p2sh_only = SCRIPT_VERIFY_P2SH | (schnorr ? SCRIPT_ENABLE_SCHNORR_MULTISIG : 0);
+
     // Normal pay-to-compressed-pubkey.
-    CreateCreditAndSpend(keystore, scriptPubkey1, output1, input1);
-    CreateCreditAndSpend(keystore, scriptPubkey2, output2, input2);
+    CreateCreditAndSpend(keystore, scriptPubkey1, output1, input1, /* success = */true, schnorr);
+    CreateCreditAndSpend(keystore, scriptPubkey2, output2, input2, /* success = */true, schnorr);
     CheckWithFlag(output1, input1, 0, true);
-    CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH, true);
+    CheckWithFlag(output1, input1, flags_p2sh_only, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
     CheckWithFlag(output1, input2, 0, false);
-    CheckWithFlag(output1, input2, SCRIPT_VERIFY_P2SH, false);
+    CheckWithFlag(output1, input2, flags_p2sh_only, false);
     CheckWithFlag(output1, input2, STANDARD_SCRIPT_VERIFY_FLAGS, false);
 
     // P2SH pay-to-compressed-pubkey.
     CreateCreditAndSpend(keystore,
                          GetScriptForDestination(ScriptID(scriptPubkey1, false /*=p2sh_20*/)),
-                         output1, input1);
+                         output1, input1, /* success = */true, schnorr);
     CreateCreditAndSpend(keystore,
                          GetScriptForDestination(ScriptID(scriptPubkey2, false /*=p2sh_20*/)),
-                         output2, input2);
+                         output2, input2, /* success = */true, schnorr);
     ReplaceRedeemScript(input2.vin[0].scriptSig, scriptPubkey1);
     CheckWithFlag(output1, input1, 0, true);
-    CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH, true);
+    CheckWithFlag(output1, input1, flags_p2sh_only, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
     CheckWithFlag(output1, input2, 0, true);
-    CheckWithFlag(output1, input2, SCRIPT_VERIFY_P2SH, false);
+    CheckWithFlag(output1, input2, flags_p2sh_only, false);
     CheckWithFlag(output1, input2, STANDARD_SCRIPT_VERIFY_FLAGS, false);
 
     // Normal pay-to-uncompressed-pubkey.
-    CreateCreditAndSpend(keystore, scriptPubkey1L, output1, input1);
-    CreateCreditAndSpend(keystore, scriptPubkey2L, output2, input2);
+    CreateCreditAndSpend(keystore, scriptPubkey1L, output1, input1, /* success = */true, schnorr);
+    CreateCreditAndSpend(keystore, scriptPubkey2L, output2, input2, /* success = */true, schnorr);
     CheckWithFlag(output1, input1, 0, true);
-    CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH, true);
+    CheckWithFlag(output1, input1, flags_p2sh_only, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
     CheckWithFlag(output1, input2, 0, false);
-    CheckWithFlag(output1, input2, SCRIPT_VERIFY_P2SH, false);
+    CheckWithFlag(output1, input2, flags_p2sh_only, false);
     CheckWithFlag(output1, input2, STANDARD_SCRIPT_VERIFY_FLAGS, false);
 
     // P2SH pay-to-uncompressed-pubkey.
     CreateCreditAndSpend(keystore,
                          GetScriptForDestination(ScriptID(scriptPubkey1L, false /*=p2sh_20*/)),
-                         output1, input1);
+                         output1, input1, /* success = */true, schnorr);
     CreateCreditAndSpend(keystore,
                          GetScriptForDestination(ScriptID(scriptPubkey2L, false /*=p2sh_20*/)),
-                         output2, input2);
+                         output2, input2, /* success = */true, schnorr);
     ReplaceRedeemScript(input2.vin[0].scriptSig, scriptPubkey1L);
     CheckWithFlag(output1, input1, 0, true);
-    CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH, true);
+    CheckWithFlag(output1, input1, flags_p2sh_only, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
     CheckWithFlag(output1, input2, 0, true);
-    CheckWithFlag(output1, input2, SCRIPT_VERIFY_P2SH, false);
+    CheckWithFlag(output1, input2, flags_p2sh_only, false);
     CheckWithFlag(output1, input2, STANDARD_SCRIPT_VERIFY_FLAGS, false);
 
     // Normal 2-of-2 multisig
-    CreateCreditAndSpend(keystore, scriptMulti, output1, input1, false);
+    CreateCreditAndSpend(keystore, scriptMulti, output1, input1, /* success = */false, schnorr);
     CheckWithFlag(output1, input1, 0, false);
-    CreateCreditAndSpend(keystore2, scriptMulti, output2, input2, false);
+    CreateCreditAndSpend(keystore2, scriptMulti, output2, input2, /* success = */false, schnorr);
     CheckWithFlag(output2, input2, 0, false);
     BOOST_CHECK(*output1 == *output2);
-    UpdateInput(input1.vin[0], CombineSignatures(input1, input2, output1));
+    UpdateInput(input1.vin[0], CombineSignatures(input1, input2, output1, {}, schnorr));
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
 
     // P2SH 2-of-2 multisig
     CreateCreditAndSpend(keystore,
                          GetScriptForDestination(ScriptID(scriptMulti, false /*=p2sh_20*/)),
-                         output1, input1, false);
+                         output1, input1, /* success = */false, schnorr);
     CheckWithFlag(output1, input1, 0, true);
-    CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH, false);
+    CheckWithFlag(output1, input1, flags_p2sh_only, false);
     CreateCreditAndSpend(keystore2,
                          GetScriptForDestination(ScriptID(scriptMulti, false /*=p2sh_20*/)),
-                         output2, input2, false);
+                         output2, input2, /* success = */false, schnorr);
     CheckWithFlag(output2, input2, 0, true);
-    CheckWithFlag(output2, input2, SCRIPT_VERIFY_P2SH, false);
+    CheckWithFlag(output2, input2, flags_p2sh_only, false);
     BOOST_CHECK(*output1 == *output2);
-    UpdateInput(input1.vin[0], CombineSignatures(input1, input2, output1));
-    CheckWithFlag(output1, input1, SCRIPT_VERIFY_P2SH, true);
+    UpdateInput(input1.vin[0], CombineSignatures(input1, input2, output1, {}, schnorr));
+    CheckWithFlag(output1, input1, flags_p2sh_only, true);
     CheckWithFlag(output1, input1, STANDARD_SCRIPT_VERIFY_FLAGS, true);
+}
+
+BOOST_AUTO_TEST_CASE(test_witness) {
+    for (const bool schnorr : {false, true}) {
+        test_witness_inner(schnorr);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(test_IsStandard) {

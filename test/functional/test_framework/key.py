@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 # Copyright (c) 2019 Pieter Wuille
+# Copyright (c) 2026-present The Bitcoin developers
 
 """Test-only secp256k1 elliptic curve implementation
 
@@ -8,6 +9,7 @@ keys, and is trivially vulnerable to side channel attacks. Do not use for
 anything but tests.
 """
 
+import hashlib
 import random
 
 
@@ -300,6 +302,27 @@ class ECPubKey():
         if R is None or R[0] != r:
             return False
         return True
+
+    def verify_schnorr(self, sig, msg32):
+        assert self.is_valid
+        assert len(sig) == 64
+        assert len(msg32) == 32
+
+        Rx = sig[:32]
+        s = int.from_bytes(sig[32:], "big")
+        e = int.from_bytes(
+            hashlib.sha256(Rx + self.get_bytes() + msg32).digest(), "big"
+        )
+        nege = SECP256K1_ORDER - e
+
+        R = SECP256K1.affine(SECP256K1.mul([(SECP256K1_G, s), (self.p, nege)]))
+
+        if R is None:
+            return False
+        if jacobi_symbol(R[1], SECP256K1.p) == -1:
+            return False
+
+        return R[0] == int.from_bytes(Rx, "big")
 
 
 class ECKey():

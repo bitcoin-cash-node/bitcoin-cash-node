@@ -20,6 +20,8 @@
 
 /** Default for -usecashaddr */
 static constexpr bool DEFAULT_USE_CASHADDR = true;
+/** Default for -signschnorr */
+static constexpr bool DEFAULT_SIGN_SCHNORR = true;
 
 class CChainParams;
 
@@ -69,6 +71,10 @@ public:
 
     virtual void SetAllowUnconnectedMining(bool) = 0;
     virtual bool GetAllowUnconnectedMining() const = 0;
+
+    /** Whether to always sign transactions using Schnorr signatures */
+    virtual void SetSignSchnorr(bool) = 0;
+    virtual bool IsSignSchnorr() const = 0;
 };
 
 class GlobalConfig final : public Config {
@@ -106,10 +112,15 @@ public:
     void SetAllowUnconnectedMining(bool b) override { allowUnconnectedMining = b; }
     bool GetAllowUnconnectedMining() const override { return allowUnconnectedMining; }
 
+    //! Whether to always sign transactions using Schnorr signatures (default: true)
+    void SetSignSchnorr(bool b) override { signSchnorr = b; }
+    bool IsSignSchnorr() const override { return signSchnorr; }
+
 private:
     bool useCashAddr;
     bool gbtCheckValidity;
     bool allowUnconnectedMining;
+    bool signSchnorr = DEFAULT_SIGN_SCHNORR;
     Amount excessUTXOCharge;
     uint64_t nInvBroadcastRate;
     uint64_t nInvBroadcastInterval;
@@ -170,6 +181,10 @@ public:
 
     void SetAllowUnconnectedMining(bool) override {}
     bool GetAllowUnconnectedMining() const override { return false; }
+
+    void SetSignSchnorr(bool) override {}
+    // This getter always just returns the default (true), unlike the other getters; we enforce Schnorr even trivially.
+    bool IsSignSchnorr() const override { return DEFAULT_SIGN_SCHNORR; }
 
 private:
     std::unique_ptr<CChainParams> chainParams;

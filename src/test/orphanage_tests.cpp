@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2022 The Bitcoin Core developers
-// Copyright (c) 2022-2026 The Bitcoin developers
+// Copyright (c) 2022-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -167,7 +167,8 @@ BOOST_AUTO_TEST_CASE(DoS_mapOrphans) {
         tx.vout[0].nValue = 1 * CENT;
         tx.vout[0].scriptPubKey = GetScriptForDestination(key.GetPubKey().GetID());
         SignatureData empty;
-        BOOST_CHECK(SignSignature(keystore, *txPrev, tx, 0, SigHashType().withFork(), STANDARD_SCRIPT_VERIFY_FLAGS, std::nullopt));
+        const bool schnorr = InsecureRandBool();
+        BOOST_CHECK(SignSignature(keystore, *txPrev, tx, 0, SigHashType().withFork(), STANDARD_SCRIPT_VERIFY_FLAGS, std::nullopt, schnorr));
 
         orphanage.AddTx(MakeTransactionRef(tx), i);
     }
@@ -187,7 +188,8 @@ BOOST_AUTO_TEST_CASE(DoS_mapOrphans) {
             tx.vin[j].prevout = COutPoint(txPrev->GetId(), j);
         }
         SignatureData empty;
-        BOOST_CHECK(SignSignature(keystore, *txPrev, tx, 0, SigHashType().withFork(), STANDARD_SCRIPT_VERIFY_FLAGS, std::nullopt));
+        const bool schnorr = InsecureRandBool();
+        BOOST_CHECK(SignSignature(keystore, *txPrev, tx, 0, SigHashType().withFork(), STANDARD_SCRIPT_VERIFY_FLAGS, std::nullopt, schnorr));
         // Reuse same signature for other inputs
         // (they don't have to be valid for this test)
         for (size_t j = 1; j < tx.vin.size(); ++j)

@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -55,6 +55,10 @@ static void SetupBitcoinTxArgs() {
         strprintf("In JSON output, use CashAddr address format for destination encoding instead of the legacy base58 format "
                   "(default: %d)", DEFAULT_USE_CASHADDR),
         ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    gArgs.AddArg(
+        "-signschnorr",
+        strprintf("Whether to always sign transactions using Schnorr signatures (default: %u)", DEFAULT_SIGN_SCHNORR),
+        ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
     SetupChainParamsBaseOptions();
 
     gArgs.AddArg("delin=N", "Delete input N from TX", ArgsManager::ALLOW_ANY,
@@ -129,6 +133,7 @@ static int AppInitRawTx(int argc, char *argv[], Config &config) {
     try {
         SelectParams(gArgs.GetChainName());
         config.SetCashAddrEncoding(gArgs.GetBoolArg("-usecashaddr", DEFAULT_USE_CASHADDR));
+        config.SetSignSchnorr(gArgs.GetBoolArg("-signschnorr", DEFAULT_SIGN_SCHNORR));
     } catch (const std::exception &e) {
         fprintf(stderr, "Error: %s\n", e.what());
         return EXIT_FAILURE;
@@ -585,7 +590,7 @@ static Amount AmountFromValue(const UniValue &value) {
     return amount;
 }
 
-static void MutateTxSign(CMutableTransaction &tx, const std::string &flagStr) {
+static void MutateTxSign(CMutableTransaction &tx, const std::string &flagStr, const bool schnorr) {
     SigHashType sigHashType = SigHashType().withFork();
 
     if ((flagStr.size() > 0) && !findSigHashFlags(sigHashType, flagStr)) {
@@ -706,12 +711,15 @@ static void MutateTxSign(CMutableTransaction &tx, const std::string &flagStr) {
         SignatureData sigdata = DataFromTransaction(contexts[i], scriptFlags);
 
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
-        if ((sigHashType.getBaseType() != BaseSigHashType::SINGLE) ||
-            (i < mergedTx.vout.size())) {
-            ProduceSignature(keystore,
-                             TransactionSignatureCreator(contexts[i], sigHashType),
-                             prevPubKey, sigdata,
-                             scriptFlags);
+        if (sigHashType.getBaseType() != BaseSigHashType::SINGLE || i < mergedTx.vout.size()) {
+            const auto nSigsBefore = sigdata.signatures.size();
+            const bool ok = ProduceSignature(keystore, TransactionSignatureCreator(contexts[i], sigHashType, schnorr),
+                                             prevPubKey, sigdata, scriptFlags);
+            if (!ok && sigdata.hadBothSchnorrAndEcdsaInMultisig) {
+                // Detect special case of user attempting to mix schnorr and ecdsa signatures
+                const bool didAddSigs = nSigsBefore < sigdata.signatures.size();
+                throw std::runtime_error(MakeHadBothSchnorrAndEcdsaInMultisigErrorMessage(i, schnorr, didAddSigs));
+            }
         }
 
         UpdateInput(txin, sigdata);
@@ -737,7 +745,7 @@ public:
 
 static void MutateTx(CMutableTransaction &tx, const std::string &command,
                      const std::string &commandVal,
-                     const CChainParams &chainParams) {
+                     const CChainParams &chainParams, const bool schnorr) {
     std::unique_ptr<Secp256k1Init> ecc;
 
     if (command == "nversion") {
@@ -764,7 +772,7 @@ static void MutateTx(CMutableTransaction &tx, const std::string &command,
         MutateTxAddOutData(tx, commandVal);
     } else if (command == "sign") {
         ecc.reset(new Secp256k1Init());
-        MutateTxSign(tx, commandVal);
+        MutateTxSign(tx, commandVal, schnorr);
     } else if (command == "load") {
         RegisterLoad(commandVal);
     } else if (command == "set") {
@@ -872,7 +880,7 @@ static int CommandLineRawTx(int argc, char *argv[], const Config &config, const 
                 value = arg.substr(eqpos + 1);
             }
 
-            MutateTx(tx, key, value, chainParams);
+            MutateTx(tx, key, value, chainParams, config.IsSignSchnorr());
         }
 
         OutputTx(config, CTransaction(tx));

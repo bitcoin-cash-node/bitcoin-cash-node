@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2018 The Bitcoin Core developers
+# Copyright (c) 2018-present The Bitcoin Core developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the Partially Signed Transaction RPCs.
@@ -203,6 +203,9 @@ class PSBTTest(BitcoinTestFramework):
             created_tx = self.nodes[0].createpsbt(
                 creator['inputs'], creator['outputs'])
             assert_equal(created_tx, creator['result'])
+
+        # The remainder of these tests must use ECDSA signing since that's what the vectors were created with
+        self.restart_node(2, ["-nosignschnorr"])
 
         # Signer tests
         for i, signer in enumerate(signers):

@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -480,5 +480,6 @@ bool PSBTInputSigned(PSBTInput &input);
 bool SignPSBTInput(const SigningProvider &provider,
                    PartiallySignedTransaction &psbt, int index,
                    uint32_t scriptFlags,
-                   SigHashType sighash = SigHashType(),
-                   const ScriptExecutionContextOpt &context = {});
+                   SigHashType sighash,
+                   const ScriptExecutionContextOpt &context,
+                   bool signSchnorr, bool *pHadBothSchnorrAndEcdsaInMultisig = nullptr);

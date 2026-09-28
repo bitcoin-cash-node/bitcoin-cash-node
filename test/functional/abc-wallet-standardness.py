@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# Copyright (c) 2019-2026 The Bitcoin developers
+# Copyright (c) 2019-present The Bitcoin developers
 # Distributed under the MIT software license, see the accompanying
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the response of wallet to a variety of weird / nonstandard coins
@@ -174,14 +174,13 @@ class WalletStandardnessTest(BitcoinTestFramework):
         fund_and_test_wallet(
             CScript([b'\x01', pubkey, OP_1, OP_CHECKMULTISIG]), False, False,
             sign_error='Data push larger than necessary')
-        # Note: 1-of-5 is nonstandard to fund yet is standard to spend. However,
-        # trying to spend it with our wallet in particular will generate
-        # too-dense sigchecks since our wallet currently only signs with ECDSA
-        # (Schnorr would not have this issue).
+        # Note: 1-of-5 is nonstandard to fund yet is standard to spend.
+        # We sign with Schnorr by default so it's spendable; however, trying
+        # to spend it with ECDSA signatures in particular will generate
+        # too-dense sigchecks.
         fund_and_test_wallet(
             CScript([OP_1, pubkey, pubkey, pubkey, pubkey, pubkey,
-                     OP_5, OP_CHECKMULTISIG]), False, False,
-            sign_error='Input SigChecks limit exceeded')
+                     OP_5, OP_CHECKMULTISIG]), False, False)
         fund_and_test_wallet(
             CScript([OP_1, pubkey, pubkey, pubkey, OP_PUSHDATA1,
                      pubkey, pubkey, OP_5, OP_CHECKMULTISIG]), False, False,

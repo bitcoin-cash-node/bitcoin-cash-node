@@ -1,10 +1,10 @@
 // Copyright (c) 2016-2018 The Bitcoin Core developers
-// Copyright (c) 2021 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <base58.h>
-#include <chainparams.h>
+#include <config.h>
 #include <fs.h>
 #include <interfaces/chain.h>
 #include <util/system.h>
@@ -33,8 +33,7 @@ static std::shared_ptr<CWallet> CreateWallet(const std::string &name,
     // dummy chain interface
     auto chain = interfaces::MakeChain();
     std::shared_ptr<CWallet> wallet_instance(
-        new CWallet(Params(), *chain, WalletLocation(name),
-                    WalletDatabase::Create(path)),
+        new CWallet(GetConfig(), *chain, WalletLocation(name), WalletDatabase::Create(path)),
         WalletToolReleaseWallet);
     bool first_run = true;
     DBErrors load_wallet_ret = wallet_instance->LoadWallet(first_run);
@@ -64,8 +63,7 @@ static std::shared_ptr<CWallet> LoadWallet(const std::string &name,
     // dummy chain interface
     auto chain = interfaces::MakeChain();
     std::shared_ptr<CWallet> wallet_instance(
-        new CWallet(Params(), *chain, WalletLocation(name),
-                    WalletDatabase::Create(path)),
+        new CWallet(GetConfig(), *chain, WalletLocation(name), WalletDatabase::Create(path)),
         WalletToolReleaseWallet);
     DBErrors load_wallet_ret;
     try {

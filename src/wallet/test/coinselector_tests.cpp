@@ -1,10 +1,10 @@
 // Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2019-2021 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <amount.h>
-#include <chainparams.h> // For Params
+#include <config.h> // for GetConfig
 #include <primitives/transaction.h>
 #include <random.h>
 #include <wallet/coincontrol.h>
@@ -301,7 +301,7 @@ BOOST_AUTO_TEST_CASE(bnb_search_test) {
 
 BOOST_AUTO_TEST_CASE(knapsack_solver_test) {
     auto testChain = interfaces::MakeChain();
-    CWallet testWallet(Params(), *testChain, WalletLocation(),
+    CWallet testWallet(GetConfig(), *testChain, WalletLocation(),
                        WalletDatabase::CreateDummy());
 
     CoinSet setCoinsRet, setCoinsRet2;
@@ -730,7 +730,7 @@ BOOST_AUTO_TEST_CASE(ApproximateBestSubset) {
 // to find a solution that can pay the target value
 BOOST_AUTO_TEST_CASE(SelectCoins_test) {
     auto testChain = interfaces::MakeChain();
-    CWallet testWallet(Params(), *testChain, WalletLocation(),
+    CWallet testWallet(GetConfig(), *testChain, WalletLocation(),
                        WalletDatabase::CreateDummy());
 
     // Random generator stuff

@@ -1,5 +1,5 @@
 // Copyright (c) 2017 The Bitcoin Core developers
-// Copyright (c) 2019-2021 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -35,8 +35,10 @@ inline bool IsValidCoinSelectionHint(int c) {
 }
 
 class CInputCoin {
+    CInputCoin(const COutPoint &op) : outpoint{op} {}
 public:
-    CInputCoin(const CTransactionRef &tx, unsigned int i) {
+    CInputCoin(const CTransactionRef &tx, unsigned int i, int input_bytes = -1, bool use_max_sig = false)
+        : m_input_bytes{input_bytes}, m_use_max_sig{use_max_sig} {
         if (!tx) {
             throw std::invalid_argument("tx should not be null");
         }
@@ -49,10 +51,7 @@ public:
         effective_value = txout.nValue;
     }
 
-    CInputCoin(const CTransactionRef &tx, unsigned int i, int input_bytes)
-        : CInputCoin(tx, i) {
-        m_input_bytes = input_bytes;
-    }
+    static CInputCoin MakeDummyForSetLookup(const COutPoint &op) { return CInputCoin(op); }
 
     COutPoint outpoint;
     CTxOut txout;
@@ -63,6 +62,12 @@ public:
      * transaction. Can be -1 if it could not be calculated.
      */
     int m_input_bytes{-1};
+    /**
+     * Flag used to fee estimation only -- if this is true then the coin is known to be externally signed
+     * (watching only) and maximal sizes should be used for the input coin for fee estimation purposes. Comes from
+     * the correspondig field COutput::use_max_sig
+     */
+    bool m_use_max_sig = false;
 
     bool operator<(const CInputCoin &rhs) const {
         return outpoint < rhs.outpoint;

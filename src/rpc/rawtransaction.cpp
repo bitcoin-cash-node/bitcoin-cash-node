@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -1069,10 +1069,15 @@ static UniValue combinerawtransaction(const Config &config,
             }
         }
 
-        ProduceSignature(
+        const bool ok = ProduceSignature(
             DUMMY_SIGNING_PROVIDER,
-            TransactionSignatureCreator(contexts[i]),
+            TransactionSignatureCreator(contexts[i], SigHashType(), config.IsSignSchnorr()),
             txout.scriptPubKey, sigdata, scriptFlags);
+        if (!ok && sigdata.hadBothSchnorrAndEcdsaInMultisig) {
+            // indicate this is unsupported by network
+            throw JSONRPCError(RPC_VERIFY_ERROR,
+                               MakeHadBothSchnorrAndEcdsaInMultisigErrorMessage(i, config.IsSignSchnorr(), false));
+        }
 
         UpdateInput(txin, sigdata);
     }
@@ -1081,7 +1086,8 @@ static UniValue combinerawtransaction(const Config &config,
 }
 
 UniValue::Object SignTransaction(interfaces::Chain &, CMutableTransaction &mtx, const UniValue &prevTxsUnival,
-                                 CBasicKeyStore *keystore, bool is_temp_keystore, const UniValue &hashType) {
+                                 CBasicKeyStore *keystore, bool is_temp_keystore, const UniValue &hashType,
+                                 const bool schnorr) {
     // Fetch previous transactions (inputs):
     CCoinsView viewDummy;
     CCoinsViewCache view(&viewDummy);
@@ -1230,19 +1236,27 @@ UniValue::Object SignTransaction(interfaces::Chain &, CMutableTransaction &mtx, 
 
         SignatureData sigdata = DataFromTransaction(contexts[i], scriptFlags);
 
+        bool gotMixedModeError = false;
         // Only sign SIGHASH_SINGLE if there's a corresponding output:
-        if ((sigHashType.getBaseType() != BaseSigHashType::SINGLE) ||
-            (i < mtx.vout.size())) {
-            ProduceSignature(*keystore,
-                             TransactionSignatureCreator(contexts[i], sigHashType),
-                             prevPubKey, sigdata, scriptFlags);
+        if (sigHashType.getBaseType() != BaseSigHashType::SINGLE || i < mtx.vout.size()) {
+            const auto nSigsBefore = sigdata.signatures.size();
+            const bool ok = ProduceSignature(*keystore, TransactionSignatureCreator(contexts[i], sigHashType, schnorr),
+                                             prevPubKey, sigdata, scriptFlags);
+            if (!ok && sigdata.hadBothSchnorrAndEcdsaInMultisig) {
+                // indicate this is unsupported by network
+                const bool didAddSigs = nSigsBefore < sigdata.signatures.size();
+                vErrors.emplace_back(TxInErrorToJSON(txin, MakeHadBothSchnorrAndEcdsaInMultisigErrorMessage(i, schnorr, didAddSigs)));
+                gotMixedModeError = true;
+            }
         }
 
-        UpdateInput(txin, sigdata);
+        if (!gotMixedModeError) { // Don't update sig on mixed-mode error since it would be always-invalid "nonsense"
+            UpdateInput(txin, sigdata);
+        }
 
         ScriptError serror = ScriptError::OK;
-        if ( ! VerifyScript(txin.scriptSig, prevPubKey, scriptFlags,
-                            TransactionSignatureChecker(contexts[i]), &serror)) {
+        if (!gotMixedModeError && !VerifyScript(txin.scriptSig, prevPubKey, scriptFlags,
+                                                TransactionSignatureChecker(contexts[i]), &serror)) {
             if (serror == ScriptError::INVALID_STACK_OPERATION) {
                 // Unable to sign input and verification failed (possible
                 // attempt to partially sign).
@@ -1266,7 +1280,7 @@ UniValue::Object SignTransaction(interfaces::Chain &, CMutableTransaction &mtx, 
     return result;
 }
 
-static UniValue signrawtransactionwithkey(const Config &,
+static UniValue signrawtransactionwithkey(const Config &config,
                                           const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() < 2 ||
         request.params.size() > 4) {
@@ -1360,7 +1374,7 @@ static UniValue signrawtransactionwithkey(const Config &,
     }
 
     return SignTransaction(*g_rpc_node->chain, mtx, request.params[2],
-                           &keystore, true, request.params[3]);
+                           &keystore, true, request.params[3], config.IsSignSchnorr());
 }
 
 static UniValue sendrawtransaction(const Config &config,
@@ -1941,8 +1955,15 @@ static UniValue finalizepsbt(const Config &config,
     // Assumption: Below code does NOT push_back new inputs to psbtx.tx.
     const auto contexts = ScriptExecutionContext::createForAllInputs(*CHECK_NONFATAL(psbtx.tx), psbtx.inputs);
     for (size_t i = 0; i < psbtx.tx->vin.size(); ++i) {
-        complete &=
-            SignPSBTInput(DUMMY_SIGNING_PROVIDER, psbtx, i, scriptFlags, SigHashType(), contexts[i]);
+        bool hadBothSchnorrAndEcdsaInMultisig{};
+        const bool ok = SignPSBTInput(DUMMY_SIGNING_PROVIDER, psbtx, i, scriptFlags, SigHashType(), contexts[i],
+                                      config.IsSignSchnorr(), &hadBothSchnorrAndEcdsaInMultisig);
+        if (!ok && hadBothSchnorrAndEcdsaInMultisig) {
+            // indicate this is unsupported by network
+            throw JSONRPCError(RPC_VERIFY_ERROR,
+                               MakeHadBothSchnorrAndEcdsaInMultisigErrorMessage(i, config.IsSignSchnorr(), false));
+        }
+        complete &= ok;
     }
 
     UniValue::Object result;

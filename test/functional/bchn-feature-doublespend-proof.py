@@ -140,8 +140,8 @@ class DoubleSpendProofTest(BitcoinTestFramework):
         pubkey = self.getpubkey()
         sighash1 = getSighashes(dsp.getPrevOutput(), dsp.spender1, fundingtx)
         sighash2 = getSighashes(dsp.getPrevOutput(), dsp.spender2, fundingtx)
-        assert pubkey.verify_ecdsa(dsp.spender1.pushData[0][:-1], sighash1)
-        assert pubkey.verify_ecdsa(dsp.spender2.pushData[0][:-1], sighash2)
+        assert pubkey.verify_schnorr(dsp.spender1.pushData[0][:-1], sighash1)
+        assert pubkey.verify_schnorr(dsp.spender2.pushData[0][:-1], sighash2)
 
         # 2. For p2pkh these is exactly one pushdata per spender
         assert_equal(1, len(dsp.spender1.pushData))

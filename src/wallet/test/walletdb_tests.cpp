@@ -1,10 +1,10 @@
-// Copyright (c) 2017-2020 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <wallet/walletdb.h>
 
-#include <chainparams.h>
+#include <config.h>
 #include <interfaces/chain.h>
 #include <wallet/wallet.h>
 
@@ -19,7 +19,7 @@ namespace {
 static std::unique_ptr<CWallet> LoadWallet(WalletBatch &batch) {
     auto chain = interfaces::MakeChain();
     std::unique_ptr<CWallet> wallet = std::make_unique<CWallet>(
-        Params(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
+        GetConfig(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
     DBErrors res = batch.LoadWallet(wallet.get());
     BOOST_CHECK(res == DBErrors::LOAD_OK);
     return wallet;

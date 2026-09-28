@@ -1,10 +1,11 @@
 // Copyright (c) 2012-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
 #include <bench/bench.h>
 #include <chainparams.h>
+#include <config.h>
 #include <interfaces/chain.h>
 #include <wallet/coinselection.h>
 #include <wallet/wallet.h>
@@ -35,7 +36,7 @@ static void CoinSelection(benchmark::State &state) {
     SelectParams(CBaseChainParams::REGTEST);
 
     auto chain = interfaces::MakeChain();
-    const CWallet wallet(Params(), *chain, WalletLocation(),
+    const CWallet wallet(GetConfig(), *chain, WalletLocation(),
                          WalletDatabase::CreateDummy());
     std::vector<std::unique_ptr<CWalletTx>> wtxs;
     LOCK(wallet.cs_wallet);
@@ -105,7 +106,7 @@ static void BnBExhaustion(benchmark::State &state) {
     SelectParams(CBaseChainParams::REGTEST);
 
     auto chain = interfaces::MakeChain();
-    const CWallet wallet(Params(), *chain, WalletLocation(),
+    const CWallet wallet(GetConfig(), *chain, WalletLocation(),
                          WalletDatabase::CreateDummy());
 
     LOCK(wallet.cs_wallet);

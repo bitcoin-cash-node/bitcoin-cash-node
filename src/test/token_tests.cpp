@@ -1,4 +1,4 @@
-// Copyright (c) 2022-2026 The Bitcoin developers
+// Copyright (c) 2022-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -1399,6 +1399,7 @@ static bool MineTransactions(const std::vector<CMutableTransaction> transactions
 /// - A single destination is automatically generated and each output is adjusted to spend to it. The key
 ///   for this destination can be retrieved with 'destinationKey_out'.
 /// - Each output's nValue is set to COIN if not already set.
+/// - The input is randomly signed with Schnorr or ECDSA
 static CMutableTransaction CreateAndSignTx(const CKey senderKey, const CTransactionRef inputTx,
                                            const std::vector<CTxOut> vout,
                                            CKey *destinationKey_out = nullptr) {
@@ -1436,9 +1437,11 @@ static CMutableTransaction CreateAndSignTx(const CKey senderKey, const CTransact
     keystore.AddKey(senderKey);
     // support p2sh wrapping p2pk for this key
     keystore.AddCScript(GetScriptForRawPubKey(senderKey.GetPubKey()), false /* not p2sh_32 */, false /* legacy vm limits */);
+    const bool schnorr = InsecureRandBool();
     BOOST_CHECK(SignSignature(keystore, *inputTx, tx, 0, SigHashType().withFork(),
                               scriptFlags,
-                              ScriptExecutionContext{0u, inputCoin, tx}));
+                              ScriptExecutionContext{0u, inputCoin, tx},
+                              schnorr));
 
     return tx;
 }

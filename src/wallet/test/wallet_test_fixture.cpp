@@ -1,5 +1,5 @@
 // Copyright (c) 2016 The Bitcoin Core developers
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -13,8 +13,7 @@
 #include <wallet/wallet.h>
 
 WalletTestingSetup::WalletTestingSetup(const std::string &chainName)
-    : TestingSetup(chainName), m_wallet(Params(), *m_chain, WalletLocation(),
-                                        WalletDatabase::CreateMock()) {
+    : TestingSetup(chainName), m_wallet(GetConfig(), *m_chain, WalletLocation(), WalletDatabase::CreateMock()) {
     bool fFirstRun;
     m_wallet.LoadWallet(fFirstRun);
     RegisterValidationInterface(&m_wallet);

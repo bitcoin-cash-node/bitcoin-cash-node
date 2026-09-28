@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2017 The Bitcoin Core developers
-// Copyright (c) 2018-2023 The Bitcoin developers
+// Copyright (c) 2018-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -253,7 +253,7 @@ bool WalletInit::ParameterInteraction() const {
     return true;
 }
 
-bool VerifyWallets(const CChainParams &chainParams, interfaces::Chain &chain,
+bool VerifyWallets(const Config &config, interfaces::Chain &chain,
                    const std::vector<std::string> &wallet_files) {
     if (gArgs.IsArgSet("-walletdir")) {
         fs::path wallet_dir = gArgs.GetArg("-walletdir", "");
@@ -304,7 +304,7 @@ bool VerifyWallets(const CChainParams &chainParams, interfaces::Chain &chain,
         std::string error_string;
         std::string warning_string;
         bool verify_success =
-            CWallet::Verify(chainParams, chain, location, salvage_wallet,
+            CWallet::Verify(config, chain, location, salvage_wallet,
                             error_string, warning_string);
         if (!error_string.empty()) {
             InitError(error_string);
@@ -330,11 +330,10 @@ void WalletInit::Construct(NodeContext &node) const {
         interfaces::MakeWalletClient(*node.chain, gArgs.GetArgs("-wallet")));
 }
 
-bool LoadWallets(const CChainParams &chainParams, interfaces::Chain &chain,
+bool LoadWallets(const Config &config, interfaces::Chain &chain,
                  const std::vector<std::string> &wallet_files) {
     for (const std::string &walletFile : wallet_files) {
-        std::shared_ptr<CWallet> pwallet = CWallet::CreateWalletFromFile(
-            chainParams, chain, WalletLocation(walletFile));
+        std::shared_ptr<CWallet> pwallet = CWallet::CreateWalletFromFile(config, chain, WalletLocation(walletFile));
         if (!pwallet) {
             return false;
         }

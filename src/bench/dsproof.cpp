@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2022 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -45,6 +45,7 @@ static void DoubleSpendProofCreate(benchmark::State &state) {
 
     // Sign transactions properly
     const SigHashType sigHashType = SigHashType().withFork();
+    constexpr bool signSchnorr = true; /* we always just sign schnorr for this bench */
     FlatSigningProvider keyStore;
     keyStore.pubkeys.emplace(privKey.GetPubKey().GetID(), privKey.GetPubKey());
     keyStore.keys.emplace(privKey.GetPubKey().GetID(), privKey);
@@ -60,7 +61,7 @@ static void DoubleSpendProofCreate(benchmark::State &state) {
             SignatureData sigdata = DataFromTransaction(limited_context, STANDARD_SCRIPT_VERIFY_FLAGS);
 
             ProduceSignature(keyStore,
-                             TransactionSignatureCreator(limited_context, sigHashType),
+                             TransactionSignatureCreator(limited_context, sigHashType, signSchnorr),
                              coin.GetTxOut().scriptPubKey, sigdata, STANDARD_SCRIPT_VERIFY_FLAGS);
             UpdateInput(txin, sigdata);
             ++i;

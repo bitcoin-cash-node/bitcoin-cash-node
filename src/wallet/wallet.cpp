@@ -141,7 +141,7 @@ void UnloadWallet(std::shared_ptr<CWallet> &&wallet) {
 
 static const size_t OUTPUT_GROUP_MAX_ENTRIES = 10;
 
-std::shared_ptr<CWallet> CreateWallet(const CChainParams &chainParams, interfaces::Chain& chain,
+std::shared_ptr<CWallet> CreateWallet(const Config &config, interfaces::Chain& chain,
                                       const std::string& name, std::string& error, std::string& warning,
                                       WalletCreationStatus& status, const SecureString& passphrase,
                                       uint64_t wallet_creation_flags) {
@@ -163,14 +163,14 @@ std::shared_ptr<CWallet> CreateWallet(const CChainParams &chainParams, interface
 
     // Wallet::Verify will check if we're trying to create a wallet with a duplicate name.
     std::string wallet_error;
-    if (!CWallet::Verify(chainParams, chain, location, false, wallet_error, warning)) {
+    if (!CWallet::Verify(config, chain, location, false, wallet_error, warning)) {
         error = "Wallet file verification failed: " + wallet_error;
         status = WalletCreationStatus::CREATION_FAILED;
         return nullptr;
     }
 
     // Make the wallet
-    std::shared_ptr<CWallet> wallet = CWallet::CreateWalletFromFile(chainParams, chain, location, wallet_creation_flags);
+    std::shared_ptr<CWallet> wallet = CWallet::CreateWalletFromFile(config, chain, location, wallet_creation_flags);
     if (!wallet) {
         error = "Wallet creation failed";
         status = WalletCreationStatus::CREATION_FAILED;
@@ -1741,18 +1741,25 @@ int64_t CWalletTx::GetTxTime() const {
     return n ? n : nTimeReceived;
 }
 
-// Helper for producing a max-sized low-S low-R signature (eg 71 bytes)
-// or a max-sized low-S signature (e.g. 72 bytes) if use_max_sig is true
-bool CWallet::DummySignInput(CTxIn &tx_in, const CTxOut &txout,
-                             bool use_max_sig) const {
+// Helper for producing a max-sized input. This involves assuming any embedded sigs are:
+// If use_max_sig is true:
+// - max-sized low-S ECDSA signatures (e.g. 72 bytes)
+// If use_max_sig is false:
+// - If not signing Schnorr: 71 byte low-S low-R signatures
+// - If signing Schnorr: 65 byte signatures
+bool CWallet::DummySignInput(CTxIn &tx_in, const CTxOut &txout, bool use_max_sig) const {
     // Fill in dummy signatures for fee calculation.
     const CScript &scriptPubKey = txout.scriptPubKey;
     SignatureData sigdata;
+    /* Note: `use_max_sig` is for watching-only addresses that are externally signed, so we must assume a worst-case of
+       maximal 72-byte DER signatures in that case, otherwise fee estimation will be off for watching-only wallets if
+       we allow for Schnorr sigs or 71-byte DER (as we would sign). */
+    const BaseSignatureCreator &creator = use_max_sig
+                                          ? DUMMY_MAXIMUM_SIGNATURE_CREATOR
+                                          : (config.IsSignSchnorr() ? DUMMY_SCHNORR_SIGNATURE_CREATOR
+                                                                    : DUMMY_SIGNATURE_CREATOR);
 
-    if ( ! ProduceSignature(*this,
-                          use_max_sig ? DUMMY_MAXIMUM_SIGNATURE_CREATOR
-                                      : DUMMY_SIGNATURE_CREATOR,
-                          scriptPubKey, sigdata, STANDARD_SCRIPT_VERIFY_FLAGS)) {
+    if ( ! ProduceSignature(*this, creator, scriptPubKey, sigdata, STANDARD_SCRIPT_VERIFY_FLAGS)) {
         return false;
     }
 
@@ -1760,25 +1767,34 @@ bool CWallet::DummySignInput(CTxIn &tx_in, const CTxOut &txout,
     return true;
 }
 
-// Helper for producing a bunch of max-sized low-S low-R signatures (eg 71
-// bytes)
-bool CWallet::DummySignTx(CMutableTransaction &txNew,
-                          const std::vector<CTxOut> &txouts,
-                          bool use_max_sig) const {
+// Helper for producing a bunch of max-sized low-S low-R signatures (eg 71-72 bytes for DER, 65 bytes for Schnorr)
+bool CWallet::DummySignTx(CMutableTransaction &txNew, const std::vector<CTxOut> &txouts, const std::set<CInputCoin> &setCoins) const {
     // Fill in dummy signatures for fee calculation.
-    int nIn = 0;
+    unsigned nIn = 0;
+
+    auto IsInputCoinExternal = [&setCoins, this](const CTxIn &txIn, const CTxOut &txout) {
+        if (auto it = setCoins.find(CInputCoin::MakeDummyForSetLookup(txIn.prevout)); it != setCoins.end()) {
+            return it->m_use_max_sig;
+        } else [[unlikely]] {
+            // Hmm. This coin is missing from setCoins, so fall back to just consulting the wallet as to whether this
+            // coin's scriptPubKey is one we can sign for. If this branch is taken it's a missed opportunity for
+            // optimization, but it is harmless otherwise.
+            return ISMINE_NO == (IsMine(txout) & ISMINE_SPENDABLE);
+        }
+    };
+
     for (const auto &txout : txouts) {
-        if (!DummySignInput(txNew.vin[nIn], txout, use_max_sig)) {
+        const bool max_sig = IsInputCoinExternal(txNew.vin[nIn], txout);
+        if (!DummySignInput(txNew.vin[nIn], txout, max_sig)) {
             return false;
         }
 
-        nIn++;
+        ++nIn;
     }
     return true;
 }
 
-int64_t CalculateMaximumSignedTxSize(const CTransaction &tx,
-                                     const CWallet *wallet, bool use_max_sig) {
+int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::set<CInputCoin> &setCoins) {
     std::vector<CTxOut> txouts;
     // Look up the inputs.  We should have already checked that this transaction
     // IsAllFromMe(ISMINE_SPENDABLE), so every input should already be in our
@@ -1791,23 +1807,20 @@ int64_t CalculateMaximumSignedTxSize(const CTransaction &tx,
         assert(input.prevout.GetN() < mi->second.tx->vout.size());
         txouts.emplace_back(mi->second.tx->vout[input.prevout.GetN()]);
     }
-    return CalculateMaximumSignedTxSize(tx, wallet, txouts, use_max_sig);
+    return CalculateMaximumSignedTxSize(tx, wallet, txouts, setCoins);
 }
 
 // txouts needs to be in the order of tx.vin
-int64_t CalculateMaximumSignedTxSize(const CTransaction &tx,
-                                     const CWallet *wallet,
-                                     const std::vector<CTxOut> &txouts,
-                                     bool use_max_sig) {
+int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::vector<CTxOut> &txouts,
+                                     const std::set<CInputCoin> &setCoins) {
     CMutableTransaction txNew(tx);
-    if (!wallet->DummySignTx(txNew, txouts, use_max_sig)) {
+    if (!wallet->DummySignTx(txNew, txouts, setCoins)) {
         return -1;
     }
     return GetSerializeSize(txNew, PROTOCOL_VERSION);
 }
 
-int CalculateMaximumSignedInputSize(const CTxOut &txout, const CWallet *wallet,
-                                    bool use_max_sig) {
+int CalculateMaximumSignedInputSize(const CTxOut &txout, const CWallet *wallet, bool use_max_sig) {
     CMutableTransaction txn;
     txn.vin.push_back(CTxIn(COutPoint()));
     if (!wallet->DummySignInput(txn.vin[0], txout, use_max_sig)) {
@@ -2677,11 +2690,11 @@ void CWallet::AvailableCoins(interfaces::Chain::Lock &locked_chain,
                 continue;
             }
 
-            bool solvable = IsSolvable(*this, pcoin->tx->vout[i].scriptPubKey, scriptFlags);
-            bool spendable =
-                ((mine & ISMINE_SPENDABLE) != ISMINE_NO) ||
-                (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) &&
-                 (coinControl && coinControl->fAllowWatchOnly && solvable));
+            const bool solvable = IsSolvable(*this, pcoin->tx->vout[i].scriptPubKey, scriptFlags);
+            const bool wallet_spendable = (mine & ISMINE_SPENDABLE) != ISMINE_NO;
+            const bool external_signing = coinControl && coinControl->fAllowWatchOnly;
+            const bool spendable = wallet_spendable
+                                   || (((mine & ISMINE_WATCH_ONLY) != ISMINE_NO) && external_signing && solvable);
 
 
             if (pcoin->tx->vout[i].tokenDataPtr) {
@@ -2701,7 +2714,7 @@ void CWallet::AvailableCoins(interfaces::Chain::Lock &locked_chain,
             }
 
             vCoins.emplace_back( /* COutput c'tor: */ pcoin, i, nDepth, spendable, solvable, safeTx,
-                                 (coinControl && coinControl->fAllowWatchOnly));
+                                 /* use_max_sig= */ external_signing || !wallet_spendable);
 
             // Checks the sum amount of all UTXO's.
             if (nMinimumSumAmount != MAX_MONEY) {
@@ -2884,7 +2897,7 @@ bool CWallet::SelectCoins(const std::vector<COutput> &vAvailableCoins,
             setCoinsRet.insert(out.GetInputCoin());
         }
 
-        return (nValueRet >= nTargetValue);
+        return nValueRet >= nTargetValue;
     }
 
     // Calculate value from preset inputs and store them.
@@ -2914,14 +2927,16 @@ bool CWallet::SelectCoins(const std::vector<COutput> &vAvailableCoins,
         }
 
         // Just to calculate the marginal byte size
-        nValueFromPresetInputs += pcoin->tx->vout[outpoint.GetN()].nValue;
-        setPresetCoins.insert(CInputCoin(pcoin->tx, outpoint.GetN()));
+        const CTxOut &presetOut = pcoin->tx->vout[outpoint.GetN()];
+        nValueFromPresetInputs += presetOut.nValue;
+        const bool external = coin_control.fAllowWatchOnly || ISMINE_NO == (IsMine(presetOut) & ISMINE_SPENDABLE);
+        setPresetCoins.emplace(pcoin->tx, outpoint.GetN(), /* input_bytes= */ -1, /* use_max_sig= */ external);
     }
 
     // Remove preset inputs from vCoins
     for (std::vector<COutput>::iterator it = vCoins.begin();
          it != vCoins.end() && coin_control.HasSelected();) {
-        if (setPresetCoins.count(it->GetInputCoin())) {
+        if (setPresetCoins.contains(it->GetInputCoin())) {
             it = vCoins.erase(it);
         } else {
             ++it;
@@ -3183,11 +3198,12 @@ CreateTransactionResult CWallet::CreateTransaction(
         // TODO: pass in scriptChange instead of reservekey so
         // change transaction isn't always pay-to-bitcoin-address
         CScript scriptChange;
+        bool change_use_max_sig{};
 
         // coin control: send change to custom address
         if (!std::get_if<CNoDestination>(&coinControl.destChange)) {
             scriptChange = GetScriptForDestination(coinControl.destChange);
-
+            change_use_max_sig = ISMINE_NO == (::IsMine(*this, scriptChange) & ISMINE_SPENDABLE);
             // no coin control: send change to newly generated address
         } else {
             // Note: We use a new key here to keep it from being obvious
@@ -3221,8 +3237,8 @@ CreateTransactionResult CWallet::CreateTransaction(
                 vecSend);
 
             LearnRelatedScripts(vchPubKey, change_type);
-            scriptChange = GetScriptForDestination(
-                GetDestinationForKey(vchPubKey, change_type));
+            scriptChange = GetScriptForDestination(GetDestinationForKey(vchPubKey, change_type));
+            change_use_max_sig = false; // don't use max sig since we sign for this
         }
         CTxOut change_prototype_txout(Amount::zero(), scriptChange);
         coin_selection_params.change_output_size =
@@ -3303,11 +3319,14 @@ CreateTransactionResult CWallet::CreateTransaction(
             if (pick_new_inputs) {
                 nValueIn = Amount::zero();
                 setCoins.clear();
-                const int change_spend_size = CalculateMaximumSignedInputSize(change_prototype_txout, this);
-                // If the wallet doesn't know how to sign change output, assume
-                // p2pkh as lower-bound to allow BnB to do it's thing
+                const int change_spend_size = CalculateMaximumSignedInputSize(change_prototype_txout, this, change_use_max_sig);
+                // If the wallet doesn't know how to sign change output, assume non-grinded ECDSA p2pkh as lower-bound
+                // to allow BnB to do it's thing
                 if (change_spend_size == -1) {
-                    coin_selection_params.change_spend_size = DUMMY_P2PKH_INPUT_SIZE;
+                    coin_selection_params.change_spend_size = change_use_max_sig ? DUMMY_P2PKH_INPUT_SIZE_MAX
+                                                                                 : (config.IsSignSchnorr()
+                                                                                    ? DUMMY_P2PKH_INPUT_SIZE_SCHNORR
+                                                                                    : DUMMY_P2PKH_INPUT_SIZE);
                 } else {
                     coin_selection_params.change_spend_size = static_cast<size_t>(change_spend_size);
                 }
@@ -3363,8 +3382,7 @@ CreateTransactionResult CWallet::CreateTransaction(
             }
 
             CTransaction txNewConst(txNew);
-            int nBytes = CalculateMaximumSignedTxSize(
-                txNewConst, this, coinControl.fAllowWatchOnly);
+            int nBytes = CalculateMaximumSignedTxSize(txNewConst, this, setCoins);
             if (nBytes < 0) {
                 strFailReason = _("Signing transaction failed");
                 return CreateTransactionResult::CT_ERROR;
@@ -3509,7 +3527,7 @@ CreateTransactionResult CWallet::CreateTransaction(
                 AssertLockHeld(cs_main);
                 const uint32_t flags = GetMemPoolScriptFlags(::Params().GetConsensus(), ::ChainActive().Tip());
 
-                if ( ! ProduceSignature(*this, TransactionSignatureCreator(limitedContext, sigHashType), scriptPubKey,
+                if ( ! ProduceSignature(*this, TransactionSignatureCreator(limitedContext, sigHashType, config.IsSignSchnorr()), scriptPubKey,
                                         sigdata, flags)) {
                     strFailReason = _("Signing transaction failed");
                     return CreateTransactionResult::CT_ERROR;
@@ -4475,7 +4493,7 @@ CWallet::GetDestValues(const std::string &prefix) const {
     return values;
 }
 
-bool CWallet::Verify(const CChainParams &chainParams, interfaces::Chain &chain,
+bool CWallet::Verify(const Config &config, interfaces::Chain &chain,
                      const WalletLocation &location, bool salvage_wallet,
                      std::string &error_string, std::string &warning_string) {
     // Do some checking on wallet path. It should be either a:
@@ -4528,7 +4546,7 @@ bool CWallet::Verify(const CChainParams &chainParams, interfaces::Chain &chain,
 
     if (salvage_wallet) {
         // Recover readable keypairs:
-        CWallet dummyWallet(chainParams, chain, WalletLocation(),
+        CWallet dummyWallet(config, chain, WalletLocation(),
                             WalletDatabase::CreateDummy());
         std::string backup_filename;
         if (!WalletBatch::Recover(
@@ -4563,7 +4581,7 @@ void CWallet::MarkPreSplitKeys() {
 }
 
 std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(
-    const CChainParams &chainParams, interfaces::Chain &chain,
+    const Config &config, interfaces::Chain &chain,
     const WalletLocation &location, uint64_t wallet_creation_flags) {
     const std::string &walletFile = location.GetName();
 
@@ -4574,7 +4592,7 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(
         uiInterface.InitMessage(_("Zapping all transactions from wallet..."));
 
         std::unique_ptr<CWallet> tempWallet = std::make_unique<CWallet>(
-            chainParams, chain, location,
+            config, chain, location,
             WalletDatabase::Create(location.GetPath()));
         DBErrors nZapWalletRet = tempWallet->ZapWalletTx(vWtx);
         if (nZapWalletRet != DBErrors::LOAD_OK) {
@@ -4591,7 +4609,7 @@ std::shared_ptr<CWallet> CWallet::CreateWalletFromFile(
     // TODO: Can't use std::make_shared because we need a custom deleter but
     // should be possible to use std::allocate_shared.
     std::shared_ptr<CWallet> walletInstance(
-        new CWallet(chainParams, chain, location,
+        new CWallet(config, chain, location,
                     WalletDatabase::Create(location.GetPath())),
         ReleaseWallet);
     DBErrors nLoadWalletRet = walletInstance->LoadWallet(fFirstRun);
