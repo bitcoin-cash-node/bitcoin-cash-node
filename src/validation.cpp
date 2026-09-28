@@ -26,6 +26,7 @@
 #include <fs.h>
 #include <hash.h>
 #include <index/txindex.h>
+#include <net_datasource.h>
 #include <node/blockstorage.h>
 #include <policy/fees.h>
 #include <policy/mempool.h>
@@ -3576,11 +3577,14 @@ static bool CheckBlockHeader(const CBlockHeader &block, CValidationState &state,
     return true;
 }
 
-bool CheckBlock(const CBlock &block, CValidationState &state,
-                const Consensus::Params &params,
-                BlockValidationOptions validationOptions) {
+bool CheckBlock(const CBlock &block, CValidationState &state, const Consensus::Params &params,
+                BlockValidationOptions validationOptions, uint64_t *pBlockSize) {
     // These are checks that are independent of context.
     if (block.fChecked) {
+        if (pBlockSize) {
+            // caller wants to know blocksize, so maintain function postconditions and set the out variable
+            *pBlockSize = ::GetSerializeSize(block, PROTOCOL_VERSION);
+        }
         return true;
     }
 
@@ -3619,7 +3623,7 @@ bool CheckBlock(const CBlock &block, CValidationState &state,
     }
 
     // Size limits (context-less, so we check against the consensus 2GB limit).
-    if (!CheckBlockSize(block, state, MAX_CONSENSUS_BLOCK_SIZE)) {
+    if (!CheckBlockSize(block, state, MAX_CONSENSUS_BLOCK_SIZE, pBlockSize)) {
         return false; // state set by CheckBlockSize()
     }
 
@@ -4152,9 +4156,8 @@ bool CChainState::AcceptBlock(const Config &config,
 
     const CChainParams &chainparams = config.GetChainParams();
     const Consensus::Params &consensusParams = chainparams.GetConsensus();
-
-    if (!CheckBlock(block, state, consensusParams,
-                    BlockValidationOptions(config)) ||
+    uint64_t blockSize{};
+    if (!CheckBlock(block, state, consensusParams, BlockValidationOptions(config), &blockSize) ||
         !ContextualCheckBlock(block, state, consensusParams, pindex->pprev)) {
         if (state.IsInvalid() && !state.CorruptionPossible()) {
             pindex->nStatus = pindex->nStatus.withFailed();
@@ -4185,7 +4188,7 @@ bool CChainState::AcceptBlock(const Config &config,
     // Relay now, but if it does not build on our best tip, let the
     // SendMessages loop relay it.
     if (!IsInitialBlockDownload() && m_chain.Tip() == pindex->pprev) {
-        GetMainSignals().NewPoWValidBlock(pindex, pblock);
+        GetMainSignals().NewPoWValidBlock(pindex, pblock, blockSize);
     }
 
     // Write block to history file
@@ -4202,7 +4205,7 @@ bool CChainState::AcceptBlock(const Config &config,
             return false;
         }
         ReceivedBlockTransactions(block, pindex, blockPos);
-        MaintainAblaState(consensusParams, block, pindex, __func__);
+        MaintainAblaState(consensusParams, block, pindex, __func__, blockSize);
     } catch (const std::runtime_error &e) {
         return AbortNode(state, std::string("System error: ") + e.what());
     }
@@ -4829,19 +4832,28 @@ bool CVerifyDB::VerifyDB(const Config &config, CCoinsView *coinsview,
         CBlock block;
 
         // check level 0: read from disk
-        if (!ReadBlockFromDisk(block, pindex, consensusParams)) {
+        uint64_t blockSizeRead{}, blockSizeChk{};
+        if (!ReadBlockFromDisk(block, pindex, consensusParams, &blockSizeRead)) {
             return error(
                 "VerifyDB(): *** ReadBlockFromDisk failed at %d, hash=%s",
                 pindex->nHeight, pindex->GetBlockHash().ToString());
         }
 
         // check level 1: verify block validity
-        if (nCheckLevel >= 1 && !CheckBlock(block, state, consensusParams,
-                                            BlockValidationOptions(config))) {
-            return error("%s: *** found bad block at %d, hash=%s (%s)\n",
-                         __func__, pindex->nHeight,
-                         pindex->GetBlockHash().ToString(),
-                         FormatStateMessage(state));
+        if (nCheckLevel >= 1) {
+            if (!CheckBlock(block, state, consensusParams, BlockValidationOptions(config), &blockSizeChk)) {
+                return error("%s: *** found bad block at %d, hash=%s (%s)\n",
+                             __func__, pindex->nHeight,
+                             pindex->GetBlockHash().ToString(),
+                             FormatStateMessage(state));
+            }
+            if (blockSizeRead != blockSizeChk) [[unlikely]] {
+                // This branch really should never be taken but it is here to future-proof the code against some sort
+                // of unexpected serialized format changes and/or as validation for CheckBlock's ability to return the
+                // serialized size correctly.
+                return error("%s: *** block size on disk disagrees with re-serialized size for block at %d, hash=%s (%i != %i)\n",
+                             __func__, pindex->nHeight, pindex->GetBlockHash().ToString(), blockSizeRead, blockSizeChk);
+            }
         }
 
         // check level 2: verify undo validity
@@ -5094,6 +5106,8 @@ void UnloadBlockIndex(const Config &config) {
         setDirtyFileInfo.clear();
     }
     setDirtyBlockIndex.clear();
+
+    SerializedDataSource::ClearCheckSumCache(); // clears internal map of CBlockIndex * -> p2p message checksum
 
     mapBlockIndex.clear();
     fHavePruned = false;

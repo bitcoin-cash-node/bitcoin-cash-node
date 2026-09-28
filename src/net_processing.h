@@ -71,11 +71,16 @@ class PeerLogicValidation final : public CValidationInterface, public NetEventsI
 
     // All of the following cache a recent block, and are protected by cs_most_recent_block.
     // They are written together in NewPoWValidBlock and are always mutually consistent: a non-null
-    // most_recent_compact_block always describes most_recent_block and most_recent_block_hash.
+    // RecentBlock::compace_block always describes RecentBlock::block, RecentBlock::hash, and
+    // RecentBlock::blockSize.
     mutable RecursiveMutex cs_most_recent_block;
-    std::shared_ptr<const CBlock> most_recent_block GUARDED_BY(cs_most_recent_block);
-    std::shared_ptr<const CBlockHeaderAndShortTxIDs> most_recent_compact_block GUARDED_BY(cs_most_recent_block);
-    BlockHash most_recent_block_hash GUARDED_BY(cs_most_recent_block);
+    struct RecentBlock {
+        std::shared_ptr<const CBlock> block;
+        std::shared_ptr<const CBlockHeaderAndShortTxIDs> compact_block;
+        BlockHash hash;
+        uint64_t blockSize{};
+    };
+    RecentBlock m_most_recent_block GUARDED_BY(cs_most_recent_block);
     // Related to the above -- the highest block height we have for compact blocks (see: NewPoWValidBlock())
     int32_t nHighestFastAnnounce GUARDED_BY(cs_main) = 0;
 
@@ -107,8 +112,9 @@ class PeerLogicValidation final : public CValidationInterface, public NetEventsI
     bool AlreadyHave(const CInv &inv) EXCLUSIVE_LOCKS_REQUIRED(cs_main);
     void RelayTransaction(const CTransaction &tx, uint64_t entryId = 0) const;
     void RelayAddress(const CAddress &addr, bool fReachable) const;
+    // Note that ProcessGetBlockData may throw if a low-level error is encountered in reading a block from disk.
     void ProcessGetBlockData(const Config &config, const NodeRef &pfrom, const CInv &inv,
-                             const std::atomic<bool> &interruptMsgProc) const;
+                             const std::atomic<bool> &interruptMsgProc) const LOCKS_EXCLUDED(cs_main);
     /**
      * Service GETDATA requests from peers.
      *
@@ -165,8 +171,7 @@ public:
     /**
      * Overridden from CValidationInterface.
      */
-    void NewPoWValidBlock(const CBlockIndex *pindex,
-                          const std::shared_ptr<const CBlock> &pblock) override;
+    void NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &pblock, uint64_t blockSize) override;
 
     /**
      * Initialize a peer by adding it to mapNodeState and pushing a message

@@ -610,10 +610,11 @@ public:
  *
  * Returns true if the provided block is valid (has valid header,
  * transactions are valid, block is a valid size, etc.)
+ *
+ * @post On true return, if `pBlockSize` is not `nullptr`, it will be filled-in with the block's serialized size.
  */
-bool CheckBlock(const CBlock &block, CValidationState &state,
-                const Consensus::Params &params,
-                BlockValidationOptions validationOptions);
+bool CheckBlock(const CBlock &block, CValidationState &state, const Consensus::Params &params,
+                BlockValidationOptions validationOptions, uint64_t *pBlockSize = nullptr);
 
 /**
  * Checks that the block's size doesn't exceed nMaxBlockSize.

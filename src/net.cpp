@@ -43,6 +43,7 @@
 #include <limits>
 #include <optional>
 #include <type_traits>
+#include <utility>
 #include <unordered_map>
 
 // Dump addresses to peers.dat every 15 minutes (900s)
@@ -730,48 +731,81 @@ uint64_t CConnman::SocketSendData(const NodeRef &pnode) const
     // >2GiB msg sizes even on win32.
     using SendSizeT = decltype(send(INVALID_SOCKET, nullptr, 0, 0)); // send()'s size type: ssize_t on unix, int on win32
     static_assert(std::is_integral_v<SendSizeT> && std::is_signed_v<SendSizeT>, "send() should return a signed integer");
-    using USendSizeT = std::make_unsigned_t<SendSizeT>; // ends up being: unsigned int or size_t
-    static_assert(std::numeric_limits<uint64_t>::max() >= static_cast<USendSizeT>(std::numeric_limits<SendSizeT>::max()),
-                  "SendSizeT's maximum value must fit into a uint64_t");
-    static_assert(std::numeric_limits<size_t>::max() >= static_cast<USendSizeT>(std::numeric_limits<SendSizeT>::max()),
-                  "SendSizeT's maximum value must fit into a size_t");
+    static_assert(std::in_range<uint64_t>(std::numeric_limits<SendSizeT>::max()), "SendSizeT's maximum value must fit into a uint64_t");
+    static_assert(std::in_range<size_t>(std::numeric_limits<SendSizeT>::max()), "SendSizeT's maximum value must fit into a size_t");
+    constexpr size_t MAX_CHUNK = static_cast<size_t>(std::numeric_limits<SendSizeT>::max());
 
-    for (const auto &data : pnode->vSendMsg) {
+    std::vector<uint8_t> tmpBuffer;
+    for (auto &data : pnode->vSendMsg) {
         assert(data.size() > pnode->nSendOffset);
-        SendSizeT nBytes = 0;
+        size_t nBytes = 0;
 
+        bool sendError = false;
+        bool lowLevelError = false;
         {
             LOCK(pnode->cs_hSocket);
             if (pnode->hSocket == INVALID_SOCKET) {
                 break;
             }
 
-            // Ensure we don't overflow SendSizeT (2GiB on win32). If the message exceeds SendSizeT on win32, we will
-            // just send it in two parts.
-            const SendSizeT bytesToSend = std::min<size_t>(data.size() - pnode->nSendOffset,
-                                                           std::numeric_limits<SendSizeT>::max());
+            const size_t recommendedChunkSize = data.RecommendedChunkSize();
+            const size_t chunkSize = std::min(MAX_CHUNK, recommendedChunkSize);
+            const size_t nFileBackedFastPeerLimit = data.isFileBacked()
+                                                        // Limit FileBacked peers to 1MB per msg per pass thru here
+                                                        ? ONE_MEGABYTE
+                                                        // Non-FileBacked peers have no special limit
+                                                        : std::numeric_limits<size_t>::max();
+            while (const size_t n2send = std::min(data.size() - (pnode->nSendOffset + nBytes), chunkSize)) {
+                std::span<const uint8_t> bytes;
+                try {
+                    bytes = data.GetBytes(pnode->nSendOffset + nBytes, n2send, tmpBuffer);
+                } catch (const std::exception &e) {
+                    // Extremely unlikely; can happen if the data source is file backed and there is a low-level disk
+                    // error. The only choice now is to close the connection, since the message stream at this point is
+                    // desynched/corrupted by being unable to correctly complete this message.
+                    LogPrint(BCLog::NET, "Got a low-level error attempting to stream some data to peer %d, "
+                                         "closing connection. Error: %s\n", pnode->GetId(), e.what());
+                    lowLevelError = true;
+                    break;
+                }
+                assert(bytes.size() == size_t(n2send));
+                const SendSizeT nsent = send(pnode->hSocket, reinterpret_cast<const char *>(bytes.data()), bytes.size(),
+                                             MSG_NOSIGNAL | MSG_DONTWAIT);
+                if (nsent < 0) {
+                    sendError = true;
+                    break;
+                }
+                nBytes += nsent;
+                if (static_cast<size_t>(nsent) != n2send) {
+                    // Short send, break out of this inner loop
+                    break;
+                }
+                if (nBytes > nFileBackedFastPeerLimit) {
+                    // A very fast peer happened to exceed the FileBacked data source's per-pass limit of ONE_MEGABYTE.
+                    // We break out early and will resume next time around. Note that the socket handler thread will
+                    // come right back here very quickly, after having given other peers a chance to receive data. We
+                    // break out early here to avoid a situation where 1 very fast peer starves other peers of ever
+                    // getting *any* data (and more importantly: starves the rest of the network subsystem from being
+                    // able to proceed due to holding CNode::cs_vSend for too long, which itself sometimes is taken
+                    // while CConnman::cs_mNodes is also held).
+                    break;
+                }
+            }
+        }
 
-            nBytes = send(pnode->hSocket,
-                          reinterpret_cast<const char *>(data.data()) +
-                              pnode->nSendOffset,
-                          bytesToSend,
-                          MSG_NOSIGNAL | MSG_DONTWAIT);
+        if (lowLevelError) {
+            pnode->CloseSocketDisconnect();
+        } else if (sendError) {
+            // error
+            const int nErr = WSAGetLastError();
+            if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE && nErr != WSAEINTR && nErr != WSAEINPROGRESS) {
+                LogPrintf("socket send error %s\n", NetworkErrorString(nErr));
+                pnode->CloseSocketDisconnect();
+            }
         }
 
         if (nBytes == 0) {
             // couldn't send anything at all
-            break;
-        }
-
-        if (nBytes < 0) {
-            // error
-            int nErr = WSAGetLastError();
-            if (nErr != WSAEWOULDBLOCK && nErr != WSAEMSGSIZE &&
-                nErr != WSAEINTR && nErr != WSAEINPROGRESS) {
-                LogPrintf("socket send error %s\n", NetworkErrorString(nErr));
-                pnode->CloseSocketDisconnect();
-            }
-
             break;
         }
 
@@ -2867,18 +2901,18 @@ bool CConnman::NodeFullyConnected(const NodeRef &pnode) {
 }
 
 void CConnman::PushMessage(const NodeRef &pnode, CSerializedNetMsg &&msg) {
-    size_t nMessageSize = msg.data.size();
-    size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;
+    const size_t nMessageSize = msg.data_source.size();
+    const size_t nTotalSize = nMessageSize + CMessageHeader::HEADER_SIZE;
     LogPrint(BCLog::NET, "sending %s (%d bytes) peer=%d\n", SanitizeString(msg.m_type.c_str()), nMessageSize,
              pnode->GetId());
 
     std::vector<uint8_t> serializedHeader;
     serializedHeader.reserve(CMessageHeader::HEADER_SIZE);
-    uint256 hash = Hash(Span{msg.data}.first(nMessageSize));
-    CMessageHeader hdr(config->GetChainParams().NetMagic(), msg.m_type.c_str(), nMessageSize);
-    std::memcpy(hdr.pchChecksum, hash.begin(), CMessageHeader::CHECKSUM_SIZE);
-
-    CVectorWriter{SER_NETWORK, INIT_PROTO_VERSION, serializedHeader, 0, hdr};
+    {
+        CMessageHeader hdr(config->GetChainParams().NetMagic(), msg.m_type.c_str(), nMessageSize,
+                           msg.data_source.CalculateCheckSum());
+        CVectorWriter{SER_NETWORK, INIT_PROTO_VERSION, serializedHeader, 0, hdr};
+    }
 
     uint64_t nBytesSent = 0;
     {
@@ -2892,9 +2926,9 @@ void CConnman::PushMessage(const NodeRef &pnode, CSerializedNetMsg &&msg) {
         if (pnode->nSendSize > nSendBufferMaxSize) {
             pnode->fPauseSend = true;
         }
-        pnode->vSendMsg.push_back(std::move(serializedHeader));
+        pnode->vSendMsg.emplace_back(std::move(serializedHeader));
         if (nMessageSize) {
-            pnode->vSendMsg.push_back(std::move(msg.data));
+            pnode->vSendMsg.push_back(std::move(msg.data_source));
         }
 
         // If write queue empty, attempt "optimistic write"

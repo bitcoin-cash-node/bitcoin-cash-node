@@ -154,7 +154,8 @@ public:
 
     // Can be overriden with a mock block checker for testing (if nullptr, we use real CheckBlock() from validation.h)
     using CheckBlockFn = std::function<bool(const CBlock &block, CValidationState &state,
-                                            const Consensus::Params &params, BlockValidationOptions validationOptions)>;
+                                            const Consensus::Params &params, BlockValidationOptions validationOptions,
+                                            uint64_t *)>;
     CheckBlockFn m_check_block_mock{nullptr};
 
     PartiallyDownloadedBlock(const Config &configIn, CTxMemPool *poolIn)

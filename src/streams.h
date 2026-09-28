@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2025 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -783,6 +783,7 @@ public:
  */
 template <typename S>
 class BufferedReader : public detail::BufferedCommon<S> {
+    uint64_t nBytesRead{};
 public:
     //! Requires stream has a lifetime longer than this instance
     explicit BufferedReader(S streamIn, size_t size = 1 << 16)
@@ -792,11 +793,13 @@ public:
         if (const size_t available = std::min(dst.size(), this->buf.size() - this->buf_pos)) {
             std::memcpy(dst.data(), this->buf.data() + this->buf_pos, available);
             this->buf_pos += available;
+            nBytesRead += available;
             dst = dst.subspan(available);
         }
         if (dst.size()) {
             assert(this->buf_pos == this->buf.size());
             this->stream.read(dst);
+            nBytesRead += dst.size();
 
             this->buf_pos = 0;
             this->buf.resize(this->stream.detail_fread(this->buf));
@@ -811,6 +814,8 @@ public:
         ::Unserialize(*this, obj);
         return *this;
     }
+
+    uint64_t GetBytesRead() const { return nBytesRead; }
 };
 
 /**

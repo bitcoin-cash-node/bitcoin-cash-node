@@ -247,7 +247,7 @@ ReadStatus PartiallyDownloadedBlock::FillBlock(CBlock &block, const std::vector<
 
     CValidationState state;
     CheckBlockFn check_block = m_check_block_mock ? m_check_block_mock : CheckBlock;
-    if (!check_block(block, state, config->GetChainParams().GetConsensus(), BlockValidationOptions(*config))) {
+    if (!check_block(block, state, config->GetChainParams().GetConsensus(), BlockValidationOptions(*config), nullptr)) {
         // TODO: We really want to just check merkle tree manually here, but
         // that is expensive, and CheckBlock caches a block's "checked-status"
         // (in the CBlock?). CBlock should be able to check its own merkle root

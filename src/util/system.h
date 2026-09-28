@@ -59,7 +59,7 @@ template <typename... Args> bool error(const char *fmt, const Args &... args) {
 void PrintExceptionContinue(const std::exception *pex, const char *pszThread);
 bool FileCommit(FILE *file);
 bool TruncateFile(FILE *file, unsigned int length);
-int RaiseFileDescriptorLimit(int nMinFD);
+int SetMaxFileDescriptorLimit();
 void AllocateFileRange(FILE *file, unsigned int offset, unsigned int length);
 bool RenameOver(fs::path src, fs::path dest);
 bool LockDirectory(const fs::path &directory, const std::string &lockfile_name,

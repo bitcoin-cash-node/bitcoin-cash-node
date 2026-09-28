@@ -16,6 +16,7 @@
 #include <dsproof/dspid.h>
 #include <extversion.h>
 #include <hash.h>
+#include <net_datasource.h>
 #include <net_nodeid.h>
 #include <net_permissions.h>
 #include <netaddress.h>
@@ -35,6 +36,7 @@
 #include <map>
 #include <memory>
 #include <thread>
+#include <utility>
 
 #ifndef WIN32
 #include <arpa/inet.h>
@@ -114,16 +116,25 @@ struct AddedNodeInfo {
 
 struct CNodeStats;
 class CClientUIInterface;
+class CBlockIndex;
 
 struct CSerializedNetMsg {
     CSerializedNetMsg() = default;
+    // For vector buffers (most messages including blocks <= 1MB)
+    CSerializedNetMsg(std::vector<uint8_t> &&data, std::string &&type)
+        : data_source(std::move(data)), m_type{std::move(type)} {}
+    // For > 1MB blocks, data source is file-backed; use the app-global CBlockIndex * for `pindex` here or `nullptr` to
+    // skip the checkSumCache. For further details, see the method documentation the c'tor for `SerializedDataSource`.
+    CSerializedNetMsg(const fs::path &file, const size_t offset, const size_t length, std::string &&type, const CBlockIndex *pindex,
+                      CAutoFile *pfileIn = nullptr)
+        : data_source(file, offset, length, pindex, pfileIn), m_type{std::move(type)} {}
     CSerializedNetMsg(CSerializedNetMsg &&) = default;
     CSerializedNetMsg &operator=(CSerializedNetMsg &&) = default;
     // No copying, only moves.
     CSerializedNetMsg(const CSerializedNetMsg &msg) = delete;
     CSerializedNetMsg &operator=(const CSerializedNetMsg &) = delete;
 
-    std::vector<uint8_t> data;
+    SerializedDataSource data_source;
     std::string m_type;
 };
 
@@ -707,7 +718,7 @@ public:
     // Offset inside the first vSendMsg already sent.
     size_t nSendOffset{0};
     uint64_t nSendBytes GUARDED_BY(cs_vSend){0};
-    std::deque<std::vector<uint8_t>> vSendMsg GUARDED_BY(cs_vSend);
+    std::deque<SerializedDataSource> vSendMsg GUARDED_BY(cs_vSend);
     mutable RecursiveMutex cs_vSend;
     RecursiveMutex cs_hSocket;
     RecursiveMutex cs_vRecv;
@@ -810,7 +821,7 @@ protected:
     mapMsgTypeSize mapRecvBytesPerMsgType GUARDED_BY(cs_vRecv);
 
 public:
-    BlockHash hashContinue;
+    BlockHash hashContinue; ///< Note: this is GUARDED_BY(cs_main) implicitly
     std::atomic<int> nStartingHeight{-1};
 
     // flood relay
