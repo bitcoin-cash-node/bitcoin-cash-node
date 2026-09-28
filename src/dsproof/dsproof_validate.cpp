@@ -12,6 +12,7 @@
 #include <logging.h>
 #include <script/interpreter.h>
 #include <script/script.h>
+#include <script/sigencoding.h>
 #include <script/standard.h>
 #include <txmempool.h>
 #include <validation.h> // for pcoinsTip
@@ -39,6 +40,7 @@ public:
         ByteView vchSig(vchSigIn);
         if (vchSig.empty())
             return false;
+        const SigHashType sigHashType = GetHashType(vchSig);
         vchSig = vchSig.first(vchSig.size() - 1); // drop the hashtype byte tacked on to the end of the signature
 
         CHashWriter ss(SER_GETHASH, 0);
@@ -58,7 +60,7 @@ public:
         WriteCompactSize(ss, scriptCode.size());
         ss << scriptCode;
         ss << m_txout.nValue << m_spender.outSequence << m_spender.hashOutputs;
-        ss << m_spender.lockTime << (int32_t) m_spender.pushData.front().back();
+        ss << m_spender.lockTime << sigHashType;
         const uint256 sighash = ss.GetHash();
         if (pbytesHashed) *pbytesHashed = ss.GetNumBytesWritten();
 
@@ -208,12 +210,12 @@ bool DoubleSpendProof::checkIsProofPossibleForAllInputsOfTx(const CTxMemPool &me
         }
         SigHashType h{uint32_t(0)};
         try {
-            h = SigHashType(uint32_t(getP2PKHSignature(tx, nIn, coin.GetTxOut()).back()));
+            h = GetHashType(getP2PKHSignature(tx, nIn, coin.GetTxOut()));
         } catch (const std::runtime_error &) {
             // exceptions ignored, means we couldn't grab signature and this is non-canonical in some way
         }
         if (!h.hasFork()) {
-            // this should never be possible under normal consensus, but is here for belt-and-suspenders
+            // this can happen if it's non-canonical in some way or if it's unsupported
             return false;
         }
         foundUnprotected = foundUnprotected || h.hasAnyoneCanPay() || h.getBaseType() != BaseSigHashType::ALL;
