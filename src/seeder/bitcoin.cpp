@@ -63,14 +63,13 @@ void CSeederNode::EndMessage() {
                     offsetof(CMessageHeader, nMessageSize),
                 &nSize, sizeof(nSize));
     if (vSend.GetVersion() >= INIT_PROTO_VERSION) {
-        uint256 hash = Hash(Span{vSend}.subspan(nMessageStart));
-        unsigned int nChecksum = 0;
-        std::memcpy(&nChecksum, &hash, sizeof(nChecksum));
-        assert(nMessageStart - nHeaderStart >=
-               offsetof(CMessageHeader, pchChecksum) + sizeof(nChecksum));
-        std::memcpy((char *)&vSend[nHeaderStart] +
-                        offsetof(CMessageHeader, pchChecksum),
-                    &nChecksum, sizeof(nChecksum));
+        const uint256 hash = Hash(Span{vSend}.subspan(nMessageStart));
+        CMessageHeader::CheckSum nChecksum;
+        static_assert(hash.size() >= nChecksum.size());
+        std::memcpy(nChecksum.data(), hash.data(), nChecksum.size());
+        assert(nMessageStart - nHeaderStart >= offsetof(CMessageHeader, pchCheckSum) + sizeof(nChecksum));
+        std::memcpy((char *)&vSend[nHeaderStart] + offsetof(CMessageHeader, pchCheckSum),
+                    nChecksum.data(), nChecksum.size());
     }
     nHeaderStart = allones;
     nMessageStart = allones;
@@ -288,9 +287,8 @@ bool CSeederNode::ProcessMessages() {
             break;
         }
         if (vRecv.GetVersion() >= INIT_PROTO_VERSION) {
-            uint256 hash = Hash(Span{vRecv}.first(nMessageSize));
-            if (std::memcmp(hash.begin(), hdr.pchChecksum,
-                            CMessageHeader::CHECKSUM_SIZE) != 0) {
+            const uint256 hash = Hash(Span{vRecv}.first(nMessageSize));
+            if (std::memcmp(hash.data(), hdr.pchCheckSum.data(), hdr.pchCheckSum.size()) != 0) {
                 continue;
             }
         }

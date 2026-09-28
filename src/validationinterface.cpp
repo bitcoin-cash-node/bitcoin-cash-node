@@ -55,8 +55,7 @@ struct MainSignalsInstance {
         Broadcast;
     boost::signals2::signal<void(const CBlock &, const CValidationState &)>
         BlockChecked;
-    boost::signals2::signal<void(const CBlockIndex *,
-                                 const std::shared_ptr<const CBlock> &)>
+    boost::signals2::signal<void(const CBlockIndex *, const std::shared_ptr<const CBlock> &, uint64_t)>
         NewPoWValidBlock;
 
     // We are not allowed to assume the scheduler only runs in one thread,
@@ -152,7 +151,7 @@ void RegisterValidationInterface(CValidationInterface *pwalletIn) {
             std::bind(&CValidationInterface::BlockChecked, pwalletIn, std::placeholders::_1, std::placeholders::_2)
         );
         conns.NewPoWValidBlock = g_signals.m_internals->NewPoWValidBlock.connect(
-            std::bind(&CValidationInterface::NewPoWValidBlock, pwalletIn, std::placeholders::_1, std::placeholders::_2)
+            std::bind(&CValidationInterface::NewPoWValidBlock, pwalletIn, std::placeholders::_1, std::placeholders::_2, std::placeholders::_3)
         );
         conns.TransactionDoubleSpent = g_signals.m_internals->TransactionDoubleSpent.connect(
             std::bind(&CValidationInterface::TransactionDoubleSpent, pwalletIn, std::placeholders::_1,
@@ -277,7 +276,7 @@ void CMainSignals::BlockChecked(const CBlock &block,
     m_internals->BlockChecked(block, state);
 }
 
-void CMainSignals::NewPoWValidBlock(
-    const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &block) {
-    m_internals->NewPoWValidBlock(pindex, block);
+void CMainSignals::NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &block,
+                                    uint64_t blockSize) {
+    m_internals->NewPoWValidBlock(pindex, block, blockSize);
 }

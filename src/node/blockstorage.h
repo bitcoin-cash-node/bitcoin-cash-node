@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2021 The Bitcoin Core developers
-// Copyright (c) 2023-2025 The Bitcoin developers
+// Copyright (c) 2023-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -16,6 +16,7 @@
 #include <set>
 #include <vector>
 
+class CAutoFile;
 class CBlock;
 class CBlockFileInfo;
 class CBlockIndex;
@@ -83,14 +84,20 @@ void UnlinkPrunedFiles(const std::set<int> &setFilesToPrune);
 
 /** Functions for disk access for blocks */
 bool ReadBlockFromDisk(CBlock &block, const FlatFilePos &pos, const Consensus::Params &params,
-                       const std::optional<BlockHash> &expectedHash = std::nullopt);
-bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &params);
+                       const std::optional<BlockHash> &expectedHash = std::nullopt,
+                       uint64_t *pBlockSize = nullptr);
+bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &params, uint64_t *pBlockSize = nullptr);
 /**
  * Read raw block bytes from disk. Faster than the above, because this function just returns the raw block data without
  * any unserialization. Intended to be used by the net code for low-overhead serving of block data.
+ * @param autoFileIn - If not nullptr, use this as the file reader. Note that this *must* be a CAutoFile pointing to the
+ *                     correct block file (may be at any position within the file) and opened for at least reading
+ *                     binary (i.e. "rb" or "rb+"). The `*autoFileIn` object will be moved-from and will be `IsNull()`
+ *                     on `true` return from this call. `false` return leaves `*autoFileIn` in a valid but unspecified
+ *                     state.
  * `nType` and `nVersion` parameters are used for `-checkblockreads` sanity checking of the serialized data. */
 bool ReadRawBlockFromDisk(std::vector<uint8_t> &rawBlock, const CBlockIndex *pindex, const CChainParams &chainParams,
-                          int nType, int nVersion);
+                          int nType, int nVersion, CAutoFile *autoFileIn = nullptr);
 
 /**
  *  Read just the block size for a given block. This is done by examining the on-disk block file data and is a
@@ -98,10 +105,15 @@ bool ReadRawBlockFromDisk(std::vector<uint8_t> &rawBlock, const CBlockIndex *pin
  *  will be bound to MAX_CONSENSUS_BLOCK_SIZE (2GB) until consensus, p2p msg format, and disk file format changes are
  *  made to support 64-bit block sizes.
  *
+ *  @param autoFileOut - If not nullptr, and if this function is successful (i.e. return value .has_value()), then
+ *                       `*autoFileOut` will be populated with a valid CAutoFile positioned right at the beginning of
+ *                       the block's data, otherwise it will remain unchanged.
  *  @return The block's serialized size. An empty optional is returned if the block is not found or if there is a
  *          low-level error.
  */
-std::optional<uint64_t> ReadBlockSizeFromDisk(const CBlockIndex *pindex, const CChainParams &chainParams);
+std::optional<uint64_t> ReadBlockSizeFromDisk(const CBlockIndex *pindex, const CChainParams &chainParams,
+                                              fs::path *fileNameOut = nullptr, uint64_t *fileOffsetOut = nullptr,
+                                              CAutoFile *autoFileOut = nullptr);
 
 bool UndoReadFromDisk(CBlockUndo &blockundo, const CBlockIndex *pindex);
 bool WriteUndoDataForBlock(const CBlockUndo &blockundo, CValidationState &state, CBlockIndex *pindex,

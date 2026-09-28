@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -40,36 +40,33 @@ public:
     static constexpr size_t COMMAND_SIZE = 12;
     static constexpr size_t MESSAGE_SIZE_SIZE = 4;
     static constexpr size_t CHECKSUM_SIZE = 4;
-    static constexpr size_t MESSAGE_SIZE_OFFSET =
-        MESSAGE_START_SIZE + COMMAND_SIZE;
-    static constexpr size_t CHECKSUM_OFFSET =
-        MESSAGE_SIZE_OFFSET + MESSAGE_SIZE_SIZE;
-    static constexpr size_t HEADER_SIZE =
-        MESSAGE_START_SIZE + COMMAND_SIZE + MESSAGE_SIZE_SIZE + CHECKSUM_SIZE;
-    typedef std::array<uint8_t, MESSAGE_START_SIZE> MessageMagic;
+    static constexpr size_t MESSAGE_SIZE_OFFSET = MESSAGE_START_SIZE + COMMAND_SIZE;
+    static constexpr size_t CHECKSUM_OFFSET = MESSAGE_SIZE_OFFSET + MESSAGE_SIZE_SIZE;
+    static constexpr size_t HEADER_SIZE = MESSAGE_START_SIZE + COMMAND_SIZE + MESSAGE_SIZE_SIZE + CHECKSUM_SIZE;
+    using MessageMagic = std::array<uint8_t, MESSAGE_START_SIZE>;
+    using CheckSum = std::array<uint8_t, CHECKSUM_SIZE>;
 
     explicit CMessageHeader(const MessageMagic &pchMessageStartIn);
 
     /**
-     * Construct a P2P message header from message-start characters, a command
-     * and the size of the message.
-     * @note Passing in a `pszCommand` longer than COMMAND_SIZE will result in a
-     * run-time assertion error.
+     * Construct a P2P message header from message-start characters, a command, the size of the message, and the
+     * checksum.
+     * @note Passing in a `pszCommand` longer than COMMAND_SIZE will result in a run-time assertion error.
      */
-    CMessageHeader(const MessageMagic &pchMessageStartIn,
-                   const char *pszCommand, unsigned int nMessageSizeIn);
+    CMessageHeader(const MessageMagic &pchMessageStartIn, const char *pszCommand, unsigned int nMessageSizeIn,
+                   const CheckSum &pchCheckSum = {});
 
     std::string GetCommand() const;
     bool IsValid(const Config &config) const;
     bool IsValidWithoutConfig(const MessageMagic &magic) const;
     bool IsOversized(const Config &config) const;
 
-    SERIALIZE_METHODS(CMessageHeader, obj) { READWRITE(obj.pchMessageStart, obj.pchCommand, obj.nMessageSize, obj.pchChecksum); }
+    SERIALIZE_METHODS(CMessageHeader, obj) { READWRITE(obj.pchMessageStart, obj.pchCommand, obj.nMessageSize, obj.pchCheckSum); }
 
-    MessageMagic pchMessageStart;
-    std::array<char, COMMAND_SIZE> pchCommand;
-    uint32_t nMessageSize;
-    uint8_t pchChecksum[CHECKSUM_SIZE];
+    MessageMagic pchMessageStart{};
+    std::array<char, COMMAND_SIZE> pchCommand{};
+    uint32_t nMessageSize = -1;
+    CheckSum pchCheckSum{};
 };
 
 /**

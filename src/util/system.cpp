@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2019 The Bitcoin Core developers
-// Copyright (c) 2020-2023 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,14 +14,17 @@
 #include <fs.h>
 #include <random.h>
 #include <serialize.h>
+#include <util/defer.h>
 #include <util/strencodings.h>
 #include <util/string.h>
 #include <util/syserror.h>
 #include <util/time.h>
 
 #include <cstdarg>
+#include <limits>
 #include <memory>
 #include <thread>
+#include <utility>
 #include <typeinfo>
 
 #if (defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__DragonFly__))
@@ -67,6 +70,7 @@
 #endif
 #include <codecvt>
 
+#include <cstdio> /* for _getmaxstdio and _setmaxstdio */
 #include <io.h> /* for _commit */
 #include <shellapi.h>
 #include <shlobj.h>
@@ -75,6 +79,17 @@
 #ifdef HAVE_MALLOPT_ARENA_MAX
 #include <malloc.h>
 #endif
+
+#if defined(MAC_OSX) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#if defined(__NetBSD__)
+/* NetBSD docs say to include this along with sys/sysctl.h */
+#include <sys/param.h>
+#else
+/* All other *BSD and macOS docs say to include this along with sys/sysctl.h */
+#include <sys/types.h>
+#endif // __NetBSD__
+#include <sys/sysctl.h>
+#endif // MAC_OSX || __DragonFly__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__
 
 // Application startup time (used for uptime calculation)
 const int64_t nStartupTime = GetTime();
@@ -1232,29 +1247,81 @@ bool TruncateFile(FILE *file, unsigned int length) {
 }
 
 /**
- * This function tries to raise the file descriptor limit to the requested
- * number. It returns the actual file descriptor limit (which may be more or
- * less than nMinFD)
+ * This function tries to raise the file descriptor limit to the maximum
+ * number. It returns the actual new file descriptor limit.
+ *
+ * On Windows, the file handle limit is 16.7 million, but the C runtime limit
+ * is max 8192 or 2048 (depending on runtime used).  On modern Linux it can be
+ * set as high as 524,288 on many systems. On macOS it can be set as high as
+ * 65,536.
  */
-int RaiseFileDescriptorLimit(int nMinFD) {
+int SetMaxFileDescriptorLimit() {
 #if defined(WIN32)
-    return 2048;
-#else
-    struct rlimit limitFD;
-    if (getrlimit(RLIMIT_NOFILE, &limitFD) != -1) {
-        if (limitFD.rlim_cur < (rlim_t)nMinFD) {
-            limitFD.rlim_cur = nMinFD;
-            if (limitFD.rlim_cur > limitFD.rlim_max) {
-                limitFD.rlim_cur = limitFD.rlim_max;
-            }
-            setrlimit(RLIMIT_NOFILE, &limitFD);
-            getrlimit(RLIMIT_NOFILE, &limitFD);
-        }
-        return limitFD.rlim_cur;
+    // Note the actual max limit depends on the C-runtime that is being used by the app.
+    // On msvcrt: The max limit is usually 2048 (limit defaults to 512)
+    // On ucrt: The max limit is usually 8192 (limit defaults to 512)
+    // We normally compile this app using mingw-g++ which uses msvcrt, so our max limit is usually 2048, but just in
+    // case, we probe by looping backwards starting at 8192 to try and get as many fd's as we can.
+    for (int lim = 8192; lim >= 2048; lim -= 2048) {
+        const int r = _setmaxstdio(lim);
+        if (r > 0) return r;
     }
-    // getrlimit failed, assume it's fine.
-    return nMinFD;
-#endif
+    return _getmaxstdio();
+#else // !WIN32
+    if (struct rlimit rl; getrlimit(RLIMIT_NOFILE, &rl) == 0) {
+        if (rl.rlim_cur != rl.rlim_max) {
+            rl.rlim_cur = rl.rlim_max;
+            setrlimit(RLIMIT_NOFILE, &rl);
+            getrlimit(RLIMIT_NOFILE, &rl);
+        }
+        if (rl.rlim_cur != RLIM_INFINITY && std::in_range<int>(rl.rlim_cur)) {
+            return rl.rlim_cur;
+        } else {
+            // RLIM_INFINITY or a value larger than INT_MAX means we need to check what the kernel says is the max fd's
+#  if defined(MAC_OSX) || defined(__DragonFly__) || defined(__FreeBSD__) || defined(__OpenBSD__) || defined(__NetBSD__)
+#    if defined(__OpenBSD__)
+            // On OpenBSD, we lack the sysctlbyname() call so we must use the more awkward sysctl(). We also lack
+            // KERN_MAXFILESPERPROC so we must use KERN_MAXFILES.
+            int mib[2], max{};
+            size_t len = sizeof(max);
+
+            mib[0] = CTL_KERN;
+            mib[1] = KERN_MAXFILES;
+            if (0 == sysctl(mib, 2, &max, &len, nullptr, 0)) {
+                return max;
+            }
+#    else // !__OpenBSD__
+            // OSX/other BSD: ask the kernel for configured max fd's via sysctlbyname. Note it can never exceed INT_MAX.
+            int max = 0;
+            size_t len = sizeof(max);
+            const char * const name =
+#      if defined(__NetBSD__)
+                // On NetBSD, we lack maxfilesperproc so wing it with maxfiles which is a kernel-wide limit.
+                "kern.maxfiles";
+#      else // !__NetBSD__
+                "kern.maxfilesperproc";
+#      endif // __NetBSD__
+            if (0 == sysctlbyname(name, &max, &len, nullptr, 0)) {
+                return max;
+            }
+#    endif // __OpenBSD__
+#  elif defined(__linux__)
+            // On linux we read /proc to determine the kernel fd limit for a process. Note it can never exceed INT_MAX.
+            if (auto *f = fsbridge::fopen("/proc/sys/fs/nr_open", "r")) {
+                Defer d = [&f] { std::fclose(f); f = nullptr; };
+                if (int max{}; 1 == std::fscanf(f, "%d", &max) && max > 0) {
+                    return max;
+                }
+            }
+#  endif // MAC_OSX || __DragonFly__ || __FreeBSD__ || __OpenBSD__ || __NetBSD__ || __linux__
+            // Unknown platform, or fallthrough if error above -- just saturate int
+            return std::numeric_limits<int>::max();
+        }
+    } else {
+        // getrlimit failed; this should never happen. Return a conservative 512 and pretend nothing went wrong.
+        return 512;
+    }
+#endif // WIN32
 }
 
 /**

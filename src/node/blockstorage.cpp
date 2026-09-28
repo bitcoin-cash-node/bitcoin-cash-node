@@ -397,7 +397,7 @@ bool WriteUndoDataForBlock(const CBlockUndo &blockundo, CValidationState &state,
 }
 
 bool ReadBlockFromDisk(CBlock &block, const FlatFilePos &pos, const Consensus::Params &params,
-                       const std::optional<BlockHash> &expectedHash) {
+                       const std::optional<BlockHash> &expectedHash, uint64_t *pBlockSize) {
     block.SetNull();
 
     // Open history file to read
@@ -410,7 +410,12 @@ bool ReadBlockFromDisk(CBlock &block, const FlatFilePos &pos, const Consensus::P
     // Read block
     try {
         // Note that `filein` is moved-from beyond this point
-        BufferedReader(std::move(filein)) >> block;
+        BufferedReader reader(std::move(filein));
+        reader >> block;
+        if (pBlockSize) {
+            // Caller wants to know the serialized size
+            *pBlockSize = reader.GetBytesRead();
+        }
     } catch (const std::exception &e) {
         return error("%s: Deserialize or I/O error - %s at %s", __func__,
                      e.what(), pos.ToString());
@@ -432,19 +437,20 @@ bool ReadBlockFromDisk(CBlock &block, const FlatFilePos &pos, const Consensus::P
     return true;
 }
 
-bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &params) {
+bool ReadBlockFromDisk(CBlock &block, const CBlockIndex *pindex, const Consensus::Params &params, uint64_t *pBlockSize) {
     FlatFilePos blockPos;
     {
         LOCK(cs_main);
         blockPos = pindex->GetBlockPos();
     }
 
-    return ReadBlockFromDisk(block, blockPos, params, pindex->GetBlockHash());
+    return ReadBlockFromDisk(block, blockPos, params, pindex->GetBlockHash(), pBlockSize);
 }
 
 static std::optional<CAutoFile> ReadBlockSizeCommon(uint64_t &blockSizeOut, const CBlockIndex *pindex,
                                                     const CChainParams &chainParams, FlatFilePos *blockPosOut = nullptr,
-                                                    const bool logErrorIfMissing = true) {
+                                                    const bool logErrorIfMissing = true,
+                                                    CAutoFile *autoFileIn = nullptr) {
 
     FlatFilePos blockPos;
     {
@@ -460,15 +466,27 @@ static std::optional<CAutoFile> ReadBlockSizeCommon(uint64_t &blockSizeOut, cons
         return std::nullopt;
     }
 
-    CAutoFile filein(OpenBlockFile(blockPos, true), SER_DISK, CLIENT_VERSION);
-    if (filein.IsNull()) {
+    std::optional<CAutoFile> optFile;
+    if (autoFileIn && !autoFileIn->IsNull()) {
+        optFile.emplace(std::move(*autoFileIn));
+        // ensure invariant assumed by code below: FILE * must be positioned at the beginning of the block data
+        if (0 != std::fseek(optFile->Get(), blockPos.nPos, SEEK_SET)) [[unlikely]] {
+            // some unspecified error seeking
+            error("%s: fseek failed for %s", __func__, blockPos.ToString());
+            return std::nullopt;
+        }
+    } else {
+        optFile.emplace(OpenBlockFile(blockPos, true), SER_DISK, CLIENT_VERSION);
+    }
+
+    if (optFile->IsNull()) {
         error("%s: OpenBlockFile failed for %s", __func__, blockPos.ToString());
         return std::nullopt;
     }
 
     unsigned int blockSize = 0;
     const size_t headerSize = CMessageHeader::MESSAGE_START_SIZE + sizeof(blockSize);
-    if (std::fseek(filein.Get(), -static_cast<long>(headerSize), SEEK_CUR)) {
+    if (std::fseek(optFile->Get(), -static_cast<long>(headerSize), SEEK_CUR)) {
         error("%s: failed to seek to the block data for %s", __func__, blockPos.ToString());
         return std::nullopt;
     }
@@ -476,7 +494,7 @@ static std::optional<CAutoFile> ReadBlockSizeCommon(uint64_t &blockSizeOut, cons
     CMessageHeader::MessageMagic magic;
     try {
         // read the disk magic and block size
-        filein >> magic >> blockSize;
+        *optFile >> magic >> blockSize;
     } catch (const std::exception &e) {
         error("%s: failed to read block header and size from disk for %s. Original exception: %s",
               __func__, blockPos.ToString(), e.what());
@@ -496,22 +514,28 @@ static std::optional<CAutoFile> ReadBlockSizeCommon(uint64_t &blockSizeOut, cons
     }
     blockSizeOut = blockSize;
 
-    return std::optional<CAutoFile>{std::move(filein)};
+    return optFile;
 }
 
-std::optional<uint64_t> ReadBlockSizeFromDisk(const CBlockIndex *pindex, const CChainParams &chainParams) {
+std::optional<uint64_t> ReadBlockSizeFromDisk(const CBlockIndex *pindex, const CChainParams &chainParams,
+                                              fs::path *fileNameOut, uint64_t *fileOffsetOut, CAutoFile *autoFileOut) {
     uint64_t blockSize;
-    if (!ReadBlockSizeCommon(blockSize, pindex, chainParams, nullptr, /* logErrorIfMissing = */ false)) {
+    FlatFilePos blockPos;
+    auto optAutoFile = ReadBlockSizeCommon(blockSize, pindex, chainParams, &blockPos, /* logErrorIfMissing = */ false);
+    if (!optAutoFile) {
         return std::nullopt;
     }
+    if (fileNameOut) *fileNameOut = BlockFileSeq().FileName(blockPos);
+    if (fileOffsetOut) *fileOffsetOut = blockPos.nPos;
+    if (autoFileOut) *autoFileOut = std::move(*optAutoFile);
     return blockSize;
 }
 
 bool ReadRawBlockFromDisk(std::vector<uint8_t> &rawBlock, const CBlockIndex *pindex,
-                          const CChainParams &chainParams, int nType, int nVersion) {
+                          const CChainParams &chainParams, int nType, int nVersion, CAutoFile *autoFileIn) {
     uint64_t blockSize;
     FlatFilePos blockPos;
-    auto optFile = ReadBlockSizeCommon(blockSize, pindex, chainParams, &blockPos);
+    auto optFile = ReadBlockSizeCommon(blockSize, pindex, chainParams, &blockPos, true, autoFileIn);
     if (!optFile) {
         // error message already generated by ReadBlockSizeCommon() above
         return false;

@@ -597,6 +597,7 @@ add_library(server
   merkleblock.cpp
   miner.cpp
   net.cpp
+  net_datasource.cpp
   net_processing.cpp
   node/blockstorage.cpp
   node/context.cpp

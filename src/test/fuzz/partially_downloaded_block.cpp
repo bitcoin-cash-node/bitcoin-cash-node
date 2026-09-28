@@ -1,5 +1,5 @@
 // Copyright (c) 2023 The Bitcoin Core developers
-// Copyright (c) 2024 The Bitcoin developers
+// Copyright (c) 2024-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -25,7 +25,7 @@
 #include <vector>
 
 PartiallyDownloadedBlock::CheckBlockFn FuzzedCheckBlock(std::optional<unsigned> result) {
-    return [result](const CBlock&, CValidationState& state, const Consensus::Params&, BlockValidationOptions) {
+    return [result](const CBlock&, CValidationState& state, const Consensus::Params&, BlockValidationOptions, uint64_t *) {
         if (result) {
             return state.Invalid(false, *result);
         }

@@ -1,7 +1,7 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
 // Copyright (C) 2020 Tom Zander <tomz@freedommail.ch>
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -73,19 +73,13 @@ static const std::vector<std::string> allNetMessageTypesVec{{
     NetMsgType::EXTVERSION,  NetMsgType::DSPROOF,
 }};
 
-CMessageHeader::CMessageHeader(const MessageMagic &pchMessageStartIn) {
-    memcpy(std::begin(pchMessageStart), std::begin(pchMessageStartIn),
-           MESSAGE_START_SIZE);
-    memset(pchCommand.data(), 0, sizeof(pchCommand));
-    nMessageSize = -1;
-    memset(pchChecksum, 0, CHECKSUM_SIZE);
-}
+CMessageHeader::CMessageHeader(const MessageMagic &pchMessageStartIn) : pchMessageStart(pchMessageStartIn) {}
 
 CMessageHeader::CMessageHeader(const MessageMagic &pchMessageStartIn,
                                const char *pszCommand,
-                               unsigned int nMessageSizeIn) {
-    memcpy(std::begin(pchMessageStart), std::begin(pchMessageStartIn),
-           MESSAGE_START_SIZE);
+                               unsigned int nMessageSizeIn,
+                               const CheckSum &pchCheckSumIn)
+    : pchMessageStart(pchMessageStartIn), nMessageSize{nMessageSizeIn}, pchCheckSum(pchCheckSumIn) {
     // Copy the command name
     size_t i = 0;
     for (; i < pchCommand.size() && pszCommand[i] != 0; ++i) {
@@ -93,13 +87,6 @@ CMessageHeader::CMessageHeader(const MessageMagic &pchMessageStartIn,
     }
     // Assert that the command name passed in is not longer than COMMAND_SIZE
     assert(pszCommand[i] == 0);
-    // Zero-pad to COMMAND_SIZE bytes
-    for (; i < pchCommand.size(); ++i) {
-        pchCommand[i] = 0;
-    }
-
-    nMessageSize = nMessageSizeIn;
-    memset(pchChecksum, 0, CHECKSUM_SIZE);
 }
 
 std::string CMessageHeader::GetCommand() const {
@@ -113,18 +100,16 @@ static bool
 CheckHeaderMagicAndCommand(const CMessageHeader &header,
                            const CMessageHeader::MessageMagic &magic) {
     // Check start string
-    if (memcmp(std::begin(header.pchMessageStart), std::begin(magic),
-               CMessageHeader::MESSAGE_START_SIZE) != 0) {
+    if (std::memcmp(header.pchMessageStart.data(), magic.data(), magic.size()) != 0) {
         return false;
     }
 
     // Check the command string for errors
-    for (const char *p1 = header.pchCommand.data();
-         p1 < header.pchCommand.data() + CMessageHeader::COMMAND_SIZE; p1++) {
+    for (const char *p1 = header.pchCommand.data(), *end = header.pchCommand.data() + header.pchCommand.size();
+         p1 < end; ++p1) {
         if (*p1 == 0) {
             // Must be all zeros after the first zero
-            for (; p1 < header.pchCommand.data() + CMessageHeader::COMMAND_SIZE;
-                 p1++) {
+            for (; p1 < end; ++p1) {
                 if (*p1 != 0) {
                     return false;
                 }

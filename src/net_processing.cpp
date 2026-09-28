@@ -989,8 +989,8 @@ void PeerLogicValidation::BlockConnected(const std::shared_ptr<const CBlock> &pb
  * Maintain state about the best-seen block and fast-announce a compact block
  * to compatible peers.
  */
-void PeerLogicValidation::NewPoWValidBlock(
-    const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &pblock) {
+void PeerLogicValidation::NewPoWValidBlock(const CBlockIndex *pindex, const std::shared_ptr<const CBlock> &pblock,
+                                           const uint64_t blockSize) {
     std::shared_ptr<const CBlockHeaderAndShortTxIDs> pcmpctblock =
         std::make_shared<const CBlockHeaderAndShortTxIDs>(*pblock);
     const CNetMsgMaker msgMaker(PROTOCOL_VERSION);
@@ -1006,9 +1006,8 @@ void PeerLogicValidation::NewPoWValidBlock(
 
     {
         LOCK(cs_most_recent_block);
-        most_recent_block_hash = hashBlock;
-        most_recent_block = pblock;
-        most_recent_compact_block = pcmpctblock;
+        m_most_recent_block = RecentBlock{.block = pblock, .compact_block = pcmpctblock, .hash = hashBlock,
+                                          .blockSize = blockSize};
     }
 
     connman->ForEachNode([this, &pcmpctblock, pindex, &msgMaker,
@@ -1225,20 +1224,14 @@ void PeerLogicValidation::RelayAddress(const CAddress &addr, bool fReachable) co
 
 void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRef &pfrom, const CInv &inv,
                                               const std::atomic<bool> &interruptMsgProc [[maybe_unused]]) const {
+    AssertLockNotHeld(cs_main);
+
     const Consensus::Params &consensusParams = config.GetChainParams().GetConsensus();
 
     const BlockHash hash(inv.hash);
 
     bool send = false;
-    std::shared_ptr<const CBlock> a_recent_block;
-    std::shared_ptr<const CBlockHeaderAndShortTxIDs> a_recent_compact_block;
-    BlockHash a_recent_block_hash{BlockHash::Uninitialized};
-    {
-        LOCK(cs_most_recent_block);
-        a_recent_block = most_recent_block;
-        a_recent_compact_block = most_recent_compact_block;
-        a_recent_block_hash = most_recent_block_hash;
-    }
+    const RecentBlock recent_block = WITH_LOCK(cs_most_recent_block, return m_most_recent_block);
 
     bool need_activate_chain = false;
     {
@@ -1259,13 +1252,13 @@ void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRe
     } // release cs_main before calling ActivateBestChain
     if (need_activate_chain) {
         CValidationState state;
-        if (!ActivateBestChain(config, state, a_recent_block)) {
+        if (!ActivateBestChain(config, state, recent_block.block)) {
             LogPrint(BCLog::NET, "failed to activate chain (%s)\n",
                      FormatStateMessage(state));
         }
     }
 
-    LOCK(cs_main);
+    WAIT_LOCK(cs_main, cs_main_lock);
     const CBlockIndex *pindex = LookupBlockIndex(hash);
     if (pindex) {
         send = BlockRequestAllowed(pindex, consensusParams);
@@ -1317,35 +1310,72 @@ void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRe
     // before trying to send.
     if (send && pindex->nStatus.hasData()) {
         std::shared_ptr<const CBlock> pblock;
-        if (a_recent_block && a_recent_block_hash == pindex->GetBlockHash()) {
-            pblock = a_recent_block;
+        uint64_t pblock_size{}; // invariant: this is valid if pblock is not nullptr
+        if (recent_block.block && recent_block.hash == pindex->GetBlockHash()) {
+            pblock = recent_block.block;
+            pblock_size = recent_block.blockSize;
         }
 
-        auto make_raw_block_message = [&pblock, &pindex, &config, &msgMaker] {
-            CSerializedNetMsg msg;
-            if (pblock) {
-                // pblock points to the recent block already in memory, so just use it rather than reading from disk
-                msg = msgMaker.Make(NetMsgType::BLOCK, *pblock);
+        auto make_raw_block_message = [&pblock, &pblock_size, &pindex, &config, &msgMaker] {
+            if (pblock && pblock_size <= ONE_MEGABYTE) {
+                // pblock points to the recent block already in memory, and it's less than 1MB, so just use it rather than reading from disk
+                return msgMaker.Make(NetMsgType::BLOCK, *pblock);
             } else {
-                // read the raw block data from disk and send it directly to network
-                msg.m_type = NetMsgType::BLOCK;
-                if (!ReadRawBlockFromDisk(msg.data, pindex, config.GetChainParams(), SER_NETWORK, msgMaker.nVersion)) {
-                    assert(!"cannot load raw block data from disk");
+                // - For sufficiently small blocks (<= 1MB), just read the block data directly now and enqueue it.
+                // - For larger blocks, enqueue a message for sending that points to the block file contents for this
+                //   block. We will stream the block data from the disk file piecemeal in CConnman::SocketSendData
+                //   later when sending. (We do this to conserve memory).
+                fs::path blockFile;
+                uint64_t fileOffset{};
+                CAutoFile autoFile(nullptr, 0, 0); // will be moved-to (overwritten) by the line below
+                const auto optSize = ReadBlockSizeFromDisk(pindex, config.GetChainParams(), &blockFile, &fileOffset, &autoFile);
+                if (!optSize) {
+                    throw std::runtime_error(strprintf("Cannot load raw block size from disk for block %d, hash: %s",
+                                                       pindex->nHeight, pindex->GetBlockHash().ToString()));
                 }
+                assert(!autoFile.IsNull()); // if this fires, ReadBlockSizeFromDisk() has a bug / contract violation
+                if constexpr (std::numeric_limits<uint64_t>::max() != std::numeric_limits<size_t>::max()) {
+                    // This check is here in case someone is building on 32-bit (NB: we don't officially support 32-bit)
+                    assert(fileOffset <= std::numeric_limits<size_t>::max() && *optSize <= std::numeric_limits<size_t>::max());
+                }
+                if (*optSize <= ONE_MEGABYTE) {
+                    // Small blocks, read now and enqueue a direct data buffer
+                    std::vector<uint8_t> data;
+                    if (!ReadRawBlockFromDisk(data, pindex, config.GetChainParams(), SER_NETWORK, msgMaker.nVersion, &autoFile)) {
+                        throw std::runtime_error(strprintf("Cannot load raw block data from disk for block %d, hash: %s, file: %s",
+                                                           pindex->nHeight, pindex->GetBlockHash().ToString(), blockFile.filename().string()));
+                    }
+                    return CSerializedNetMsg(std::move(data), NetMsgType::BLOCK);
+                }
+                // For larger blocks, we stream the data from the block file as it's being read by the network thread.
+                // Note that we have taken care to open the file in such a way so as for the following to be true on
+                // *both* Unix and Win32: The file will still remain readable even if it were to be deleted because of
+                // pruning. In such a scenario, the deleted block file really is released back to the system only when
+                // this file is closed after the lifetime of the contained `SerializedDataSource` object ends.
+                LogPrint(BCLog::NET, "Will stream block %d (%u bytes) from disk file %s directly starting at offset %u\n",
+                         pindex->nHeight, *optSize, blockFile.filename().string(), fileOffset);
+                // Note: Assumption here is that `pindex` is an app-global and stable pointer and can serve as a unique
+                //       identifier for this block. This is always true in the current codebase but if that assumption
+                //       changes, then class CSerializedNetMsg and class SerializedDataSource will need to be updated.
+                return CSerializedNetMsg(blockFile, fileOffset, *optSize, NetMsgType::BLOCK, pindex, &autoFile); // may throw
             }
-            return msg;
         };
 
         if (inv.type == MSG_BLOCK) {
-            connman->PushMessage(pfrom, make_raw_block_message());
+            auto msg = make_raw_block_message(); // may throw
+            REVERSE_LOCK(cs_main_lock);
+            // PushMessage without cs_main held because holding it is not necessary and may involve
+            // longish disk reads.
+            connman->PushMessage(pfrom, std::move(msg)); // may throw
         } else {
-            auto ensure_pblock = [&pblock, &pindex, &consensusParams]() -> const CBlock & {
+            auto ensure_pblock = [&pblock, &pblock_size, &pindex, &consensusParams]() -> const CBlock & {
                 // Read block from disk if not already in memory and deserialize to transform it to
                 // MerkleBlock or CompactBlock
                 if (!pblock) {
                     std::shared_ptr<CBlock> pblockRead = std::make_shared<CBlock>();
-                    if (!ReadBlockFromDisk(*pblockRead, pindex, consensusParams)) {
-                        assert(!"cannot load block from disk");
+                    if (!ReadBlockFromDisk(*pblockRead, pindex, consensusParams, &pblock_size)) {
+                        throw std::runtime_error(strprintf("Cannot load block from disk for block %d, hash: %s",
+                                                           pindex->nHeight, pindex->GetBlockHash().ToString()));
                     }
                     pblock = pblockRead;
                 }
@@ -1398,12 +1428,12 @@ void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRe
                 if (CanDirectFetch(consensusParams) &&
                     pindex->nHeight >=
                         ::ChainActive().Height() - MAX_CMPCTBLOCK_DEPTH) {
-                    if (a_recent_compact_block && a_recent_block_hash == pindex->GetBlockHash()) {
+                    if (recent_block.compact_block && recent_block.hash == pindex->GetBlockHash()) {
                         // The requested block is the one we cached on arrival, so reuse
                         // its short txids rather than recomputing them per peer.
                         connman->PushMessage(
                             pfrom, msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK,
-                                                 *a_recent_compact_block));
+                                                 *recent_block.compact_block));
                     } else {
                         CBlockHeaderAndShortTxIDs cmpctblock(ensure_pblock());
                         connman->PushMessage(
@@ -1411,7 +1441,11 @@ void PeerLogicValidation::ProcessGetBlockData(const Config &config, const NodeRe
                                                  cmpctblock));
                     }
                 } else {
-                    connman->PushMessage(pfrom, make_raw_block_message());
+                    auto msg = make_raw_block_message(); // may throw
+                    REVERSE_LOCK(cs_main_lock);
+                    // PushMessage without cs_main held because holding it is not necessary
+                    // here and may involve longish disk reads.
+                    connman->PushMessage(pfrom, std::move(msg)); // may throw
                 }
             }
         }
@@ -1498,7 +1532,23 @@ void PeerLogicValidation::ProcessGetData(const Config &config, const NodeRef &pf
         // BLOCK/FILTERED_BLOCK/CMPCT_BLOCK, then process it as such
         if (inv.type == MSG_BLOCK || inv.type == MSG_FILTERED_BLOCK ||
             inv.type == MSG_CMPCT_BLOCK) {
-            ProcessGetBlockData(config, pfrom, inv, interruptMsgProc);
+            try {
+                ProcessGetBlockData(config, pfrom, inv, interruptMsgProc);
+            } catch (const std::exception &e) {
+                // This exception handler will not normally ever be triggered unless there is some low-level disk I/O
+                // error in reading a block from disk.
+                auto msg = strprintf("WARNING: Caught an exception from ProcessGetBlockData on an inv of type 0x%x for"
+                                     " peer=%d", inv.type, pfrom->GetId());
+                // At this point we can't service the block data request so we really have to behave as if we are a
+                // "pruned" node that is asked for a block below its prune cutoff. So we disconnect the peer (unless
+                // it's whitelisted), so as to not risk having it temporarily stall waiting for a block that will never
+                // arrive.
+                if (!pfrom->HasPermission(PF_NOBAN)) {
+                    pfrom->fDisconnect = true;
+                    msg += " (will disconnect peer)";
+                }
+                LogPrintf("%s. Exception message: %s\n", msg, e.what());
+            }
         }
         // else, if the first item on the queue is an unknown type, we ignore it.
         // In either case we erase this item and continue processing the queue on
@@ -2602,7 +2652,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
             std::shared_ptr<const CBlock> a_recent_block;
             {
                 LOCK(cs_most_recent_block);
-                a_recent_block = most_recent_block;
+                a_recent_block = m_most_recent_block.block;
             }
             CValidationState state;
             if (!ActivateBestChain(config, state, a_recent_block)) {
@@ -2668,8 +2718,8 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         std::shared_ptr<const CBlock> recent_block;
         {
             LOCK(cs_most_recent_block);
-            if (most_recent_block_hash == req.blockhash) {
-                recent_block = most_recent_block;
+            if (m_most_recent_block.hash == req.blockhash) {
+                recent_block = m_most_recent_block.block;
             }
             // Unlock cs_most_recent_block to avoid cs_main lock inversion
         }
@@ -3801,12 +3851,9 @@ bool PeerLogicValidation::ProcessMessages(const Config &config, NodeRef pfrom, s
             return false;
         }
         // Just take one message
-        msgs.splice(msgs.begin(), pfrom->vProcessMsg,
-                    pfrom->vProcessMsg.begin());
-        pfrom->nProcessQueueSize -=
-            msgs.front().vRecv.size() + CMessageHeader::HEADER_SIZE;
-        pfrom->fPauseRecv =
-            pfrom->nProcessQueueSize > connman->GetReceiveFloodSize();
+        msgs.splice(msgs.begin(), pfrom->vProcessMsg, pfrom->vProcessMsg.begin());
+        pfrom->nProcessQueueSize -= msgs.front().vRecv.size() + CMessageHeader::HEADER_SIZE;
+        pfrom->fPauseRecv = pfrom->nProcessQueueSize > connman->GetReceiveFloodSize();
         fMoreWork = !pfrom->vProcessMsg.empty();
     }
     CNetMessage &msg(msgs.front());
@@ -3814,11 +3861,9 @@ bool PeerLogicValidation::ProcessMessages(const Config &config, NodeRef pfrom, s
     msg.SetVersion(pfrom->GetRecvVersion());
 
     // Scan for message start
-    if (memcmp(std::begin(msg.hdr.pchMessageStart),
-               std::begin(chainparams.NetMagic()),
-               CMessageHeader::MESSAGE_START_SIZE) != 0) {
-        LogPrint(BCLog::NET,
-                 "PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n",
+    static_assert(std::is_same_v<decltype(msg.hdr.pchMessageStart), std::remove_cvref_t<decltype(chainparams.NetMagic())>>);
+    if (0 != std::memcmp(msg.hdr.pchMessageStart.data(), chainparams.NetMagic().data(), msg.hdr.pchMessageStart.size())) {
+        LogPrint(BCLog::NET, "PROCESSMESSAGE: INVALID MESSAGESTART %s peer=%d\n",
                  SanitizeString(msg.hdr.GetCommand()), pfrom->GetId());
 
         // Make sure we discourage and disconnect where that come from
@@ -3846,10 +3891,10 @@ bool PeerLogicValidation::ProcessMessages(const Config &config, NodeRef pfrom, s
     // Checksum
     CDataStream &vRecv = msg.vRecv;
     const uint256 &hash = msg.GetMessageHash();
-    if (std::memcmp(hash.data(), hdr.pchChecksum, CMessageHeader::CHECKSUM_SIZE) != 0) {
+    if (std::memcmp(hash.data(), hdr.pchCheckSum.data(), CMessageHeader::CHECKSUM_SIZE) != 0) {
         LogPrint(BCLog::NET, "%s(%s, %u bytes): CHECKSUM ERROR expected %s was %s from peer=%d\n", __func__,
                  SanitizeString(msg_type), nMessageSize, HexStr(Span{hash}.first(CMessageHeader::CHECKSUM_SIZE)),
-                 HexStr(hdr.pchChecksum), pfrom->GetId());
+                 HexStr(hdr.pchCheckSum), pfrom->GetId());
         if (m_banman) {
             m_banman->Discourage(pfrom->addr);
         }
@@ -4331,11 +4376,11 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
                 bool fGotBlockFromCache = false;
                 {
                     LOCK(cs_most_recent_block);
-                    if (most_recent_compact_block && most_recent_block_hash == pBestIndex->GetBlockHash()) {
+                    if (m_most_recent_block.compact_block && m_most_recent_block.hash == pBestIndex->GetBlockHash()) {
                         connman->PushMessage(
                             pto,
                             msgMaker.Make(nSendFlags, NetMsgType::CMPCTBLOCK,
-                                          *most_recent_compact_block));
+                                          m_most_recent_block.compact_block));
                         fGotBlockFromCache = true;
                     }
                 }

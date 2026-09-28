@@ -1669,19 +1669,24 @@ bool AppInitParameterInteraction(Config &config) {
         gArgs.GetArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS);
     nMaxConnections = std::max(nUserMaxConnections, 0);
 
-    // Trim requested connection counts, to fit into system limitations
-    // <int> in std::min<int>(...) to work around FreeBSD compilation issue
-    // described in #2695
-    nFD = RaiseFileDescriptorLimit(nMaxConnections + MIN_CORE_FILEDESCRIPTORS + MAX_ADDNODE_CONNECTIONS);
+    // NB: We require as many fd's as we can get, so as to accomodate leveldb and/or SerializedDataSource::FileBacked
+    nFD = SetMaxFileDescriptorLimit();
+    LogPrintf("File descriptor limit: %d\n", nFD);
 #ifdef USE_POLL
     int fd_max = nFD;
 #else
     int fd_max = FD_SETSIZE;
 #endif
+    // Trim requested connection counts, to fit into system limitations <int> in std::min<int>(...) to work around
+    // FreeBSD compilation issue described in core#2695
     nMaxConnections = std::max(
         std::min<int>(nMaxConnections, fd_max - nBind - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS), 0);
     if (nFD < MIN_CORE_FILEDESCRIPTORS) {
         return InitError(_("Not enough file descriptors available."));
+    } else if (const auto thresh = nBind + MIN_CORE_FILEDESCRIPTORS + nMaxConnections * 2; nFD < thresh) {
+        LogPrintf("WARNING: File descriptor limit of %d is lower than expected; you may experience problems serving block"
+                  " files reliably to peers. Please see about adjusting system limits to allow for at least %d file"
+                  " descriptors per process.\n", nFD, thresh);
     }
     nMaxConnections =
         std::min(nFD - MIN_CORE_FILEDESCRIPTORS - MAX_ADDNODE_CONNECTIONS,
