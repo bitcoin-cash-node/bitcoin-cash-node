@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2019-2023 The Bitcoin developers
+// Copyright (c) 2019-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -69,7 +69,7 @@ BOOST_AUTO_TEST_CASE(outbound_slow_chain_eviction) {
     // Mock an outbound peer
     CAddress addr1(ip(0xa0b0c001), NODE_NONE);
     auto pdummyNode1 = CNode::Make({}, id++, ServiceFlags(NODE_NETWORK), 0, INVALID_SOCKET, addr1,
-                                   0, 0, CAddress(), "", /*fInboundIn=*/false);
+                                   0, 0, CAddress(), "", ConnectionType::OUTBOUND_FULL_RELAY);
     auto & dummyNode1 = *pdummyNode1;
     dummyNode1.SetSendVersion(PROTOCOL_VERSION);
 
@@ -129,7 +129,7 @@ static void AddRandomOutboundPeer(const Config &config,
     CAddress addr(ip(g_insecure_rand_ctx.randbits(32)), NODE_NONE);
     vNodes.emplace_back(CNode::Make({}, id++, ServiceFlags(NODE_NETWORK), 0,
                                     INVALID_SOCKET, addr, 0, 0, CAddress(), "",
-                                    /*fInboundIn=*/false));
+                                    ConnectionType::OUTBOUND_FULL_RELAY));
     NodeRef &pnode = vNodes.back();
     CNode &node = *pnode;
     node.SetSendVersion(PROTOCOL_VERSION);
@@ -153,7 +153,7 @@ BOOST_AUTO_TEST_CASE(stale_tip_peer_management) {
     constexpr int nMaxOutbound = 8;
     CConnman::Options options;
     options.nMaxConnections = 125;
-    options.nMaxOutbound = nMaxOutbound;
+    options.nMaxOutboundFullRelay = nMaxOutbound;
     options.nMaxFeeler = 1;
 
     connman->Init(options);
@@ -229,7 +229,7 @@ BOOST_AUTO_TEST_CASE(DoS_autodiscourage) {
 
     banman->ClearAll();
     CAddress addr1(ip(0xa0b0c001), NODE_NONE);
-    NodeRef pdummyNode1 = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr1, 0, 0, CAddress(), "", true);
+    NodeRef pdummyNode1 = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr1, 0, 0, CAddress(), "", ConnectionType::INBOUND);
     auto &dummyNode1 = *pdummyNode1;
     dummyNode1.SetSendVersion(PROTOCOL_VERSION);
     peerLogic->InitializeNode(config, pdummyNode1);
@@ -251,7 +251,7 @@ BOOST_AUTO_TEST_CASE(DoS_autodiscourage) {
     BOOST_CHECK(!banman->IsDiscouraged(ip(0xa0b0c001 | 0x0000ff00)));
 
     CAddress addr2(ip(0xa0b0c002), NODE_NONE);
-    NodeRef pdummyNode2 = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr2, 1, 1, CAddress(), "", true);
+    NodeRef pdummyNode2 = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr2, 1, 1, CAddress(), "", ConnectionType::INBOUND);
     CNode &dummyNode2 = *pdummyNode2;
     dummyNode2.SetSendVersion(PROTOCOL_VERSION);
     peerLogic->InitializeNode(config, pdummyNode2);
@@ -300,7 +300,7 @@ BOOST_AUTO_TEST_CASE(DoS_banscore) {
     // because 11 is my favorite number.
     gArgs.ForceSetArg("-banscore", "111");
     CAddress addr1(ip(0xa0b0c001), NODE_NONE);
-    NodeRef pdummyNode1 = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr1, 3, 1, CAddress(), "", true);
+    NodeRef pdummyNode1 = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr1, 3, 1, CAddress(), "", ConnectionType::INBOUND);
     CNode &dummyNode1 = *pdummyNode1;;
     dummyNode1.SetSendVersion(PROTOCOL_VERSION);
     peerLogic->InitializeNode(config, pdummyNode1);
@@ -356,7 +356,7 @@ BOOST_AUTO_TEST_CASE(DoS_bantime) {
     SetMockTime(nStartTime);
 
     CAddress addr(ip(0xa0b0c001), NODE_NONE);
-    NodeRef pdummyNode = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr, 4, 4, CAddress(), "", true);
+    NodeRef pdummyNode = CNode::Make({}, id++, NODE_NETWORK, 0, INVALID_SOCKET, addr, 4, 4, CAddress(), "", ConnectionType::INBOUND);
     CNode &dummyNode = *pdummyNode;
     dummyNode.SetSendVersion(PROTOCOL_VERSION);
     peerLogic->InitializeNode(config, pdummyNode);
