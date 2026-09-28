@@ -1,4 +1,4 @@
-// Copyright (c) 2019-2020 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,27 +8,38 @@
 
 #include <boost/test/unit_test.hpp>
 
+#include <stdexcept>
+
 BOOST_FIXTURE_TEST_SUITE(script_bitfield_tests, BasicTestingSetup)
 
-static void CheckBitFieldFailure(const std::vector<uint8_t> &vch, unsigned size,
-                                 ScriptError expected_error) {
-    uint32_t bitfield;
+static void CheckBitFieldFailure(const std::vector<uint8_t> &vch, const unsigned size, const ScriptError expected_error) {
+    uint32_t bitfield{};
     ScriptError serror = ScriptError::OK;
 
-    // First check that size larger than 32 get rejected.
+    // Ensure we get the anticipated error
     BOOST_CHECK(!DecodeBitfield(vch, size, bitfield, &serror));
     BOOST_CHECK(serror == expected_error);
+
+    if (size > 32) {
+        // Check that attempts to encode >32 throw
+        BOOST_CHECK_THROW(EncodeBitfield(bitfield, size), std::domain_error);
+    } else {
+        // But that <= 32 always succeeds
+        BOOST_CHECK_NO_THROW(EncodeBitfield(bitfield, size));
+    }
 }
 
-static void CheckBitFieldSuccess(const std::vector<uint8_t> &vch, unsigned size,
-                                 uint32_t result) {
+static void CheckBitFieldSuccess(const std::vector<uint8_t> &vch, const unsigned size, const uint32_t result) {
     uint32_t bitfield;
     ScriptError serror = ScriptError::OK;
 
-    // First check that size larger than 32 get rejected.
+    // Ensure decoding works ok
     BOOST_CHECK(DecodeBitfield(vch, size, bitfield, &serror));
     BOOST_CHECK_EQUAL(bitfield, result);
     BOOST_CHECK(serror == ScriptError::OK);
+
+    // Ensure encoding is the same as decoding
+    BOOST_CHECK(EncodeBitfield(result, size) == vch);
 
     // One more byte and the test case is invalid.
     std::vector<uint8_t> copy = vch;

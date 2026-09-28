@@ -1,5 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
-// Copyright (c) 2020-2021 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -15,6 +15,7 @@ struct BlockHash;
 class CBlock;
 struct CBlockLocator;
 class CChainParams;
+class Config;
 class CScheduler;
 
 namespace interfaces {
@@ -136,10 +137,10 @@ public:
     virtual void registerRpcs() = 0;
 
     //! Check for errors before loading.
-    virtual bool verify(const CChainParams &chainParams) = 0;
+    virtual bool verify(const Config &config) = 0;
 
     //! Load saved state.
-    virtual bool load(const CChainParams &chainParams) = 0;
+    virtual bool load(const Config &config) = 0;
 
     //! Start client execution and provide a scheduler.
     virtual void start(CScheduler &scheduler) = 0;

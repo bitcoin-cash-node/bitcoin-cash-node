@@ -1,4 +1,4 @@
-// Copyright (c) 2021-2022 The Bitcoin developers
+// Copyright (c) 2021-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -9,6 +9,7 @@
 #include <cashaddrenc.h>
 #include <chain.h>
 #include <chainparams.h>
+#include <config.h>
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
 #include <key_io.h>
@@ -196,7 +197,7 @@ void TestGUI() {
 
     auto chain = interfaces::MakeChain();
     std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(
-        Params(), *chain, WalletLocation(), WalletDatabase::CreateMock());
+        GetConfig(), *chain, WalletLocation(), WalletDatabase::CreateMock());
 
     bool firstRun;
     wallet->LoadWallet(firstRun);

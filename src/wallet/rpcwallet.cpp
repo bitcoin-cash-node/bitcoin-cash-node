@@ -1,6 +1,6 @@
 // Copyright (c) 2010 Satoshi Nakamoto
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -2954,8 +2954,6 @@ static UniValue loadwallet(const Config &config,
             HelpExampleRpc("loadwallet", "\"test.dat\""));
     }
 
-    const CChainParams &chainParams = config.GetChainParams();
-
     WalletLocation location(request.params[0].get_str());
     std::string error;
 
@@ -2974,14 +2972,14 @@ static UniValue loadwallet(const Config &config,
     }
 
     std::string warning;
-    if (!CWallet::Verify(chainParams, *g_rpc_node->chain, location, false,
+    if (!CWallet::Verify(config, *g_rpc_node->chain, location, false,
                          error, warning)) {
         throw JSONRPCError(RPC_WALLET_ERROR,
                            "Wallet file verification failed: " + std::move(error));
     }
 
     std::shared_ptr<CWallet> const wallet = CWallet::CreateWalletFromFile(
-        chainParams, *g_rpc_node->chain, location);
+        config, *g_rpc_node->chain, location);
     if (!wallet) {
         throw JSONRPCError(RPC_WALLET_ERROR, "Wallet loading failed.");
     }
@@ -3023,8 +3021,6 @@ static UniValue createwallet(const Config &config,
             HelpExampleRpc("createwallet", "\"testwallet\""));
     }
 
-    const CChainParams &chainParams = config.GetChainParams();
-
     uint64_t flags = 0;
     if (!request.params[1].isNull() && request.params[1].get_bool()) {
         flags |= WALLET_FLAG_DISABLE_PRIVATE_KEYS;
@@ -3047,7 +3043,7 @@ static UniValue createwallet(const Config &config,
     std::string error;
     std::string create_warning;
     WalletCreationStatus status;
-    std::shared_ptr<CWallet> wallet = CreateWallet(chainParams, *g_rpc_node->chain, request.params[0].get_str(), error,
+    std::shared_ptr<CWallet> wallet = CreateWallet(config, *g_rpc_node->chain, request.params[0].get_str(), error,
                                                    create_warning, status, passphrase, flags);
     if (status == WalletCreationStatus::CREATION_FAILED) {
         throw JSONRPCError(RPC_WALLET_ERROR, error);
@@ -3686,7 +3682,7 @@ UniValue signrawtransactionwithwallet(const Config &config,
     EnsureWalletIsUnlocked(*pwallet);
 
     return SignTransaction(pwallet->chain(), mtx, request.params[1], pwallet,
-                           false, request.params[2]);
+                           false, request.params[2], config.IsSignSchnorr());
 }
 
 UniValue generate(const Config &config, const JSONRPCRequest &request) {

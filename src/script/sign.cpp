@@ -9,12 +9,15 @@
 #include <key.h>
 #include <policy/policy.h>
 #include <primitives/transaction.h>
+#include <script/bitfield.h>
 #include <script/standard.h>
 #include <uint256.h>
 
+#include <cassert>
+
 TransactionSignatureCreator::TransactionSignatureCreator(const ScriptExecutionContext &contextIn,
-                                                         SigHashType sigHashTypeIn)
-    : context(contextIn), sigHashType(sigHashTypeIn), checker(contextIn)
+                                                         SigHashType sigHashTypeIn, bool signSchnorrIn)
+    : context(contextIn), sigHashType(sigHashTypeIn), signSchnorr(signSchnorrIn), checker(contextIn)
 {}
 
 bool TransactionSignatureCreator::CreateSig(const SigningProvider &provider, std::vector<uint8_t> &vchSig,
@@ -26,8 +29,20 @@ bool TransactionSignatureCreator::CreateSig(const SigningProvider &provider, std
     }
 
     const auto & [hash, bytesHashed] = SignatureHash(scriptCode, context, sigHashType, nullptr, scriptFlags);
-    if (!key.SignECDSA(hash, vchSig)) {
-        return false;
+
+    vchSig.clear();
+    if (IsSchnorr()) {
+        // Schnorr
+        vchSig.reserve(65); // 64 for sig + 1 for sigHashType byte
+        if (!key.SignSchnorr(hash, vchSig)) {
+            return false;
+        }
+    } else {
+        // ECDSA
+        vchSig.reserve(73); // max 72 for sig + 1 for sigHashType byte
+        if (!key.SignECDSA(hash, vchSig)) {
+            return false;
+        }
     }
 
     vchSig.push_back(uint8_t(sigHashType.getRawSigHashType()));
@@ -88,6 +103,7 @@ static bool SignStep(const SigningProvider &provider,
     CScript scriptRet;
     ret.clear();
     std::vector<uint8_t> sig;
+    sigdata.hadBothSchnorrAndEcdsaInMultisig = false;
 
     std::vector<StackVec> vSolutions;
     whichTypeRet = Solver(scriptPubKey, vSolutions, scriptFlags);
@@ -132,19 +148,46 @@ static bool SignStep(const SigningProvider &provider,
             return false;
         }
         case TX_MULTISIG: {
-            size_t required = vSolutions.front()[0];
-            // workaround CHECKMULTISIG bug
-            ret.push_back(StackVec());
+            size_t ecdsaCt = 0, schnorrCt = 0;
+            const size_t required = vSolutions.front()[0];
+            const size_t nPubKeys = vSolutions.back()[0];
+            // In case we are signing Schnorr
+            uint32_t schnorr_bitfield = 0;
+            const size_t schnorr_bitfield_index = ret.size();
+            // For ECDSA: This empty vector is a workaround for CHECKMULTISIG bug.
+            // For Schnorr: This empty vector is where we will place the bitfield.
+            ret.emplace_back(/* empty vector */);
             for (size_t i = 1; i < vSolutions.size() - 1; ++i) {
-                CPubKey pubkey = CPubKey(vSolutions[i]);
-                if (ret.size() < required + 1 &&
-                    CreateSig(creator, sigdata, provider, sig, pubkey, scriptPubKey, scriptFlags)) {
+                const CPubKey pubkey(vSolutions[i]);
+                if (ret.size() < required + 1 && CreateSig(creator, sigdata, provider, sig, pubkey, scriptPubKey,
+                                                           scriptFlags)) {
+                    if (const size_t bitpos = i - 1; bitpos < 32) { // guard against illegal shifts
+                        schnorr_bitfield |= 0x1u << bitpos;
+                    }
+
+                    // detect schnorr vs ecdsa
+                    const bool isSchnorr = sig.size() == 65; // consensus rule: schnorr is 64 + 1 sighash byte
+                    schnorrCt += isSchnorr;
+                    ecdsaCt += !isSchnorr;
+
                     ret.push_back(std::move(sig));
                 }
             }
-            bool ok = ret.size() == required + 1;
+            // Tell caller about whether there was mixing of schnorr and ecdsa in a multisig
+            sigdata.hadBothSchnorrAndEcdsaInMultisig = ecdsaCt && schnorrCt;
+            // We are ok if:
+            // - We have the required number of signatures, and
+            // - If we are emitting the Schnorr bitfield, there are no more than 32 pubkeys
+            //   (consensus rule + guard against illegal usage of EncodeBitField), and
+            // - We don't have a heteregenous mix of ecdsa & schnorr sigs (must be either: all schnorr or all ecdsa)
+            const bool ok = ret.size() == required + 1 && (!schnorrCt || nPubKeys <= 32)
+                            && !sigdata.hadBothSchnorrAndEcdsaInMultisig;
             for (size_t i = 0; i + ret.size() < required + 1; ++i) {
-                ret.push_back(StackVec());
+                ret.emplace_back(/* empty vector */);
+            }
+            if (schnorrCt) {
+                // Add the schnorr bitfield if we have schnorr sigs
+                ret[schnorr_bitfield_index] = EncodeBitfield(schnorr_bitfield, std::min<size_t>(32u, nPubKeys));
             }
             return ok;
         }
@@ -160,6 +203,9 @@ static CScript PushAll(const std::vector<StackVec> &values) {
             result << OP_0;
         } else if (v.size() == 1 && v[0] >= 1 && v[0] <= 16) {
             result << CScript::EncodeOP_N(v[0]);
+        } else if (v.size() == 1 && v[0] == 0x81) {
+            // Minimal push op-code required for any byte blobs matching '0x81' (such as Schnorr multisig bitfields)
+            result << OP_1NEGATE;
         } else {
             result << v;
         }
@@ -327,7 +373,7 @@ void SignatureData::MergeSignatureData(SignatureData sigdata) {
 bool SignSignature(const SigningProvider &provider, const CScript &fromPubKey,
                    CMutableTransaction &txTo, unsigned int nIn,
                    const CTxOut &prevOut, SigHashType sigHashType, const uint32_t scriptFlags,
-                   ScriptExecutionContextOpt const& context) {
+                   ScriptExecutionContextOpt const& context, const bool signSchnorr) {
     assert(nIn < txTo.vin.size());
 
     ScriptExecutionContextOpt tmp;
@@ -340,7 +386,7 @@ bool SignSignature(const SigningProvider &provider, const CScript &fromPubKey,
         pcontext = &*tmp;
     }
 
-    TransactionSignatureCreator creator(*pcontext, sigHashType);
+    TransactionSignatureCreator creator(*pcontext, sigHashType, signSchnorr);
 
     SignatureData sigdata;
     bool ret = ProduceSignature(provider, creator, fromPubKey, sigdata, scriptFlags);
@@ -350,13 +396,14 @@ bool SignSignature(const SigningProvider &provider, const CScript &fromPubKey,
 
 bool SignSignature(const SigningProvider &provider, const CTransaction &txFrom,
                    CMutableTransaction &txTo, unsigned int nIn,
-                   SigHashType sigHashType, const uint32_t scriptFlags, ScriptExecutionContextOpt const& context) {
+                   SigHashType sigHashType, const uint32_t scriptFlags, ScriptExecutionContextOpt const& context,
+                   const bool signSchnorr) {
     assert(nIn < txTo.vin.size());
     CTxIn &txin = txTo.vin[nIn];
     assert(txin.prevout.GetN() < txFrom.vout.size());
     const CTxOut &txout = txFrom.vout[txin.prevout.GetN()];
 
-    return SignSignature(provider, txout.scriptPubKey, txTo, nIn, txout, sigHashType, scriptFlags, context);
+    return SignSignature(provider, txout.scriptPubKey, txTo, nIn, txout, sigHashType, scriptFlags, context, signSchnorr);
 }
 
 namespace {
@@ -401,6 +448,20 @@ public:
     }
 };
 
+class DummySchnorrSignatureCreator final : public BaseSignatureCreator {
+public:
+    DummySchnorrSignatureCreator() = default;
+    const BaseSignatureChecker &Checker() const override { return DUMMY_CHECKER; }
+    bool CreateSig(const SigningProvider &, std::vector<uint8_t> &vchSig, const CKeyID &, const CScript &,
+                   uint32_t) const override {
+        // create a dummy all-zeroes Schnorr signature
+        vchSig.assign(65, uint8_t{0});
+        vchSig.back() = SIGHASH_ALL | SIGHASH_FORKID;
+        return true;
+    }
+    bool IsSchnorr() const override { return true; }
+};
+
 template <typename M, typename K, typename V>
 bool LookupHelper(const M &map, const K &key, V &value) {
     auto it = map.find(key);
@@ -415,6 +476,7 @@ bool LookupHelper(const M &map, const K &key, V &value) {
 
 const BaseSignatureCreator &DUMMY_SIGNATURE_CREATOR = DummySignatureCreator(32, 32);
 const BaseSignatureCreator &DUMMY_MAXIMUM_SIGNATURE_CREATOR = DummySignatureCreator(33, 32);
+const BaseSignatureCreator &DUMMY_SCHNORR_SIGNATURE_CREATOR = DummySchnorrSignatureCreator();
 const SigningProvider &DUMMY_SIGNING_PROVIDER = SigningProvider();
 
 bool HidingSigningProvider::GetCScript(const ScriptID &scriptid, CScript &script) const {
@@ -478,4 +540,20 @@ bool IsSolvable(const SigningProvider &provider, const CScript &script, const ui
         return true;
     }
     return false;
+}
+
+// Utility function mainly used by RPCs and bitcoin-tx
+std::string MakeHadBothSchnorrAndEcdsaInMultisigErrorMessage(unsigned input, bool schnorr, bool didAddSigs) {
+    std::string extraMsg;
+    if (didAddSigs) {
+        // we added a signature, so perhaps the error originates from *us* having added an incongruent sig
+        extraMsg = strprintf("You may retry after restarting this software with -signschnorr=%i or asking"
+                             " all cosigners to sign keys with %s signatures",
+                             !schnorr, schnorr ? "Schnorr" : "ECDSA");
+    } else {
+        extraMsg = "Please ask all cosigners to either sign with Schnorr (-signschnorr=1) or"
+                   " ECDSA (-signschnorr=0)";
+    }
+    return strprintf("TX input %i contains a multi-signature script that mixes both Schnorr and ECDSA signatures; this"
+                     " is forbidden by consensus. %s.", input, extraMsg);
 }

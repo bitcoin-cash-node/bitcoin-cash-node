@@ -1,5 +1,5 @@
 // Copyright (c) 2018 The Bitcoin Core developers
-// Copyright (c) 2019-2022 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -119,10 +119,11 @@ void Check(const std::string &prv, const std::string &pub, int flags,
                     CMutableTransaction spend;
                     spend.vin.resize(1);
                     spend.vout.resize(1);
+                    const bool schnorr = InsecureRandBool();
                     BOOST_CHECK_MESSAGE(
                         SignSignature(Merge(keys_priv, script_provider),
                                       spks[n], spend, 0, CTxOut{1 * COIN, spks[n]},
-                                      SigHashType().withFork(), STANDARD_SCRIPT_VERIFY_FLAGS, null_context),
+                                      SigHashType().withFork(), STANDARD_SCRIPT_VERIFY_FLAGS, null_context, schnorr),
                         prv);
                 }
             }

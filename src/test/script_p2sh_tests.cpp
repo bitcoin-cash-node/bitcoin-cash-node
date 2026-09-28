@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2016 The Bitcoin Core developers
-// Copyright (c) 2019-2026 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -54,7 +54,10 @@ BOOST_FIXTURE_TEST_SUITE(script_p2sh_tests, BasicTestingSetup)
 BOOST_AUTO_TEST_CASE(sign) {
     const bool targetedVmLimitsEnabled = false; /* Use legacy VM limits for this test. */
     // This tests both regular p2sh (hash160) and p2sh_32 (hash256).
-    for (const bool is_p2sh_32 : {false, true}) {
+    // Also test both signing ECDSA and signing Schnorr
+    for (unsigned word = 0; word < 0b100; ++word) {
+        const bool is_p2sh_32 = word & 0b01;
+        const bool schnorr = word & 0b10;
         const uint32_t flags = is_p2sh_32 ? STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32
                                           : STANDARD_SCRIPT_VERIFY_FLAGS & ~SCRIPT_ENABLE_P2SH_32;
 
@@ -112,7 +115,7 @@ BOOST_AUTO_TEST_CASE(sign) {
         for (int i = 0; i < 8; i++) {
             BOOST_CHECK_MESSAGE(SignSignature(keystore, CTransaction(txFrom),
                                               txTo[i], 0,
-                                              SigHashType().withFork(), flags, null_context),
+                                              SigHashType().withFork(), flags, null_context, schnorr),
                                 strprintf("SignSignature %d", i));
         }
 
@@ -175,7 +178,10 @@ BOOST_AUTO_TEST_CASE(norecurse) {
 BOOST_AUTO_TEST_CASE(set) {
     const bool targetedVmLimitsEnabled = false; /* Use legacy VM limits for this test. */
     // This tests p2sh_20 and p2sh_32 as well.
-    for (const bool is_p2sh_32 : {false, true}) {
+    // Also test both signing ECDSA and signing Schnorr
+    for (unsigned word = 0; word < 0b100; ++word) {
+        const bool is_p2sh_32 = word & 0b01;
+        const bool schnorr = word & 0b10;
         const uint32_t flags = is_p2sh_32 ? STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32
                                           : STANDARD_SCRIPT_VERIFY_FLAGS & ~SCRIPT_ENABLE_P2SH_32;
 
@@ -231,7 +237,7 @@ BOOST_AUTO_TEST_CASE(set) {
         for (int i = 0; i < 4; i++) {
             BOOST_CHECK_MESSAGE(SignSignature(keystore, CTransaction(txFrom),
                                               txTo[i], 0,
-                                              SigHashType().withFork(), flags, null_context),
+                                              SigHashType().withFork(), flags, null_context, schnorr),
                                 strprintf("SignSignature %d", i));
             BOOST_CHECK_MESSAGE(IsStandardTx(CTransaction(txTo[i]), reason, flags), strprintf("txTo[%d].IsStandard", i));
         }
@@ -471,7 +477,10 @@ BOOST_AUTO_TEST_CASE(switchover) {
 BOOST_AUTO_TEST_CASE(AreInputsStandard) {
     const bool targetedVmLimitsEnabled = false; /* Use legacy VM limits for this test. */
     // This tests p2sh_20 and p2sh_32 as well.
-    for (const bool is_p2sh_32 : {false, true}) {
+    // Also test both signing ECDSA and signing Schnorr
+    for (unsigned word = 0; word < 0b100; ++word) {
+        const bool is_p2sh_32 = word & 0b01;
+        const bool schnorr = word & 0b10;
         const uint32_t flags = is_p2sh_32 ? STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32
                                           : STANDARD_SCRIPT_VERIFY_FLAGS & ~SCRIPT_ENABLE_P2SH_32;
 
@@ -535,11 +544,11 @@ BOOST_AUTO_TEST_CASE(AreInputsStandard) {
 
         auto const null_context = std::nullopt; // It is Ok to have a null context here (not using SIGHASH_UTXOS)
         BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0,
-                                  SigHashType().withFork(), flags, null_context));
+                                  SigHashType().withFork(), flags, null_context, schnorr));
         BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 1,
-                                  SigHashType().withFork(), flags, null_context));
+                                  SigHashType().withFork(), flags, null_context, schnorr));
         BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 2,
-                                  SigHashType().withFork(), flags, null_context));
+                                  SigHashType().withFork(), flags, null_context, schnorr));
     }
 }
 

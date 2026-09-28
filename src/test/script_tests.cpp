@@ -11,6 +11,7 @@
 #include <script/sign.h>
 #include <script/standard.h>
 
+#include <config.h>
 #include <coins.h>
 #include <core_io.h>
 #include <key.h>
@@ -18,6 +19,7 @@
 #include <policy/policy.h>
 #include <random.h>
 #include <rpc/server.h>
+#include <span.h>
 #include <streams.h>
 #include <util/strencodings.h>
 #include <util/system.h>
@@ -2764,7 +2766,8 @@ BOOST_AUTO_TEST_CASE(script_CHECKMULTISIG23) {
 SignatureData CombineSignatures(const CTxOut &txout,
                                 const CMutableTransaction &tx,
                                 const SignatureData &scriptSig1,
-                                const SignatureData &scriptSig2) {
+                                const SignatureData &scriptSig2,
+                                const bool schnorr) {
     SignatureData data;
     data.MergeSignatureData(scriptSig1);
     data.MergeSignatureData(scriptSig2);
@@ -2773,12 +2776,12 @@ SignatureData CombineSignatures(const CTxOut &txout,
     const ScriptExecutionContext limited_context{0, txout, tx};
 
     ProduceSignature(DUMMY_SIGNING_PROVIDER,
-                     TransactionSignatureCreator(limited_context),
+                     TransactionSignatureCreator(limited_context, SigHashType(), schnorr),
                      txout.scriptPubKey, data, STANDARD_SCRIPT_VERIFY_FLAGS);
     return data;
 }
 
-BOOST_AUTO_TEST_CASE(script_combineSigs) {
+void script_combineSigs_inner(const bool schnorr) {
     // Test the ProduceSignature's ability to combine signatures function
     CBasicKeyStore keystore;
     std::vector<CKey> keys;
@@ -2800,26 +2803,26 @@ BOOST_AUTO_TEST_CASE(script_combineSigs) {
 
     SignatureData empty;
     SignatureData combined =
-        CombineSignatures(txFrom.vout[0], txTo, empty, empty);
+        CombineSignatures(txFrom.vout[0], txTo, empty, empty, schnorr);
     BOOST_CHECK(combined.scriptSig.empty());
 
     auto const context = std::nullopt;
 
     // Single signature case:
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                              STANDARD_SCRIPT_VERIFY_FLAGS, context));
+                              STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr));
     scriptSig = DataFromTransaction(ScriptExecutionContext{0, txFrom.vout[0], txTo}, STANDARD_SCRIPT_VERIFY_FLAGS);
-    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
+    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
-    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
+    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
     SignatureData scriptSigCopy = scriptSig;
 
     // Signing again will give a different, valid signature:
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                              STANDARD_SCRIPT_VERIFY_FLAGS, context));
+                              STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr));
     scriptSig = DataFromTransaction(ScriptExecutionContext{0, txFrom.vout[0], txTo}, STANDARD_SCRIPT_VERIFY_FLAGS);
-    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig);
+    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSigCopy.scriptSig ||
                 combined.scriptSig == scriptSig.scriptSig);
 
@@ -2829,17 +2832,17 @@ BOOST_AUTO_TEST_CASE(script_combineSigs) {
     BOOST_CHECK(keystore.AddCScript(pkSingle, false /*=p2sh_20*/, false /* legacy vm limits */));
     scriptPubKey = GetScriptForDestination(ScriptID(pkSingle, false /*=p2sh_20*/));
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                              STANDARD_SCRIPT_VERIFY_FLAGS, context));
+                              STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr));
     scriptSig = DataFromTransaction(ScriptExecutionContext{0, txFrom.vout[0], txTo}, STANDARD_SCRIPT_VERIFY_FLAGS);
-    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
+    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
-    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
+    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
     scriptSigCopy = scriptSig;
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                              STANDARD_SCRIPT_VERIFY_FLAGS, context));
+                              STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr));
     scriptSig = DataFromTransaction(ScriptExecutionContext{0, txFrom.vout[0], txTo}, STANDARD_SCRIPT_VERIFY_FLAGS);
-    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig);
+    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSigCopy.scriptSig ||
                 combined.scriptSig == scriptSig.scriptSig);
 
@@ -2847,21 +2850,21 @@ BOOST_AUTO_TEST_CASE(script_combineSigs) {
     BOOST_CHECK(keystore.AddCScript(pkSingle, true /*=p2sh_32*/, false /* legacy vm limits */));
     scriptPubKey = GetScriptForDestination(ScriptID(pkSingle, true /*=p2sh_32*/));
     BOOST_CHECK(!SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                               STANDARD_SCRIPT_VERIFY_FLAGS & ~SCRIPT_ENABLE_P2SH_32, context));
+                               STANDARD_SCRIPT_VERIFY_FLAGS & ~SCRIPT_ENABLE_P2SH_32, context, schnorr));
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                              STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32, context));
+                              STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32, context, schnorr));
     scriptSig = DataFromTransaction(ScriptExecutionContext{0, txFrom.vout[0], txTo},
                                     STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32);
-    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
+    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
-    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
+    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
     scriptSigCopy = scriptSig;
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                              STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32, context));
+                              STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32, context, schnorr));
     scriptSig = DataFromTransaction(ScriptExecutionContext{0, txFrom.vout[0], txTo},
                                     STANDARD_SCRIPT_VERIFY_FLAGS | SCRIPT_ENABLE_P2SH_32);
-    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig);
+    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSigCopy, scriptSig, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSigCopy.scriptSig ||
                 combined.scriptSig == scriptSig.scriptSig);
 
@@ -2869,11 +2872,11 @@ BOOST_AUTO_TEST_CASE(script_combineSigs) {
     scriptPubKey = GetScriptForMultisig(2, pubkeys);
     BOOST_CHECK(keystore.AddCScript(scriptPubKey, false /*=p2sh_20*/, false /* legacy vm limits */));
     BOOST_CHECK(SignSignature(keystore, CTransaction(txFrom), txTo, 0, SigHashType().withFork(),
-                              STANDARD_SCRIPT_VERIFY_FLAGS, context));
+                              STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr));
     scriptSig = DataFromTransaction(ScriptExecutionContext{0, txFrom.vout[0], txTo}, STANDARD_SCRIPT_VERIFY_FLAGS);
-    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty);
+    combined = CombineSignatures(txFrom.vout[0], txTo, scriptSig, empty, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
-    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig);
+    combined = CombineSignatures(txFrom.vout[0], txTo, empty, scriptSig, schnorr);
     BOOST_CHECK(combined.scriptSig == scriptSig.scriptSig);
 
     // A couple of partially-signed versions:
@@ -2881,19 +2884,31 @@ BOOST_AUTO_TEST_CASE(script_combineSigs) {
     const ScriptExecutionContext limited_context{0, CTxOut{Amount::zero(), scriptPubKey}, txTo};
     uint256 hash1 = SignatureHash(scriptPubKey, limited_context, SigHashType().withFork(), nullptr,
                                   STANDARD_SCRIPT_VERIFY_FLAGS).signatureHash;
-    BOOST_CHECK(keys[0].SignECDSA(hash1, sig1));
+    if (schnorr) {
+        BOOST_CHECK(keys[0].SignSchnorr(hash1, sig1));
+    } else {
+        BOOST_CHECK(keys[0].SignECDSA(hash1, sig1));
+    }
     sig1.push_back(SIGHASH_ALL | SIGHASH_FORKID);
     std::vector<uint8_t> sig2;
     uint256 hash2 = SignatureHash(scriptPubKey, limited_context,
                                   SigHashType().withBaseType(BaseSigHashType::NONE).withFork(),
                                   nullptr, STANDARD_SCRIPT_VERIFY_FLAGS).signatureHash;
-    BOOST_CHECK(keys[1].SignECDSA(hash2, sig2));
+    if (schnorr) {
+        BOOST_CHECK(keys[1].SignSchnorr(hash2, sig2));
+    } else {
+        BOOST_CHECK(keys[1].SignECDSA(hash2, sig2));
+    }
     sig2.push_back(SIGHASH_NONE | SIGHASH_FORKID);
     std::vector<uint8_t> sig3;
     uint256 hash3 = SignatureHash(scriptPubKey, limited_context,
                                   SigHashType().withBaseType(BaseSigHashType::SINGLE).withFork(),
                                   nullptr, STANDARD_SCRIPT_VERIFY_FLAGS).signatureHash;
-    BOOST_CHECK(keys[2].SignECDSA(hash3, sig3));
+    if (schnorr) {
+        BOOST_CHECK(keys[2].SignSchnorr(hash3, sig3));
+    } else {
+        BOOST_CHECK(keys[2].SignECDSA(hash3, sig3));
+    }
     sig3.push_back(SIGHASH_SINGLE | SIGHASH_FORKID);
 
     // Not fussy about order (or even existence) of placeholders or signatures:
@@ -2914,22 +2929,48 @@ BOOST_AUTO_TEST_CASE(script_combineSigs) {
     SignatureData partial3_sigs;
     partial3_sigs.signatures.emplace(keys[2].GetPubKey().GetID(), SigPair(keys[2].GetPubKey(), sig3));
 
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial1_sigs);
-    BOOST_CHECK(combined.scriptSig == partial1a);
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial2_sigs);
-    BOOST_CHECK(combined.scriptSig == complete12);
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial2_sigs, partial1_sigs);
-    BOOST_CHECK(combined.scriptSig == complete12);
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial2_sigs);
-    BOOST_CHECK(combined.scriptSig == complete12);
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial1_sigs);
-    BOOST_CHECK(combined.scriptSig == complete13);
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial2_sigs, partial3_sigs);
-    BOOST_CHECK(combined.scriptSig == complete23);
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial2_sigs);
-    BOOST_CHECK(combined.scriptSig == complete23);
-    combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial3_sigs);
-    BOOST_CHECK(combined.scriptSig == partial3c);
+    auto CheckMatchesExpected = [schnorr](const CScript &target, const CScript &expected, unsigned expected_bitfield) {
+        if (!schnorr) {
+            // ECDSA multisig: the OP_0 in expected is copied vebatim (no bitfield used in ECDSA -- it's always OP_0)
+            BOOST_CHECK(target == expected);
+        } else {
+            // Schnorr multisig: we must account for the fact that `expected` has OP_0 for the bitfield as a
+            // placeholder. So, we must:
+            // - Check that `target` matches `expected` *after* the OP_0 plaeeholder
+            BOOST_REQUIRE(!target.empty() && !expected.empty());
+            BOOST_CHECK(Span{target}.subspan(1) == Span{expected}.subspan(1));
+            // - Use `expected_bitfield` instead, and check that it matches the script number at position 0 of `target`
+            unsigned num = target.front();
+            // transform from script number op-code to regular number
+            BOOST_REQUIRE(num == 0 || (num >= OP_1 && num <= OP_16));
+            if (num) num -= OP_1 - 1;
+            // Must match the expected bitfield
+            BOOST_CHECK_EQUAL(num, expected_bitfield);
+        }
+    };
+
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial1_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, partial1a, 0b001);
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial2_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, complete12, 0b011);
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial2_sigs, partial1_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, complete12, 0b011);
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial1_sigs, partial2_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, complete12, 0b011);
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial1_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, complete13, 0b101);
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial2_sigs, partial3_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, complete23, 0b110);
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial2_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, complete23, 0b110);
+    combined = CombineSignatures(txFrom.vout[0], txTo, partial3_sigs, partial3_sigs, schnorr);
+    CheckMatchesExpected(combined.scriptSig, partial3c, 0b100);
+}
+
+BOOST_AUTO_TEST_CASE(script_combineSigs) {
+    for (const bool schnorr : {false, true}) {
+        script_combineSigs_inner(schnorr);
+    }
 }
 
 BOOST_AUTO_TEST_CASE(script_standard_push) {

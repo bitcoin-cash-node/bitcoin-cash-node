@@ -1,5 +1,5 @@
 // Copyright (c) 2012-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -63,7 +63,7 @@ BOOST_FIXTURE_TEST_CASE(rescan, TestChain100Setup) {
 
     // Verify ScanForWalletTransactions accommodates a null start block.
     {
-        CWallet wallet(Params(), *chain, WalletLocation(),
+        CWallet wallet(GetConfig(), *chain, WalletLocation(),
                        WalletDatabase::CreateDummy());
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(&wallet);
@@ -80,7 +80,7 @@ BOOST_FIXTURE_TEST_CASE(rescan, TestChain100Setup) {
     // Verify ScanForWalletTransactions picks up transactions in both the old
     // and new block files.
     {
-        CWallet wallet(Params(), *chain, WalletLocation(),
+        CWallet wallet(GetConfig(), *chain, WalletLocation(),
                        WalletDatabase::CreateDummy());
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(&wallet);
@@ -101,7 +101,7 @@ BOOST_FIXTURE_TEST_CASE(rescan, TestChain100Setup) {
     // Verify ScanForWalletTransactions only picks transactions in the new block
     // file.
     {
-        CWallet wallet(Params(), *chain, WalletLocation(),
+        CWallet wallet(GetConfig(), *chain, WalletLocation(),
                        WalletDatabase::CreateDummy());
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(&wallet);
@@ -121,7 +121,7 @@ BOOST_FIXTURE_TEST_CASE(rescan, TestChain100Setup) {
 
     // Verify ScanForWalletTransactions scans no blocks.
     {
-        CWallet wallet(Params(), *chain, WalletLocation(),
+        CWallet wallet(GetConfig(), *chain, WalletLocation(),
                        WalletDatabase::CreateDummy());
         AddKey(wallet, coinbaseKey);
         WalletRescanReserver reserver(&wallet);
@@ -157,7 +157,7 @@ BOOST_FIXTURE_TEST_CASE(importmulti_rescan, TestChain100Setup) {
     // after.
     {
         std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(
-            Params(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
+            GetConfig(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
         AddWallet(wallet);
         UniValue::Array keys;
         UniValue::Object key;
@@ -232,7 +232,7 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup) {
     // Import key into wallet and call dumpwallet to create backup file.
     {
         std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(
-            Params(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
+            GetConfig(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
         LOCK(wallet->cs_wallet);
         wallet->mapKeyMetadata[coinbaseKey.GetPubKey().GetID()].nCreateTime =
             KEY_TIME;
@@ -249,7 +249,7 @@ BOOST_FIXTURE_TEST_CASE(importwallet_rescan, TestChain100Setup) {
     // were scanned, and no prior blocks were scanned.
     {
         std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(
-            Params(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
+            GetConfig(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
 
         JSONRPCRequest request;
         request.params.setArray().emplace_back(backup_file);
@@ -292,7 +292,7 @@ BOOST_AUTO_TEST_CASE(no_wallet) {
 // debit functions.
 BOOST_FIXTURE_TEST_CASE(coin_mark_dirty_immature_credit, TestChain100Setup) {
     auto chain = interfaces::MakeChain();
-    CWallet wallet(Params(), *chain, WalletLocation(),
+    CWallet wallet(GetConfig(), *chain, WalletLocation(),
                    WalletDatabase::CreateDummy());
     CWalletTx wtx(&wallet, m_coinbase_txns.back());
     auto locked_chain = chain->lock();
@@ -386,7 +386,7 @@ public:
     ListCoinsTestingSetup() {
         CreateAndProcessBlock({},
                               GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
-        wallet = std::make_unique<CWallet>(Params(), *m_chain, WalletLocation(),
+        wallet = std::make_unique<CWallet>(GetConfig(), *m_chain, WalletLocation(),
                                            WalletDatabase::CreateMock());
         bool firstRun;
         wallet->LoadWallet(firstRun);
@@ -564,7 +564,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_error_on_invalid_coinselection_hint, ListCoinsTes
 BOOST_FIXTURE_TEST_CASE(wallet_disableprivkeys, TestChain100Setup) {
     auto chain = interfaces::MakeChain();
     std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(
-        Params(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
+        GetConfig(), *chain, WalletLocation(), WalletDatabase::CreateDummy());
     wallet->SetMinVersion(FEATURE_LATEST);
     wallet->SetWalletFlag(WALLET_FLAG_DISABLE_PRIVATE_KEYS);
     BOOST_CHECK(!wallet->TopUpKeyPool(1000));
@@ -573,7 +573,7 @@ BOOST_FIXTURE_TEST_CASE(wallet_disableprivkeys, TestChain100Setup) {
 }
 
 // Explicit calculation which is used to test the wallet constant
-static size_t CalculateP2PKHInputSize(bool use_max_sig) {
+static size_t CalculateP2PKHInputSize(bool use_max_sig, bool use_schnorr) {
     // Generate ephemeral valid pubkey
     CKey key;
     key.MakeNewKey(true);
@@ -591,10 +591,10 @@ static size_t CalculateP2PKHInputSize(bool use_max_sig) {
 
     // Fill in dummy signatures for fee calculation.
     SignatureData sig_data;
-    if (!ProduceSignature(keystore,
-                          use_max_sig ? DUMMY_MAXIMUM_SIGNATURE_CREATOR
-                                      : DUMMY_SIGNATURE_CREATOR,
-                          script, sig_data, 0 /* scriptFlags: unused by dummy class, 0 ok here */)) {
+    const auto &creator = use_max_sig ? DUMMY_MAXIMUM_SIGNATURE_CREATOR
+                                      : (use_schnorr ? DUMMY_SCHNORR_SIGNATURE_CREATOR
+                                                     : DUMMY_SIGNATURE_CREATOR);
+    if (!ProduceSignature(keystore, creator, script, sig_data, 0 /* scriptFlags: unused by dummy class, 0 ok here */)) {
         // We're hand-feeding it correct arguments; shouldn't happen
         assert(false);
     }
@@ -605,8 +605,89 @@ static size_t CalculateP2PKHInputSize(bool use_max_sig) {
 }
 
 BOOST_FIXTURE_TEST_CASE(dummy_input_size_test, TestChain100Setup) {
-    BOOST_CHECK(CalculateP2PKHInputSize(false) <= DUMMY_P2PKH_INPUT_SIZE);
-    BOOST_CHECK_EQUAL(CalculateP2PKHInputSize(true), DUMMY_P2PKH_INPUT_SIZE);
+    BOOST_CHECK_EQUAL(CalculateP2PKHInputSize(false, false), DUMMY_P2PKH_INPUT_SIZE);
+    BOOST_CHECK_EQUAL(CalculateP2PKHInputSize(true, false), DUMMY_P2PKH_INPUT_SIZE_MAX);
+    BOOST_CHECK_EQUAL(CalculateP2PKHInputSize(true, true), DUMMY_P2PKH_INPUT_SIZE_MAX);
+    BOOST_CHECK_EQUAL(CalculateP2PKHInputSize(false, true), DUMMY_P2PKH_INPUT_SIZE_SCHNORR);
+}
+
+// Sign a P2PKH input for real and measure it, so the dummy constants are
+// anchored to an actual signature rather than only to the dummy creators.
+static size_t RealP2PKHInputSize(bool sign_schnorr) {
+    CKey key;
+    key.MakeNewKey(true);
+    const CPubKey pubkey = key.GetPubKey();
+    const CScript script = GetScriptForDestination(pubkey.GetID());
+
+    CBasicKeyStore keystore;
+    keystore.AddKeyPubKey(key, pubkey);
+
+    // A transaction spending one P2PKH output of our own.
+    const CTxOut prev_out(1 * COIN, script);
+    CMutableTransaction tx;
+    tx.vin.resize(1);
+    tx.vout.resize(1);
+    tx.vout[0].nValue = prev_out.nValue - 1000 * SATOSHI;
+    tx.vout[0].scriptPubKey = script;
+
+    BOOST_REQUIRE(SignSignature(keystore, script, tx, 0, prev_out, SigHashType().withFork(),
+                                STANDARD_SCRIPT_VERIFY_FLAGS, {}, sign_schnorr));
+    return static_cast<size_t>(GetVirtualTransactionInputSize(tx.vin[0], 1, nBytesPerSigCheck));
+}
+
+BOOST_FIXTURE_TEST_CASE(real_input_size_test, TestChain100Setup) {
+    // The constants must bound what we really produce, not just what the dummy
+    // creators produce; otherwise a matching error in both goes unnoticed.
+    BOOST_CHECK_EQUAL(RealP2PKHInputSize(/* sign_schnorr= */ true), DUMMY_P2PKH_INPUT_SIZE_SCHNORR);
+    size_t max_ecdsa = 0;
+    for (size_t i = 0; i < 64u; ++i) {
+        const size_t sz = RealP2PKHInputSize(/* sign_schnorr= */ false);
+        // Note that: 1 in 64 times ECDSA signatures will be 70 bytes and not 71, thus sz will be 146 and not 147
+        BOOST_CHECK_LE(sz, DUMMY_P2PKH_INPUT_SIZE);
+        max_ecdsa = std::max(max_ecdsa, sz);
+    }
+    // After 64 iterations above the probability is essentially 1.0 that we have seen max_ecdsa == 147,
+    // or more precisely: P(all 64 samples short) is about 2^-384
+    BOOST_CHECK_EQUAL(max_ecdsa, DUMMY_P2PKH_INPUT_SIZE);
+}
+
+// CalculateP2PKHInputSize above re-implements DummySignInput's creator choice,
+// so it cannot notice that choice regressing. Drive the wallet's own path.
+BOOST_FIXTURE_TEST_CASE(dummy_input_size_honors_use_max_sig_test, TestChain100Setup) {
+    const Defer d = [wasSchnorr = GetConfig().IsSignSchnorr()] {
+        // Restore whatever the global setting was prior to this test
+        GetMutableConfig().SetSignSchnorr(wasSchnorr);
+    };
+    auto chain = interfaces::MakeChain();
+    auto wallet = std::make_shared<CWallet>(GetConfig(), *chain, WalletLocation(),
+                                            WalletDatabase::CreateDummy());
+    CKey key;
+    key.MakeNewKey(true);
+    const CPubKey pubkey = key.GetPubKey();
+    {
+        LOCK(wallet->cs_wallet);
+        BOOST_REQUIRE(wallet->AddKeyPubKey(key, pubkey));
+    }
+    const CTxOut txout(1 * COIN, GetScriptForDestination(pubkey.GetID()));
+
+    const bool origSignSchnorr = GetConfig().IsSignSchnorr();
+    Defer restore([&origSignSchnorr] { GetMutableConfig().SetSignSchnorr(origSignSchnorr); });
+
+    // use_max_sig means an external party signs this input, so the estimate must
+    // assume the largest signature they can produce, whatever we would sign with.
+    GetMutableConfig().SetSignSchnorr(true);
+    BOOST_CHECK_EQUAL(CalculateMaximumSignedInputSize(txout, wallet.get(), /* use_max_sig= */ true),
+                      int(DUMMY_P2PKH_INPUT_SIZE_MAX));
+    BOOST_CHECK_EQUAL(CalculateMaximumSignedInputSize(txout, wallet.get(), /* use_max_sig= */ false),
+                      int(DUMMY_P2PKH_INPUT_SIZE_SCHNORR));
+
+    GetMutableConfig().SetSignSchnorr(false);
+    BOOST_CHECK_EQUAL(CalculateMaximumSignedInputSize(txout, wallet.get(), /* use_max_sig= */ true),
+                      int(DUMMY_P2PKH_INPUT_SIZE_MAX));
+    // If use_max_sig is false in non-Schnorr context, we assume a grinded-down input size (147) bytes,
+    // as we ourselves would sign in ECDSA mode.
+    BOOST_CHECK_EQUAL(CalculateMaximumSignedInputSize(txout, wallet.get(), /* use_max_sig= */ false),
+                      int(DUMMY_P2PKH_INPUT_SIZE));
 }
 
 struct Upgrade9NotActivatedTestingSetup : ListCoinsTestingSetup {

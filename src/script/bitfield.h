@@ -18,3 +18,11 @@ enum class ScriptError;
  * @return `false` on error. If `true` is returned, then the `bitfield` out param is populated properly.
  */
 bool DecodeBitfield(const std::vector<uint8_t> &vch, unsigned size, uint32_t &bitfield, ScriptError *serror);
+
+/**
+ *  Returns `bitfield` encoded as a vector, in little endian order. This vector can be used in a multisig Schnorr
+ *  signature. The returned vector will contain the minimal number of bytes needed to encode a bitfield of the given
+ *  `size` in bits.
+ *  @exception std::domain_error if `size` is >32
+ */
+std::vector<uint8_t> EncodeBitfield(uint32_t bitfield, unsigned size);

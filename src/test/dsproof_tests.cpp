@@ -1,4 +1,4 @@
-// Copyright (c) 2020-2024 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -317,8 +317,9 @@ BOOST_FIXTURE_TEST_CASE(dsproof_doublespend_mempool, EnsureClearedMempoolTestCha
         spend.vout[0].nValue = int64_t(GetRand(1'000)) * CENT;
         spend.vout[0].scriptPubKey = scriptPubKey;
         // Sign:
+        const bool schnorr = InsecureRandBool();
         const auto ok = SignSignature(provider, *tx, spend, 0, SigHashType().withFork(),
-                                      STANDARD_SCRIPT_VERIFY_FLAGS, {} /* context */);
+                                      STANDARD_SCRIPT_VERIFY_FLAGS, {} /* context */, schnorr);
         BOOST_CHECK(ok);
         // Also a tx spending a p2pk cannot have a dsproof
         BOOST_CHECK(!DoubleSpendProof::checkIsProofPossibleForAllInputsOfTx(g_mempool, CTransaction{spend}, &isProtected));
@@ -357,8 +358,9 @@ BOOST_FIXTURE_TEST_CASE(dsproof_doublespend_mempool, EnsureClearedMempoolTestCha
         spends[i].vout[0].scriptPubKey = scriptPubKey;
 
         // Sign:
+        const bool schnorr = InsecureRandBool();
         const auto ok = SignSignature(provider, *cbTxRef, spends[i], 0, SigHashType().withFork(),
-                                      STANDARD_SCRIPT_VERIFY_FLAGS, context);
+                                      STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr);
         BOOST_CHECK(ok);
     }
 
@@ -580,8 +582,9 @@ BOOST_FIXTURE_TEST_CASE(dsproof_recursive_search_mempool, EnsureClearedMempoolTe
         spends[i].vout[1].scriptPubKey = scriptPubKey;
 
         // Sign:
+        const bool schnorr = InsecureRandBool();
         const auto ok = SignSignature(provider, *cbTxRef, spends[i], 0, SigHashType().withFork(),
-                                      STANDARD_SCRIPT_VERIFY_FLAGS, context);
+                                      STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr);
         BOOST_CHECK(ok);
     }
     size_t nokCt = 0, okCt = 0;
@@ -631,8 +634,9 @@ BOOST_FIXTURE_TEST_CASE(dsproof_recursive_search_mempool, EnsureClearedMempoolTe
 
             // Sign:
             for (size_t n = 0; n < tx.vin.size(); ++n) {
+                const bool schnorr = InsecureRandBool();
                 const auto ok = SignSignature(provider, *parent, tx, n, SigHashType().withFork(),
-                                              STANDARD_SCRIPT_VERIFY_FLAGS, context);
+                                              STANDARD_SCRIPT_VERIFY_FLAGS, context, schnorr);
                 BOOST_CHECK(ok);
             }
             l.emplace_back();
@@ -736,10 +740,11 @@ BOOST_FIXTURE_TEST_CASE(dsproof_with_cashtokens, Upgrade9TestChain100Setup) {
         BOOST_CHECK_GT(commitmentData.size(), uint256::size());
         txTo.vout[1].tokenDataPtr.emplace(tokenId, token::SafeAmount::fromInt(0).value(), commitmentData, true /* hasNFT */);
 
-        // Sign all inputs
+        // Sign all inputs, randomly toggling between ECDSA and Schnorr
         for (size_t inputNum = 0; inputNum < txTo.vin.size(); ++inputNum) {
+            const bool schnorr = InsecureRandBool();
             const auto ok = SignSignature(provider, *txFrom, txTo, inputNum, SigHashType().withFork(),
-                                          scriptFlags, context);
+                                          scriptFlags, context, schnorr);
             BOOST_CHECK(ok);
         }
     }
@@ -792,8 +797,9 @@ BOOST_FIXTURE_TEST_CASE(dsproof_with_cashtokens, Upgrade9TestChain100Setup) {
 
                 // Sign all inputs
                 for (size_t inputNum = 0; inputNum < txTo.vin.size(); ++inputNum) {
+                    const bool schnorr = InsecureRandBool();
                     const auto ok = SignSignature(provider, *txFrom, txTo, inputNum, SigHashType().withFork(),
-                                                  scriptFlags, context);
+                                                  scriptFlags, context, schnorr);
                     BOOST_CHECK(ok);
                 }
             }

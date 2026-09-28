@@ -1,6 +1,6 @@
 // Copyright (c) 2009-2010 Satoshi Nakamoto
 // Copyright (c) 2009-2016 The Bitcoin Core developers
-// Copyright (c) 2017-2022 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -89,28 +89,34 @@ public:
     virtual bool CreateSig(const SigningProvider &provider,
                            std::vector<uint8_t> &vchSig, const CKeyID &keyid,
                            const CScript &scriptCode, uint32_t scriptFlags) const = 0;
+
+    ///! If true, we are signing with Schnorr
+    virtual bool IsSchnorr() const { return false; }
 };
 
 /** A signature creator for transactions. */
 class TransactionSignatureCreator : public BaseSignatureCreator {
     const ScriptExecutionContext &context;
     SigHashType sigHashType;
+    const bool signSchnorr;
     const TransactionSignatureChecker checker;
 
 public:
     // NB: if `context.isLimited()`, then we won't be able to sign SIGHASH_UTXOS
-    explicit TransactionSignatureCreator(const ScriptExecutionContext &context,
-                                         SigHashType sigHashTypeIn = SigHashType());
+    explicit TransactionSignatureCreator(const ScriptExecutionContext &context, SigHashType sigHashTypeIn, bool signSchnorr);
     const BaseSignatureChecker &Checker() const override { return checker; }
     bool CreateSig(const SigningProvider &provider,
                    std::vector<uint8_t> &vchSig, const CKeyID &keyid,
                    const CScript &scriptCode, uint32_t scriptFlags) const override;
+    bool IsSchnorr() const override { return signSchnorr; }
 };
 
 /** A signature creator that just produces 71-byte empty signatures. */
 extern const BaseSignatureCreator &DUMMY_SIGNATURE_CREATOR;
 /** A signature creator that just produces 72-byte empty signatures. */
 extern const BaseSignatureCreator &DUMMY_MAXIMUM_SIGNATURE_CREATOR;
+/** A signature creator that just produces 65-byte empty signatures. */
+extern const BaseSignatureCreator &DUMMY_SCHNORR_SIGNATURE_CREATOR;
 
 typedef std::pair<CPubKey, std::vector<uint8_t>> SigPair;
 
@@ -121,6 +127,9 @@ typedef std::pair<CPubKey, std::vector<uint8_t>> SigPair;
 struct SignatureData {
     /// Stores whether the scriptSig are complete.
     bool complete = false;
+    /// Filled-in by ProduceSignature to indicate that this was a multisig with mixed ECDSA and Schnorr sigs
+    /// Normally if this is true, then `complete` is false
+    bool hadBothSchnorrAndEcdsaInMultisig = false;
     /// The scriptSig of an input. Contains complete signatures or the
     /// traditional partial signatures format.
     CScript scriptSig;
@@ -225,10 +234,12 @@ bool ProduceSignature(const SigningProvider &provider,
 bool SignSignature(const SigningProvider &provider, const CScript &fromPubKey,
                    CMutableTransaction &txTo, unsigned int nIn,
                    const CTxOut &prevTxOut, SigHashType sigHashType,
-                   uint32_t scriptFlags, ScriptExecutionContextOpt const& context);
+                   uint32_t scriptFlags, ScriptExecutionContextOpt const& context, bool signSchnorr);
+
 bool SignSignature(const SigningProvider &provider, const CTransaction &txFrom,
                    CMutableTransaction &txTo, unsigned int nIn,
-                   SigHashType sigHashType, uint32_t scriptFlags, ScriptExecutionContextOpt const& context);
+                   SigHashType sigHashType, uint32_t scriptFlags, ScriptExecutionContextOpt const& context,
+                   bool signSchnorr);
 
 /** Extract signature data from a transaction input, and insert it. */
 SignatureData DataFromTransaction(const ScriptExecutionContext &context, uint32_t scriptFlags);
@@ -241,3 +252,9 @@ void UpdateInput(CTxIn &input, const SignatureData &data);
  * Solvability is unrelated to whether we consider this output to be ours.
  */
 bool IsSolvable(const SigningProvider &provider, const CScript &script, uint32_t scriptFlags);
+
+/**
+ *  Utility function to generate an error message appropriate for complaining that a signed or partially signed
+ *  multisig input mixed Schnorr and ECDSA. Intented to be returned as an RPC error message or used by bitcoin-tx.
+ */
+std::string MakeHadBothSchnorrAndEcdsaInMultisigErrorMessage(unsigned input, bool nodeIsSchnorr, bool nodeDidAddSigs);

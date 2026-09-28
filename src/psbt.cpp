@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -144,9 +144,14 @@ bool PSBTInputSigned(PSBTInput &input) {
 
 bool SignPSBTInput(const SigningProvider &provider,
                    PartiallySignedTransaction &psbt, int index, const uint32_t scriptFlags,
-                   SigHashType sighash, const ScriptExecutionContextOpt &optContext) {
+                   SigHashType sighash, const ScriptExecutionContextOpt &optContext, const bool schnorr,
+                   bool *pHadBothSchnorrAndEcdsaInMultisig) {
     PSBTInput &input = psbt.inputs.at(index);
     const CMutableTransaction &tx = psbt.tx.value();
+
+    if (pHadBothSchnorrAndEcdsaInMultisig) {
+        *pHadBothSchnorrAndEcdsaInMultisig = false;
+    }
 
     if (PSBTInputSigned(input)) {
         return true;
@@ -177,9 +182,12 @@ bool SignPSBTInput(const SigningProvider &provider,
         tmp.emplace(unsigned(index), utxo, tx);
         pcontext = &*tmp;
     }
-    TransactionSignatureCreator creator(*pcontext, sighash);
+    TransactionSignatureCreator creator(*pcontext, sighash, schnorr);
 
     bool sig_complete = ProduceSignature(provider, creator, utxo.scriptPubKey, sigdata, scriptFlags);
+    if (pHadBothSchnorrAndEcdsaInMultisig) {
+        *pHadBothSchnorrAndEcdsaInMultisig = sigdata.hadBothSchnorrAndEcdsaInMultisig;
+    }
     input.FromSignatureData(sigdata);
 
     return sig_complete;

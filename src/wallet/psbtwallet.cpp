@@ -1,5 +1,5 @@
 // Copyright (c) 2009-2018 The Bitcoin Core developers
-// Copyright (c) 2020-2025 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -49,9 +49,17 @@ bool FillPSBT(const CWallet *pwallet, PartiallySignedTransaction &psbtx, uint32_
                 "Specified sighash and sighash in PSBT do not match.");
         }
 
-        complete &=
-            SignPSBTInput(HidingSigningProvider(pwallet, !sign, !bip32derivs),
-                          psbtx, i, scriptFlags, sighash_type);
+        bool hadBothSchnorrAndEcdsaInMultisig{};
+        const auto nSigsBefore = psbtx.inputs.at(i).partial_sigs.size();
+        const bool ok = SignPSBTInput(HidingSigningProvider(pwallet, !sign, !bip32derivs), psbtx, i, scriptFlags,
+                                      sighash_type, {}, pwallet->config.IsSignSchnorr(), &hadBothSchnorrAndEcdsaInMultisig);
+        if (!ok && hadBothSchnorrAndEcdsaInMultisig) {
+            // indicate this is unsupported by network
+            const bool didAddSigs = nSigsBefore < psbtx.inputs.at(i).partial_sigs.size();
+            throw JSONRPCError(RPC_VERIFY_ERROR,
+                               MakeHadBothSchnorrAndEcdsaInMultisigErrorMessage(i, pwallet->config.IsSignSchnorr(), didAddSigs));
+        }
+        complete &= ok;
     }
 
     // Fill in the bip32 keypaths and redeemscripts for the outputs so that
@@ -66,7 +74,7 @@ bool FillPSBT(const CWallet *pwallet, PartiallySignedTransaction &psbtx, uint32_
 
         const ScriptExecutionContext limitedContext(0u, out, *psbtx.tx);
 
-        TransactionSignatureCreator creator(limitedContext, SigHashType().withFork());
+        TransactionSignatureCreator creator(limitedContext, SigHashType().withFork(), pwallet->config.IsSignSchnorr());
 
         ProduceSignature(HidingSigningProvider(pwallet, true, !bip32derivs), creator, out.scriptPubKey, sigdata,
                          scriptFlags);

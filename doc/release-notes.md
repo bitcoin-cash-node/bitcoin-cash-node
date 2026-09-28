@@ -21,7 +21,8 @@ Users who are running v29.1.0 or older are encouraged to upgrade to v29.1.1.
 
 ## Added functionality
 
-None
+- A new CLI arg, `-signschnorr` (default: 1) has been added. It controls whether the node signs with Schnorr signatures
+  or not. If disabled (by e.g.: `-signschnorr=0` and/or `-nosignschnorr`), the node reverts back to signing with ECDSA.
 
 ## Deprecated functionality
 
@@ -46,6 +47,18 @@ None
 - The `savemempool` RPC command now returns the full path and name of the file to which the mempool was saved.
 - The `listunspent` RPC now has a new argument `include_immature_coinbase` to include coinbase UTXOs that don't meet the
   minimum spendability depth requirement (which before were silently skipped).
+- The node RPC, node wallet, and the `bitcoin-tx` tool now always sign all transactions with Schnorr signatures. To
+  disable this behavior, and go back to ECDSA-only signing, restart the node with `-signschnorr=0` or `-nosignschnorr`.
+  - Compatibility note: This means that all node-signed transactions now have a different shape by default, so any
+    external tooling depending on e.g. exact output from `signrawtransactionwithwallet` might need to be updated if they
+    depend on assumptions related to ECDSA signatures that don't hold for Schnorr signatures. In that hopefully unlikely
+    case, the the node must be started with `-nosignschnorr` to revert to previous behavior (until the tooling itself is
+    updated).
+  - The RPCs `finalizepsbt`, `walletprocesspsbt` and `combinerawtransaction` now may return a JSON-RPC error code -25
+    should they be tasked to sign or combine a multisig transaction that ends up having a mixture of ECDSA and Schnorr
+    signatures. Mixing Schnorr and ECDSA signatures when spending a multisig input is forbidden by consensus. If you use
+    the node wallet to sign or prepare multisig transactions from external signers, always be sure that all cosigners are
+    either all signing with Schnorr (`-signschnorr=1`) or with ECDSA (`-signschnorr=0`).
 
 ## Removed functionality
 

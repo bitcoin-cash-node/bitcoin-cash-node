@@ -1,5 +1,5 @@
 // Copyright (c) 2011-2016 The Bitcoin Core developers
-// Copyright (c) 2020-2026 The Bitcoin developers
+// Copyright (c) 2020-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -38,7 +38,23 @@ static bool ToMemPool(const CMutableTransaction &tx) {
         Amount::zero() /* nAbsurdFee */);
 }
 
-BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, TestChain100Setup) {
+// Testing setup that we use with a few cases below to try both Schnorr and ECDSA signing for the same test cases
+struct TxValidationCacheSetup : TestChain100Setup {
+    TxValidationCacheSetup() = default;
+
+    void tx_mempool_block_doublespend_inner(bool schnorr);
+    void checkinputs_test_inner(bool schnorr);
+
+    bool CoinbaseKeySign(const bool schnorr, const uint256 &hash, std::vector<uint8_t> &vchSig) const {
+        if (schnorr) {
+            return coinbaseKey.SignSchnorr(hash, vchSig);
+        } else {
+            return coinbaseKey.SignECDSA(hash, vchSig);
+        }
+    }
+};
+
+void TxValidationCacheSetup::tx_mempool_block_doublespend_inner(const bool schnorr) {
     // Make sure skipping validation of transactions that were validated going
     // into the memory pool does not allow double-spends in blocks to pass
     // validation when they should not.
@@ -60,7 +76,7 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, TestChain100Setup) {
         std::vector<uint8_t> vchSig;
         uint256 hash = SignatureHash(scriptPubKey, ScriptExecutionContext{0, m_coinbase_txns[0]->vout[0], spends[i]},
                                      SigHashType().withFork(), nullptr, STANDARD_SCRIPT_VERIFY_FLAGS).signatureHash;
-        BOOST_CHECK(coinbaseKey.SignECDSA(hash, vchSig));
+        BOOST_CHECK(CoinbaseKeySign(schnorr, hash, vchSig));
         vchSig.push_back(uint8_t(SIGHASH_ALL | SIGHASH_FORKID));
         spends[i].vin[0].scriptSig << vchSig;
     }
@@ -92,6 +108,14 @@ BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, TestChain100Setup) {
     // spends[1] should have been removed from the mempool when the block with
     // spends[0] is accepted:
     BOOST_CHECK_EQUAL(g_mempool.size(), 0U);
+}
+
+// We do this test case both with Schnorr and ECDSA signing, for belt-and-suspenders
+BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend, TxValidationCacheSetup) {
+    tx_mempool_block_doublespend_inner(true);
+}
+BOOST_FIXTURE_TEST_CASE(tx_mempool_block_doublespend_ecdsa, TxValidationCacheSetup) {
+    tx_mempool_block_doublespend_inner(false);
 }
 
 static inline bool
@@ -178,7 +202,7 @@ ValidateCheckInputsForAllFlags(const CTransaction &tx, uint32_t failing_flags,
     }
 }
 
-BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
+void TxValidationCacheSetup::checkinputs_test_inner(const bool schnorr) {
     // Test that passing CheckInputs with one set of script flags doesn't imply
     // that we would pass again with a different set of flags.
     {
@@ -215,7 +239,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
         const ScriptExecutionContext limited_context{0, m_coinbase_txns[0]->vout[0], funding_tx};
         uint256 fundingSigHash = SignatureHash(p2pk_scriptPubKey, limited_context, SigHashType().withFork(),
                                                nullptr, STANDARD_SCRIPT_VERIFY_FLAGS).signatureHash;
-        BOOST_CHECK(coinbaseKey.SignECDSA(fundingSigHash, fundingVchSig));
+        BOOST_CHECK(CoinbaseKeySign(schnorr, fundingSigHash, fundingVchSig));
         fundingVchSig.push_back(uint8_t(SIGHASH_ALL | SIGHASH_FORKID));
         funding_tx.vin[0].scriptSig << fundingVchSig;
     }
@@ -355,7 +379,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
         const ScriptExecutionContext limited_context{0, spend_tx.vout[1], invalid_with_cltv_tx};
         uint256 hash = SignatureHash(spend_tx.vout[1].scriptPubKey, limited_context, SigHashType().withFork(),
                                      nullptr, STANDARD_SCRIPT_VERIFY_FLAGS).signatureHash;
-        BOOST_CHECK(coinbaseKey.SignECDSA(hash, vchSig));
+        BOOST_CHECK(CoinbaseKeySign(schnorr, hash, vchSig));
         vchSig.push_back(uint8_t(SIGHASH_ALL | SIGHASH_FORKID));
         invalid_with_cltv_tx.vin[0].scriptSig = CScript() << vchSig << ScriptInt::fromIntUnchecked(101);
 
@@ -393,7 +417,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
         const ScriptExecutionContext limited_context{0, spend_tx.vout[2], invalid_with_csv_tx};
         uint256 hash = SignatureHash(spend_tx.vout[2].scriptPubKey, limited_context, SigHashType().withFork(),
                                      nullptr, STANDARD_SCRIPT_VERIFY_FLAGS).signatureHash;
-        BOOST_CHECK(coinbaseKey.SignECDSA(hash, vchSig));
+        BOOST_CHECK(CoinbaseKeySign(schnorr, hash, vchSig));
         vchSig.push_back(uint8_t(SIGHASH_ALL | SIGHASH_FORKID));
         invalid_with_csv_tx.vin[0].scriptSig = CScript() << vchSig << ScriptInt::fromIntUnchecked(101);
 
@@ -436,7 +460,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
             const ScriptExecutionContext limited_context{0, spend_tx.vout[0], tx};
 
             BOOST_CHECK(ProduceSignature(keystore,
-                                         TransactionSignatureCreator(limited_context, SigHashType().withFork()),
+                                         TransactionSignatureCreator(limited_context, SigHashType().withFork(), schnorr),
                                          spend_tx.vout[0].scriptPubKey, sigdata, STANDARD_SCRIPT_VERIFY_FLAGS));
             UpdateInput(tx.vin[0], sigdata);
         }
@@ -446,7 +470,7 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
             const ScriptExecutionContext limited_context{1, spend_tx.vout[3], tx};
 
             BOOST_CHECK(ProduceSignature(keystore,
-                                         TransactionSignatureCreator(limited_context, SigHashType().withFork()),
+                                         TransactionSignatureCreator(limited_context, SigHashType().withFork(), schnorr),
                                          spend_tx.vout[3].scriptPubKey, sigdata, STANDARD_SCRIPT_VERIFY_FLAGS));
             UpdateInput(tx.vin[1], sigdata);
         }
@@ -585,6 +609,14 @@ BOOST_FIXTURE_TEST_CASE(checkinputs_test, TestChain100Setup) {
         BOOST_CHECK_EQUAL(scriptchecks[1].GetScriptError(),
                           ScriptError::INVALID_STACK_OPERATION);
     }
+}
+
+// We do this test case both with Schnorr and ECDSA signing, for belt-and-suspenders
+BOOST_FIXTURE_TEST_CASE(checkinputs_test, TxValidationCacheSetup) {
+    checkinputs_test_inner(true);
+}
+BOOST_FIXTURE_TEST_CASE(checkinputs_test_ecdsa, TxValidationCacheSetup) {
+    checkinputs_test_inner(false);
 }
 
 BOOST_AUTO_TEST_CASE(scriptcache_values) {

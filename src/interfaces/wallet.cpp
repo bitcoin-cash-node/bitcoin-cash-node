@@ -1,6 +1,6 @@
 // Copyright (c) 2018 The Bitcoin Core developers
 // Copyright (c) 2022 The Bitcoin Cash Node developers
-// Copyright (c) 2019-2022 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -8,6 +8,7 @@
 
 #include <amount.h>
 #include <chain.h>
+#include <config.h>
 #include <consensus/validation.h>
 #include <init.h>
 #include <interfaces/chain.h>
@@ -508,11 +509,11 @@ namespace {
             RegisterWalletRPCCommands(::tableRPC);
             RegisterDumpRPCCommands(::tableRPC);
         }
-        bool verify(const CChainParams &chainParams) override {
-            return VerifyWallets(chainParams, m_chain, m_wallet_filenames);
+        bool verify(const Config &config) override {
+            return VerifyWallets(config, m_chain, m_wallet_filenames);
         }
-        bool load(const CChainParams &chainParams) override {
-            return LoadWallets(chainParams, m_chain, m_wallet_filenames);
+        bool load(const Config &config) override {
+            return LoadWallets(config, m_chain, m_wallet_filenames);
         }
         void start(CScheduler &scheduler) override {
             return StartWallets(scheduler);

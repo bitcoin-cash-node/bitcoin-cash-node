@@ -8,6 +8,7 @@
 #pragma once
 
 #include <amount.h>
+#include <config.h>
 #include <dsproof/dsproof.h>
 #include <interfaces/chain.h>
 #include <outputtype.h>
@@ -43,12 +44,11 @@
 //  This function will perform salvage on the wallet if requested, as long as
 //  only one wallet is being loaded (WalletParameterInteraction forbids
 //  -salvagewallet, -zapwallettxes or -upgradewallet with multiwallet).
-bool VerifyWallets(const CChainParams &chainParams, interfaces::Chain &chain,
+bool VerifyWallets(const Config &config, interfaces::Chain &chain,
                    const std::vector<std::string> &wallet_files);
 
 //! Load wallet databases.
-bool LoadWallets(const CChainParams &chainParams, interfaces::Chain &chain,
-                 const std::vector<std::string> &wallet_files);
+bool LoadWallets(const Config &config, interfaces::Chain &chain, const std::vector<std::string> &wallet_files);
 
 //! Complete startup of wallets.
 void StartWallets(CScheduler &scheduler);
@@ -81,7 +81,7 @@ enum class WalletCreationStatus {
     ENCRYPTION_FAILED
 };
 
-std::shared_ptr<CWallet> CreateWallet(const CChainParams &chainParams, interfaces::Chain& chain, const std::string& name,
+std::shared_ptr<CWallet> CreateWallet(const Config &config, interfaces::Chain& chain, const std::string& name,
                                       std::string& error, std::string& warning, WalletCreationStatus& status,
                                       const SecureString& passphrase, uint64_t wallet_creation_flags);
 
@@ -108,7 +108,9 @@ static constexpr bool DEFAULT_ALLOW_LEGACY_P2SH = false;
 //! Default for the RPC option "include_unsafe"
 static constexpr bool DEFAULT_INCLUDE_UNSAFE_INPUTS = false;
 //! Pre-calculated constant for input size estimation
-static constexpr size_t DUMMY_P2PKH_INPUT_SIZE = 148;
+static constexpr size_t DUMMY_P2PKH_INPUT_SIZE_MAX = 148; // 72-byte worst-case ECDSA sig
+static constexpr size_t DUMMY_P2PKH_INPUT_SIZE = 147; // 71-byte grinded-down ECDSA sig as we would produce
+static constexpr size_t DUMMY_P2PKH_INPUT_SIZE_SCHNORR = 141;
 
 class CChainParams;
 class CCoinControl;
@@ -355,8 +357,7 @@ public:
 };
 
 // Get the marginal bytes of spending the specified output
-int CalculateMaximumSignedInputSize(const CTxOut &txout, const CWallet *pwallet,
-                                    bool use_max_sig = false);
+int CalculateMaximumSignedInputSize(const CTxOut &txout, const CWallet *pwallet, bool use_max_sig = false);
 
 /**
  * A transaction with a bunch of additional info that only the owner cares
@@ -558,8 +559,7 @@ public:
     // Get the marginal bytes if spending the specified output from this
     // transaction
     int GetSpendSize(unsigned int out, bool use_max_sig = false) const {
-        return CalculateMaximumSignedInputSize(tx->vout[out], pwallet,
-                                               use_max_sig);
+        return CalculateMaximumSignedInputSize(tx->vout[out], pwallet, use_max_sig);
     }
 
     void GetAmounts(std::list<COutputEntry> &listReceived,
@@ -651,7 +651,7 @@ public:
     std::string ToString() const;
 
     inline CInputCoin GetInputCoin() const {
-        return CInputCoin(tx->tx, i, nInputBytes);
+        return CInputCoin(tx->tx, i, nInputBytes, use_max_sig);
     }
 };
 
@@ -833,6 +833,7 @@ private:
     BlockHash m_last_block_processed;
 
 public:
+    const Config &config;
     const CChainParams &chainParams;
     /*
      * Main wallet lock.
@@ -880,11 +881,11 @@ public:
     unsigned int nMasterKeyMaxID = 0;
 
     /** Construct wallet with specified name and database implementation. */
-    CWallet(const CChainParams &chainParamsIn, interfaces::Chain &chain,
+    CWallet(const Config &configIn, interfaces::Chain &chain,
             const WalletLocation &location,
             std::unique_ptr<WalletDatabase> databaseIn)
         : m_chain(chain), m_location(location), database(std::move(databaseIn)),
-          chainParams(chainParamsIn) {}
+          config(configIn), chainParams(config.GetChainParams()) {}
 
     ~CWallet() {
         // Should not have slots connected at this point.
@@ -1164,17 +1165,8 @@ public:
         std::vector<std::pair<std::string, std::string>> orderForm,
         CReserveKey &reservekey, CConnman *connman, CValidationState &state);
 
-    bool DummySignTx(CMutableTransaction &txNew, const std::set<CTxOut> &txouts,
-                     bool use_max_sig = false) const {
-        std::vector<CTxOut> v_txouts(txouts.size());
-        std::copy(txouts.begin(), txouts.end(), v_txouts.begin());
-        return DummySignTx(txNew, v_txouts, use_max_sig);
-    }
-    bool DummySignTx(CMutableTransaction &txNew,
-                     const std::vector<CTxOut> &txouts,
-                     bool use_max_sig = false) const;
-    bool DummySignInput(CTxIn &tx_in, const CTxOut &txout,
-                        bool use_max_sig = false) const;
+    bool DummySignTx(CMutableTransaction &txNew, const std::vector<CTxOut> &txouts, const std::set<CInputCoin> &setCoins) const;
+    bool DummySignInput(CTxIn &tx_in, const CTxOut &txout, bool use_max_sig) const;
 
     CFeeRate m_pay_tx_fee{DEFAULT_PAY_TX_FEE};
     bool m_spend_zero_conf_change{DEFAULT_SPEND_ZEROCONF_CHANGE};
@@ -1350,7 +1342,7 @@ public:
                             const TxId &txid);
 
     //! Verify wallet naming and perform salvage on the wallet if required
-    static bool Verify(const CChainParams &chainParams,
+    static bool Verify(const Config &config,
                        interfaces::Chain &chain, const WalletLocation &location,
                        bool salvage_wallet, std::string &error_string,
                        std::string &warning_string);
@@ -1360,7 +1352,7 @@ public:
      * in case of an error.
      */
     static std::shared_ptr<CWallet> CreateWalletFromFile(
-        const CChainParams &chainParams, interfaces::Chain &chain,
+        const Config &config, interfaces::Chain &chain,
         const WalletLocation &location, uint64_t wallet_creation_flags = 0);
 
     /**
@@ -1538,11 +1530,7 @@ public:
 // Use DummySignatureCreator, which inserts 71 byte signatures everywhere.
 // NOTE: this requires that all inputs must be in mapWallet (eg the tx should
 // be IsAllFromMe).
-int64_t CalculateMaximumSignedTxSize(const CTransaction &tx,
-                                     const CWallet *wallet,
-                                     bool use_max_sig = false)
+int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::set<CInputCoin> &setCoins)
     EXCLUSIVE_LOCKS_REQUIRED(wallet->cs_wallet);
-int64_t CalculateMaximumSignedTxSize(const CTransaction &tx,
-                                     const CWallet *wallet,
-                                     const std::vector<CTxOut> &txouts,
-                                     bool use_max_sig = false);
+int64_t CalculateMaximumSignedTxSize(const CTransaction &tx, const CWallet *wallet, const std::vector<CTxOut> &txouts,
+                                     const std::set<CInputCoin> &setCoins);

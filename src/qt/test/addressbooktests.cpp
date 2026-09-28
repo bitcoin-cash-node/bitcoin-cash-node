@@ -1,9 +1,10 @@
-// Copyright (c) 2019-2020 The Bitcoin developers
+// Copyright (c) 2019-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 #include <qt/test/addressbooktests.h>
 #include <test/setup_common.h>
 
+#include <config.h>
 #include <interfaces/chain.h>
 #include <interfaces/node.h>
 #include <qt/addressbookpage.h>
@@ -65,7 +66,7 @@ void TestAddAddressesToSendBook() {
 
     auto chain = interfaces::MakeChain();
     std::shared_ptr<CWallet> wallet = std::make_shared<CWallet>(
-        Params(), *chain, WalletLocation(), WalletDatabase::CreateMock());
+        GetConfig(), *chain, WalletLocation(), WalletDatabase::CreateMock());
 
     bool firstRun;
     wallet->LoadWallet(firstRun);

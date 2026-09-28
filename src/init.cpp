@@ -595,6 +595,10 @@ void SetupServerArgs() {
         "-reindex",
         "Rebuild chain state and block index from the blk*.dat files on disk",
         ArgsManager::ALLOW_ANY, OptionsCategory::OPTIONS);
+    gArgs.AddArg(
+        "-signschnorr",
+        strprintf("Whether to always sign transactions using Schnorr signatures (default: %u)", DEFAULT_SIGN_SCHNORR),
+        ArgsManager::ALLOW_BOOL, OptionsCategory::OPTIONS);
 #ifndef WIN32
     gArgs.AddArg(
         "-sysperms",
@@ -2316,7 +2320,7 @@ bool AppInitMain(Config &config, RPCServer &rpcServer,
 
     // Step 5: verify wallet database integrity
     for (const auto &client : node.chain_clients) {
-        if (!client->verify(chainparams)) {
+        if (!client->verify(config)) {
             return false;
         }
     }
@@ -2755,6 +2759,9 @@ bool AppInitMain(Config &config, RPCServer &rpcServer,
     // We do this by default to avoid confusion with BTC addresses.
     config.SetCashAddrEncoding(gArgs.GetBoolArg("-usecashaddr", DEFAULT_USE_CASHADDR));
 
+    // Set whether wallet & RPCs always sign transactions with Schnorr. Defaults to enabled for privacy.
+    config.SetSignSchnorr(gArgs.GetBoolArg("-signschnorr", DEFAULT_SIGN_SCHNORR));
+
     // Step 8: load indexers
     if (gArgs.GetBoolArg("-txindex", DEFAULT_TXINDEX)) {
         g_txindex = std::make_unique<TxIndex>(nTxIndexCache, false, fReindex);
@@ -2767,7 +2774,7 @@ bool AppInitMain(Config &config, RPCServer &rpcServer,
 
     // Step 9: load wallet
     for (const auto &client : node.chain_clients) {
-        if (!client->load(chainparams)) {
+        if (!client->load(config)) {
             return false;
         }
     }
