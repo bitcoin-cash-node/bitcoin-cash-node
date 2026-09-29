@@ -1248,8 +1248,9 @@ void SetupServerArgs() {
                  " multiple times. The field <whitelist> comes in the format: <USERNAME>:<rpc 1>,<rpc 2>,...,<rpc n>."
                  " If multiple whitelists are set for a given user, they are set-intersected. See -rpcwhitelistdefault"
                  " documentation for information on default whitelist behavior. Note that cookie-authenticated clients"
-                 " such as bitcoin-cli authenticate as the user __cookie__; when using -rpcwhitelist you must either"
-                 " add an -rpcwhitelist entry for __cookie__ or set -rpcwhitelistdefault=0.",
+                 " such as some configurations of bitcoin-cli authenticate as the user __cookie__; when using"
+                 " -rpcwhitelist with such configurations, you must either add an entry for __cookie__ or set"
+                 " -rpcwhitelistdefault=0.",
                  ArgsManager::ALLOW_ANY, OptionsCategory::RPC);
     gArgs.AddArg("-rpcwhitelistdefault",
                  "Sets default behavior for rpc whitelisting. Unless rpcwhitelistdefault is set to 0, if any"
