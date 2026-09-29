@@ -1727,9 +1727,7 @@ UniValue listtransactions(const Config &config, const JSONRPCRequest &request) {
         for (CWallet::TxItems::const_reverse_iterator it = txOrdered.rbegin();
              it != txOrdered.rend(); ++it) {
             CWalletTx *const pwtx = (*it).second;
-
-            ListTransactions(*locked_chain, pwallet, *pwtx, 0, true, ret,filter, filter_label);
-
+            ListTransactions(*locked_chain, pwallet, *pwtx, 0, true, ret, filter, filter_label);
             if (int(ret.size()) >= (nCount + nFrom)) {
                 break;
             }
@@ -1779,7 +1777,7 @@ static UniValue listsinceblock(const Config &config,
                     {"include_removed", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "true", "Show transactions that were removed due to a reorg in the \"removed\" array\n"
             "                                                           (not guaranteed to work on pruned nodes)"},
                     {"include_change", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Also add entries for change outputs."},
-                    {"label", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Return only incoming transactions paying to addresses with the specified label."},
+                    {"label", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Return only incoming transactions paying to addresses with the specified label. Note that if this argument is specified, only 'receive' transactions paying to \"label\" will be returned in both the the \"transactions\" and \"removed\" arrays."},
                 }}
                 .ToString() +
             "\nResult:\n"
@@ -1900,7 +1898,7 @@ static UniValue listsinceblock(const Config &config,
 
     std::optional<std::string> filter_label;
     if (!request.params[5].isNull()) {
-        filter_label = request.params[5].get_str();
+        filter_label = LabelFromValue(request.params[5]);
     }
 
     const std::optional<int> tip_height = locked_chain->getHeight();
