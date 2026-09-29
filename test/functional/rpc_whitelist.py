@@ -7,7 +7,9 @@
 A test for RPC users with restricted permissions
 """
 import http.client
+import json
 import os
+import random
 import urllib.parse
 
 from test_framework.test_framework import BitcoinTestFramework
@@ -24,6 +26,18 @@ def rpccall(node, user, method):
     conn = http.client.HTTPConnection(url.hostname, url.port)
     conn.connect()
     conn.request('POST', '/', '{"method": "' + method + '"}', headers)
+    resp = conn.getresponse()
+    conn.close()
+    return resp
+
+
+def rpcbatch(node, user, methods):
+    url = urllib.parse.urlparse(node.url)
+    headers = {"Authorization": "Basic " + str_to_b64str('{}:{}'.format(user[0], user[3]))}
+    conn = http.client.HTTPConnection(url.hostname, url.port)
+    conn.connect()
+    batch = json.dumps([{"method": m} for m in methods])
+    conn.request('POST', '/', batch, headers)
     resp = conn.getresponse()
     conn.close()
     return resp
@@ -72,18 +86,30 @@ class RPCWhitelistTest(BitcoinTestFramework):
         for user in self.users:
             permissions = user[2].replace(" ", "").split(",")
             # Pop all empty items
-            i = 0
-            while i < len(permissions):
-                if permissions[i] == '':
-                    permissions.pop(i)
+            permissions = [p for p in permissions if p]
 
-                i += 1
+            # Test non-batched single method calls
             for permission in permissions:
                 self.log.info("[" + user[0] + "]: Testing a permitted permission (" + permission + ")")
                 assert_equal(200, rpccall(self.nodes[0], user, permission).status)
             for permission in self.never_allowed:
                 self.log.info("[" + user[0] + "]: Testing a non permitted permission (" + permission + ")")
                 assert_equal(403, rpccall(self.nodes[0], user, permission).status)
+
+            # Test batching (all allow)
+            allowed = permissions
+            random.shuffle(allowed)
+            self.log.info("[" + user[0] + "]: Testing a single batch of allowed methods (" + ', '.join(allowed)
+                          + ")")
+            assert_equal(200, rpcbatch(self.nodes[0], user, allowed).status)
+
+            # Test batching (mixing of allow and deny)
+            mixed = permissions + self.never_allowed
+            random.shuffle(mixed)
+            self.log.info("[" + user[0] + "]: Testing a single batch of a mix of allowed and forbidden methods  ("
+                          + ', '.join(mixed) + ")")
+            assert_equal(403, rpcbatch(self.nodes[0], user, mixed).status)
+
         # Now test the strange users
         for permission in self.never_allowed:
             self.log.info("Strange test 1")
