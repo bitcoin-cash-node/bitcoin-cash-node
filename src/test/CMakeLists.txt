@@ -264,6 +264,7 @@ add_boost_unit_tests_to_suite(bitcoin test_bitcoin
     multisig_tests.cpp
     native_introspection_tests.cpp
     netbase_tests.cpp
+    net_datasource_tests.cpp
     net_tests.cpp
     op_reversebytes_tests.cpp
     orphanage_tests.cpp
