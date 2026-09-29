@@ -141,7 +141,9 @@ struct CSerializedNetMsg {
 /** Different types of connections to a peer. This enum encapsulates the
  * information we have available at the time of opening or accepting the
  * connection. Aside from INBOUND, all types are initiated by us.
- */
+ *
+ * If adding or removing types, please update CONNECTION_TYPE_DOC in
+ * src/rpc/net.cpp as well as ConnectionTypeAsString() in src/net.cpp. */
 enum class ConnectionType : uint8_t {
     /**
      * Inbound connections are those initiated by a peer. This is the only
@@ -710,6 +712,7 @@ struct CNodeStats {
     uint32_t m_mapped_as;
     uint64_t m_addr_processed = 0;
     uint64_t m_addr_rate_limited = 0;
+    std::string m_conn_type_string;
 };
 
 class CNetMessage {
@@ -1085,6 +1088,8 @@ public:
         } // no default case, so the compiler can warn about missing cases
         assert(false);
     }
+
+    std::string ConnectionTypeAsString() const { return ::ConnectionTypeAsString(m_conn_type); }
 };
 
 /**

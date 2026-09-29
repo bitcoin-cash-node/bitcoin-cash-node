@@ -145,6 +145,13 @@ class NetTest(BitcoinTestFramework):
         for info in peer_info:
             assert_net_servicesnames(int(info[0]["services"], 0x10), info[0]["servicesnames"])
 
+        # Check connection_type
+        assert_equal(peer_info[0][0]['connection_type'], 'manual')
+        assert_equal(peer_info[0][1]['connection_type'], 'inbound')
+
+        assert_equal(peer_info[1][0]['connection_type'], 'inbound')
+        assert_equal(peer_info[1][1]['connection_type'], 'manual')
+
     def _test_getnodeaddresses(self):
         self.nodes[0].add_p2p_connection(P2PInterface())
 
