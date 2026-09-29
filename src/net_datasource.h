@@ -41,6 +41,7 @@ public:
     ///                 `pindex` is never derefercened, only its raw pointer value is used as a cache key.
     /// @param pfileIn - If not `nullptr`, performance optimization to re-use the file handle owned by `*pfileIn`. After
     ///                  this call, `*pfileIn` will be `IsNull()`. Pass `nullptr` to have this class open the file itself.
+    ///                  Any handle it owns must refer to `file`; on non-Windows platforms that handle is reused.
     /// @throw std::runtime_error If the file could not be opened for reading.
     SerializedDataSource(const fs::path &file, const size_t offset, const size_t length, const CBlockIndex *pindex,
                          CAutoFile *pfileIn = nullptr);

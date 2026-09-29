@@ -13,9 +13,12 @@
 #include <util/overloaded.h>
 #include <util/saltedhashers.h>
 
+#include <algorithm>
 #include <array>
 #include <cstdio>
+#include <cstring>
 #include <ios>
+#include <optional>
 #include <stdexcept>
 #include <unordered_map>
 #include <utility>
@@ -24,9 +27,9 @@
 #include <netbase.h> /* For NetworkErrorString */
 #include <windows.h>
 
-static std::string GetErrorReason() {
-    // Note that NetworkErrorString, despite the name, can return text for any windows error code from GetLastError()
-    return NetworkErrorString(GetLastError());
+static std::string GetErrorReason(const DWORD err) {
+    // NetworkErrorString also handles non-network Windows error codes.
+    return NetworkErrorString(err);
 }
 #endif
 
@@ -42,7 +45,8 @@ class SerializedDataSource::FileBacked {
     std::string fileName; // the file's basename (sans path); used for logging
     size_t offset = 0; // where in the file the data starts
     size_t length = 0; // the length of the data for this data source
-    size_t currentReadPos = 0; // the file's current position (optimization to avoid redundant fseek() calls each time)
+    // Empty after an I/O failure, so the next read must seek.
+    std::optional<size_t> currentReadPos;
 
 public:
     const uintptr_t checkSumKey{}; ///< if not zero, will use checkSumCache
@@ -88,23 +92,22 @@ public:
         }
         const auto ok = ReadFile(hFile, dest.data(), size, &nread, nullptr);
         if (!ok) [[unlikely]] {
+            const DWORD err = GetLastError();
+            currentReadPos.reset();
             throw std::ios_base::failure(strprintf("Failed to read %u bytes from %s, error: %s", dest.size(), fileName,
-                                                   GetErrorReason()));
+                                                   GetErrorReason(err)));
         }
         if (nread != size) [[unlikely]] {
-            LARGE_INTEGER l; l.QuadPart = static_cast<LONGLONG>(currentReadPos);
-            const bool badSeek = !SetFilePointerEx(hFile, l, nullptr, FILE_BEGIN); // restore hFile to a known-good pos
-            throw std::ios_base::failure(strprintf("Short read %u != %u bytes from %s%s", nread, size, fileName,
-                                                   badSeek ? " (also failed to seek back to old pos)" : ""));
+            currentReadPos.reset();
+            throw std::ios_base::failure(strprintf("Short read %u != %u bytes from %s", nread, size, fileName));
         }
 #else
         if (std::fread(dest.data(), 1, dest.size(), f) != dest.size()) {
-            const bool badSeek = 0 != std::fseek(f, currentReadPos, SEEK_SET); // restore `f` to a known-good position
-            throw std::ios_base::failure(strprintf("Failed to read %u bytes from %s%s", dest.size(), fileName,
-                                                   badSeek ? " (also failed to seek back to old pos)" : ""));
+            currentReadPos.reset();
+            throw std::ios_base::failure(strprintf("Failed to read %u bytes from %s", dest.size(), fileName));
         }
 #endif
-        currentReadPos += dest.size();
+        currentReadPos.value() += dest.size();
     }
 
     size_t size() const { return length; }
@@ -123,7 +126,8 @@ private:
         }
 #endif
         fileName = {}; // release mem
-        currentReadPos = offset = length = 0;
+        currentReadPos.reset();
+        offset = length = 0;
     }
     void open(const fs::path &path) {
 #ifdef _WIN32
@@ -134,8 +138,10 @@ private:
             hFile = CreateFileW(path.wstring().c_str(), GENERIC_READ,
                                 FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                                 nullptr, OPEN_EXISTING, FILE_ATTRIBUTE_NORMAL, nullptr);
-            if (hFile == INVALID_HANDLE_VALUE) [[unlikely]]
-                throw std::ios_base::failure("Error opening file: " + path.string() + ", error: " + GetErrorReason());
+            if (hFile == INVALID_HANDLE_VALUE) [[unlikely]] {
+                const DWORD err = GetLastError(); // capture before path.string(), which may clobber it
+                throw std::ios_base::failure("Error opening file: " + path.string() + ", error: " + GetErrorReason(err));
+            }
             currentReadPos = 0;
         }
 #else
@@ -159,15 +165,19 @@ private:
             l.QuadPart = static_cast<LONGLONG>(newPos);
             const auto ok = SetFilePointerEx(hFile, l, nullptr, FILE_BEGIN);
             if (!ok) [[unlikely]] {
+                const DWORD err = GetLastError();
+                currentReadPos.reset();
                 throw std::ios_base::failure(strprintf("Error seeking file %s to offset %u, error: %s",
-                                                       fileName, newPos, GetErrorReason()));
+                                                       fileName, newPos, GetErrorReason(err)));
             }
 #else
             const long lpos = static_cast<long>(newPos);
             if (lpos < 0 || static_cast<size_t>(lpos) != newPos) [[unlikely]] {
                 throw std::domain_error(strprintf("Desired file position %u is out of bounds of a C++ long value!", lpos));
             }
+            if (!currentReadPos) std::clearerr(f);
             if (std::fseek(f, lpos, SEEK_SET) != 0) {
+                currentReadPos.reset();
                 throw std::ios_base::failure(strprintf("Error seeking file %s to offset %u", fileName, newPos));
             }
 #endif
@@ -267,16 +277,19 @@ CMessageHeader::CheckSum SerializedDataSource::CalculateCheckSum() {
 }
 
 std::span<const uint8_t> SerializedDataSource::GetBytes(const size_t offset, const size_t count, Vec &tmpBuffer) {
-    static const auto ThrowIfGT = [](const size_t end, const size_t size) {
-        if (end > size) [[unlikely]] throw std::invalid_argument("Attempt to read past end of buffer");
+    // Written so that `offset + count` is never formed, since that sum can wrap.
+    static const auto ThrowIfPastEnd = [](const size_t offset, const size_t count, const size_t size) {
+        if (offset > size || count > size - offset) [[unlikely]] {
+            throw std::invalid_argument("Attempt to read past end of buffer");
+        }
     };
     return std::visit(util::Overloaded{
         [offset, count](const Vec &v) {
-            ThrowIfGT(offset + count, v.size());
+            ThrowIfPastEnd(offset, count, v.size());
             return std::span{v.data() + offset, count};
         },
         [offset, count, &tmpBuffer](FBP &f) {
-            ThrowIfGT(offset + count, f->size());
+            ThrowIfPastEnd(offset, count, f->size());
             tmpBuffer.resize(count);
             f->read(offset, tmpBuffer);
             return std::span<const uint8_t>{tmpBuffer};
