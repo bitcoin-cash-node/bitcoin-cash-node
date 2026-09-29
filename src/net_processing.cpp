@@ -985,6 +985,7 @@ void PeerLogicValidation::BlockConnected(const std::shared_ptr<const CBlock> &pb
     g_last_tip_update = GetTime();
 }
 
+
 /**
  * Maintain state about the best-seen block and fast-announce a compact block
  * to compatible peers.
@@ -2715,6 +2716,14 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
         BlockTransactionsRequest req;
         vRecv >> req;
 
+        if (req.indices.empty()) {
+            // No legitimate reason to ask for no transactions.
+            LogPrint(BCLog::NET, "Peer %d sent us a getblocktxn with no transaction indices\n",
+                     pfrom->GetId());
+            pfrom->fDisconnect = true;
+            return true;
+        }
+
         std::shared_ptr<const CBlock> recent_block;
         {
             LOCK(cs_most_recent_block);
@@ -2739,28 +2748,14 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
             return true;
         }
 
-        if (pindex->nHeight < ::ChainActive().Height() - MAX_BLOCKTXN_DEPTH) {
-            // If an older block is requested (should never happen in practice,
-            // but can happen in tests) send a block response instead of a
-            // blocktxn response. Sending a full block response instead of a
-            // small blocktxn response is preferable in the case where a peer
-            // might maliciously send lots of getblocktxn requests to trigger
-            // expensive disk reads, because it will require the peer to
-            // actually receive all the data read from disk over the network.
-            LogPrint(BCLog::NET,
-                     "Peer %d sent us a getblocktxn for a block > %i deep\n",
-                     pfrom->GetId(), MAX_BLOCKTXN_DEPTH);
-            pfrom->vRecvGetData.emplace_back(MSG_BLOCK, req.blockhash);
-            // The message processing loop will go around again (without
-            // pausing) and we'll respond then (without cs_main)
-            return true;
-        }
-
-        CBlock block;
-        bool ret = ReadBlockFromDisk(block, pindex, chainparams.GetConsensus());
-        assert(ret);
-
-        SendBlockTransactions(block, req, pfrom);
+        // The requested block is not cached; even the tip may be uncached after a restart.
+        // BIP152 permits a full-block response. ProcessGetBlockData() applies the relay rules.
+        LogPrint(BCLog::NET,
+                 "Peer %d sent us a getblocktxn for uncached block %s; "
+                 "queueing a full-block request\n",
+                 pfrom->GetId(), req.blockhash.ToString());
+        pfrom->vRecvGetData.emplace_back(MSG_BLOCK, req.blockhash);
+        // The message processing loop will go around again (without pausing) and we'll respond then
         return true;
     }
 

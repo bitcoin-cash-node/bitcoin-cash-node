@@ -49,7 +49,7 @@ from test_framework.p2p import (
 from test_framework.script import CScript, OP_TRUE
 from test_framework.test_framework import BitcoinTestFramework
 from test_framework.txtools import pad_tx
-from test_framework.util import assert_equal, connect_nodes_bi, disconnect_nodes, wait_until
+from test_framework.util import assert_equal, assert_greater_than, connect_nodes_bi, disconnect_nodes, wait_until
 
 # TestP2PConn: A peer we use to send messages to bitcoind, and store responses.
 
@@ -642,52 +642,65 @@ class CompactBlocksTest(BitcoinTestFramework):
         assert_equal(int(node.getbestblockhash(), 16), block.sha256)
 
     def test_getblocktxn_handler(self, node, test_node, version):
-        # bitcoind will not send blocktxn responses for blocks whose height is
-        # more than 10 blocks deep.
-        MAX_GETBLOCKTXN_DEPTH = 10
+        # Requests for the cached tip get a blocktxn response; uncached blocks get a full block.
+        NUM_SERVED_BLOCKS = 1
+        REQUESTS_PER_BLOCK = 6
+        # Receive a new tip so it is cached, with enough transactions to request more than index 0.
+        served_blocks = []
+        for _ in range(NUM_SERVED_BLOCKS):
+            utxo = self.utxos.pop(0)
+            block, ordered_txs = self.build_block_with_transactions(node, utxo, 5)
+            self.utxos.append(
+                [ordered_txs[-1].sha256, 0, ordered_txs[-1].vout[0].nValue])
+            test_node.send_and_ping(msg_block(block))
+            assert_equal(int(node.getbestblockhash(), 16), block.sha256)
+            served_blocks.append(block)
         chain_height = node.getblockcount()
-        current_height = chain_height
-        while (current_height >= chain_height - MAX_GETBLOCKTXN_DEPTH):
-            block_hash = node.getblockhash(current_height)
-            block = FromHex(CBlock(), node.getblock(block_hash, False))
 
+        for block in reversed(served_blocks):
+            assert_greater_than(len(block.vtx), 1)
+            [tx.calc_sha256() for tx in block.vtx]
+            for _ in range(REQUESTS_PER_BLOCK):
+                msg = msg_getblocktxn()
+                msg.block_txn_request = BlockTransactionsRequest(
+                    block.sha256, [])
+                num_to_request = random.randint(1, len(block.vtx))
+                msg.block_txn_request.from_absolute(
+                    sorted(random.sample(range(len(block.vtx)), num_to_request)))
+                test_node.send_message(msg)
+                wait_until(lambda: "blocktxn" in test_node.last_message,
+                           timeout=10, lock=p2p_lock)
+
+                with p2p_lock:
+                    assert_equal(
+                        test_node.last_message["blocktxn"].block_transactions.blockhash, block.sha256)
+                    all_indices = msg.block_txn_request.to_absolute()
+                    for index in all_indices:
+                        tx = test_node.last_message["blocktxn"].block_transactions.transactions.pop(
+                            0)
+                        tx.calc_sha256()
+                        assert_equal(tx.sha256, block.vtx[index].sha256)
+                    test_node.last_message.pop("blocktxn", None)
+
+        # Every block below the tip should get a full block response instead.
+        current_height = chain_height - NUM_SERVED_BLOCKS
+        while current_height > chain_height - NUM_SERVED_BLOCKS - 3:
+            block_hash = node.getblockhash(current_height)
             msg = msg_getblocktxn()
             msg.block_txn_request = BlockTransactionsRequest(
-                int(block_hash, 16), [])
-            num_to_request = random.randint(1, len(block.vtx))
-            msg.block_txn_request.from_absolute(
-                sorted(random.sample(range(len(block.vtx)), num_to_request)))
-            test_node.send_message(msg)
-            wait_until(lambda: "blocktxn" in test_node.last_message,
-                       timeout=10, lock=p2p_lock)
-
-            [tx.calc_sha256() for tx in block.vtx]
+                int(block_hash, 16), [0])
             with p2p_lock:
-                assert_equal(test_node.last_message["blocktxn"].block_transactions.blockhash, int(
-                    block_hash, 16))
-                all_indices = msg.block_txn_request.to_absolute()
-                for index in all_indices:
-                    tx = test_node.last_message["blocktxn"].block_transactions.transactions.pop(
-                        0)
-                    tx.calc_sha256()
-                    assert_equal(tx.sha256, block.vtx[index].sha256)
+                test_node.last_message.pop("block", None)
                 test_node.last_message.pop("blocktxn", None)
+            test_node.send_and_ping(msg)
+            wait_until(lambda: "block" in test_node.last_message,
+                       timeout=10, lock=p2p_lock)
+            with p2p_lock:
+                test_node.last_message["block"].block.calc_sha256()
+                assert_equal(
+                    test_node.last_message["block"].block.sha256, int(block_hash, 16))
+                assert "blocktxn" not in test_node.last_message
             current_height -= 1
-
-        # Next request should send a full block response, as we're past the
-        # allowed depth for a blocktxn response.
-        block_hash = node.getblockhash(current_height)
-        msg.block_txn_request = BlockTransactionsRequest(
-            int(block_hash, 16), [0])
-        with p2p_lock:
-            test_node.last_message.pop("block", None)
-            test_node.last_message.pop("blocktxn", None)
-        test_node.send_and_ping(msg)
-        with p2p_lock:
-            test_node.last_message["block"].block.calc_sha256()
-            assert_equal(
-                test_node.last_message["block"].block.sha256, int(block_hash, 16))
-            assert "blocktxn" not in test_node.last_message
 
     def test_compactblocks_not_at_tip(self, node, test_node):
         # Test that requesting old compactblocks doesn't work.
