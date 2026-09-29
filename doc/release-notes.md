@@ -48,11 +48,12 @@ None
 - The `listunspent` RPC now has a new argument `include_immature_coinbase` to include coinbase UTXOs that don't meet the
   minimum spendability depth requirement (which before were silently skipped).
 - The node RPC, node wallet, and the `bitcoin-tx` tool now always sign all transactions with Schnorr signatures. To
-  disable this behavior, and go back to ECDSA-only signing, restart the node with `-signschnorr=0` or `-nosignschnorr`.
+  disable this behavior, and go back to ECDSA-only signing, restart the node and/or `bitcoin-tx` with `-signschnorr=0`
+  (or `-nosignschnorr`).
   - Compatibility note: This means that all node-signed transactions now have a different shape by default, so any
     external tooling depending on e.g. exact output from `signrawtransactionwithwallet` might need to be updated if they
     depend on assumptions related to ECDSA signatures that don't hold for Schnorr signatures. In that hopefully unlikely
-    case, the the node must be started with `-nosignschnorr` to revert to previous behavior (until the tooling itself is
+    case, the node must be started with `-nosignschnorr` to revert to previous behavior (until the tooling itself is
     updated).
   - The RPCs `finalizepsbt`, `walletprocesspsbt` and `combinerawtransaction` now may return a JSON-RPC error code -25
     should they be tasked to sign or combine a multisig transaction that ends up having a mixture of ECDSA and Schnorr
