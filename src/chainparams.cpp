@@ -320,6 +320,7 @@ public:
                 // Upgrade 12; May 15, 2026 (MTP time >= 1778846400), first block mined with upgrade rules: 951145
                 {951145, BlockHash::fromHex("000000000000000000f64dbed68370486f945097ba90b17e30d7bf5c43df7a60")},
                 {960710, BlockHash::fromHex("00000000000000000275ee55c04aa109347c9ee0b5bb4617837df3044f7e1be5")},
+                {970892, BlockHash::fromHex("000000000000000000e76270e57f4ebbd2b282db46a1695984935126c0a68cd8")},
             }};
 
         // Data as of block
@@ -542,6 +543,7 @@ public:
                 // Upgrade 12; May 15, 2026 (MTP time >= 1778846400), first block mined with upgrade rules: 1710483
                 {1710483, BlockHash::fromHex("00000000078fe0c74ffa0c5221081c34774aa7d17a3c14c36f952f829463f120")},
                 {1718198, BlockHash::fromHex("00000000fb70d93bc600b9189f2bb13383b0e44d96a4547615b3c194680e6308")},
+                {1730264, BlockHash::fromHex("000000000001ce982fa29717a4ed233b0e5a7a8b9936a17fdeeccc5c1d0af795")},
             }};
 
         // Data as of block
@@ -736,6 +738,7 @@ public:
                 // Upgrade 12; May 15, 2026 (MTP time >= 1778846400), first block mined with upgrade rules: 305848
                 {305848, BlockHash::fromHex("00000000601bf68f9927154cf55557b1c08245b4d415658d1cbcd1eb4502dabc")},
                 {313651, BlockHash::fromHex("000000005c58d20403191a778c51206eca7552629c1e390313e786d2c388d0fb")},
+                {325709, BlockHash::fromHex("00000000000097a6ca206aa88b45a2158eea1a9ab8a49aed8f4b193d558e74b4")},
             }};
 
         // Data as of block
@@ -1092,6 +1095,7 @@ public:
                 // A block after Upgrade 12 activated (Nov. 15, 2025), first block after upgrade: 279792
                 {284827, BlockHash::fromHex("000000007af65a6e8853f858b3f2a8e7edabe41e6264410276705b324267d7d8")},
                 {313653, BlockHash::fromHex("0000000046cfd2f762f82a2dd2594e84e824789c43c3f7f1d12050cde3f8b8e7")},
+                {325627, BlockHash::fromHex("000000002bb8a32bd6b1022e5370b10e7dc139770d626e1a0911e6b596cf3069")},
             }};
 
         // Data as of block
