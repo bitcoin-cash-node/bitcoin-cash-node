@@ -322,17 +322,16 @@ public:
                 {960710, BlockHash::fromHex("00000000000000000275ee55c04aa109347c9ee0b5bb4617837df3044f7e1be5")},
             }};
 
-        // Data as of block
-        // 000000000000000000554ace32e88899a5b79418a5e604885b985da5efc95c88
-        // (height 960730).
+        // Data as of block 000000000000000000dd27d2a8bc6ecad19b915eef50a707e7388e0ca1551038
+        // (height 970905).
         chainTxData = ChainTxData{
             // UNIX timestamp of last known number of transactions.
-            1784734498,
+            1790801397,
             // Total number of transactions between genesis and that timestamp
             // (the tx=... number in the ChainStateFlushed debug.log lines)
-            416474148,
+            417337845,
             // Estimated number of transactions per second after that timestamp.
-            0.186,
+            0.1424,
         };
     }
 };
@@ -545,9 +544,9 @@ public:
             }};
 
         // Data as of block
-        // 0000000041e99b001e1b8e861304b819eac33b2b94ef96164b57da954ff5f1b8
-        // (height 1720199)
-        chainTxData = ChainTxData{1784733646 /* time */, 64427240 /* numTx */, 0.00459 /* tx/sec */};
+        // 000000005614709d3e0942b1efd2734b9ebac4c2b7e694100057ad1c72a75441
+        // (height 1730410)
+        chainTxData = ChainTxData{ 1790801808 /* time */, 64452467 /* numTx */, 0.004157 /* tx/sec */ };
     }
 };
 
@@ -739,9 +738,9 @@ public:
             }};
 
         // Data as of block
-        // 000000001035dbaaac980e55dbd948a8b4fc74b1a6bb4554739f10e40029c550
-        // (height 315656)
-        chainTxData = {1784734682 /* time */, 431338 /* numTx */, 0.00236 /* tx/sec */};
+        // 00000000000027e1d043576720b945a4b18c5d6efd70bdb5d30b91a0e1d7de50
+        // (height 325859)
+        chainTxData = ChainTxData{ 1790802089 /* time */, 442245 /* numTx */, 0.001798 /* tx/sec */ };
     }
 };
 
@@ -1095,9 +1094,9 @@ public:
             }};
 
         // Data as of block
-        // 00000000006fc81d92076c3a1892e0ee8dd2c935ea25d29079c4ece585fdc20c
-        // (height 315659)
-        chainTxData = {1784734726 /* time */, 2515565 /* numTx */, 0.08467 /* tx/sec */};
+        // 0000000000000256e125f8b2205c624fce2278c74b529d341aa9a3045aebbb42
+        // (height 322290)
+        chainTxData = ChainTxData{ 1788650365 /* time */, 2720902 /* numTx */, 0.05244 /* tx/sec */ };
     }
 };
 
