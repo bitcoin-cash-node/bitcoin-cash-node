@@ -1831,7 +1831,7 @@ int CalculateMaximumSignedInputSize(const CTxOut &txout, const CWallet *wallet, 
 
 void CWalletTx::GetAmounts(std::list<COutputEntry> &listReceived,
                            std::list<COutputEntry> &listSent, Amount &nFee,
-                           const isminefilter &filter) const {
+                           const isminefilter &filter, const bool include_change) const {
     nFee = Amount::zero();
     listReceived.clear();
     listSent.clear();
@@ -1853,7 +1853,7 @@ void CWalletTx::GetAmounts(std::list<COutputEntry> &listReceived,
         //   2) the output is to us (received)
         if (nDebit > Amount::zero()) {
             // Don't report 'change' txouts
-            if (pwallet->IsChange(txout)) {
+            if (!include_change && pwallet->IsChange(txout)) {
                 continue;
             }
         } else if (!(fIsMine & filter)) {
