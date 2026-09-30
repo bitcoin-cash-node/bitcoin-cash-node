@@ -5,7 +5,11 @@
 
 #pragma once
 
+#include <coins.h>
+#include <primitives/transaction.h>
+
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
 #include <string>
@@ -101,6 +105,11 @@ public:
         //! is guaranteed to be an ancestor of the block used to create the
         //! locator.
         virtual std::optional<int> findLocatorFork(const CBlockLocator &locator) = 0;
+
+        //! Look up unspent output information. Returns coins in the mempool and in
+        //! the current chain UTXO set. Iterates through all the keys in the map and
+        //! populates the values. Unknown coins will be cleared via `Coin::Clear()`.
+        virtual void findCoins(std::map<COutPoint, Coin> &coins) = 0;
     };
 
     //! Return Lock interface. Chain is locked when this is called, and

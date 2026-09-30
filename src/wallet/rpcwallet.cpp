@@ -38,7 +38,9 @@
 #include <event2/http.h>
 
 #include <functional>
+#include <map>
 #include <optional>
+#include <set>
 
 static const std::string WALLET_ENDPOINT_BASE = "/wallet/";
 
@@ -4505,6 +4507,122 @@ static UniValue walletcreatefundedpsbt(const Config &config,
     return result;
 }
 
+static UniValue simulaterawtransaction(const Config &, const JSONRPCRequest &request) {
+    if (request.fHelp || request.params.size() < 1 || request.params.size() > 2) {
+        throw std::runtime_error(
+            RPCHelpMan{"simulaterawtransaction",
+                       "\nCalculate the balance change resulting in the signing and broadcasting of the given transaction(s).\n",
+                       {
+                            {"rawtxs", RPCArg::Type::ARR, /* opt */ false, /* default_val */ "", "An array of hex strings of raw transactions.",
+                                {{"hexstring", RPCArg::Type::STR_HEX, /* opt */ false, /* default_val */ "", "Transaction hex"}},
+                            },
+                            {"options", RPCArg::Type::OBJ, /* opt */ true, /* default_val */ "", "Options",
+                                {
+                                    {"include_watchonly", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Whether to include watch-only addresses (see RPC importaddress)"},
+                                },
+                            }
+                       },
+            }.ToString() + R"""(
+Result:
+{
+  "balance_change":     (numeric) The wallet balance change (negative means decrease).
+}
+
+Examples:
+)""" + HelpExampleCli("simulaterawtransaction", "[\"myhex\"]") + HelpExampleRpc("simulaterawtransaction", "[\"myhex\"]")
+
+        );
+    }
+    const std::shared_ptr<const CWallet> rpc_wallet = GetWalletForJSONRPCRequest(request);
+    if (!rpc_wallet) {
+        return UniValue::VNULL;
+    }
+    const CWallet &wallet = *rpc_wallet;
+
+    RPCTypeCheck(request.params, {UniValue::VARR|UniValue::VSTR, UniValue::VOBJ|UniValue::VNULL});
+
+    // parse txs
+    const UniValue::Array *txs = nullptr;
+    std::optional<UniValue::Array> tmpTxs;
+    if (request.params[0].isStr()) {
+        // Support single string arg; simulate the array using tmpTxs
+        txs = &tmpTxs.emplace();
+        tmpTxs->push_back(request.params[0]);
+    } else {
+        // API as specified: array of strings
+        txs = &request.params[0].get_array();
+    }
+
+    // parse options object
+    isminefilter filter = ISMINE_SPENDABLE;
+
+    if (request.params[1].isObject()) {
+        const UniValue::Object &options = request.params[1].get_obj();
+        RPCTypeCheckObj(options, {{"include_watchonly", UniValue::MBOOL|UniValue::VNULL}},
+                        /* disallowUnknownKeys = */ true);
+        const auto &include_watchonly = options["include_watchonly"];
+        if (!include_watchonly.isNull() && include_watchonly.get_bool()) {
+            filter = filter | ISMINE_WATCH_ONLY;
+        }
+    }
+
+    auto locked_chain = wallet.chain().lock(); // this implicitly takes cs_main
+    LOCK(wallet.cs_wallet);
+
+    Amount changes;
+    std::map<COutPoint, Amount> new_utxos; // UTXOs that were made available in transaction array
+    std::set<COutPoint> spent;
+
+    for (const auto &uvtx : *txs) {
+        CMutableTransaction mtx;
+        if (!DecodeHexTx(mtx, uvtx.get_str())) {
+            throw JSONRPCError(RPC_DESERIALIZATION_ERROR, "Transaction hex string decoding failure.");
+        }
+        // Fetch previous transactions (inputs)
+        std::map<COutPoint, Coin> coins;
+        for (const CTxIn &txin : mtx.vin) {
+            coins[txin.prevout]; // Create empty map entry keyed by prevout.
+        }
+        locked_chain->findCoins(coins); // Populate coins from utxo set + mempool (missing coins will be "IsSpent()")
+
+        // Fetch debit; we are *spending* these; if the transaction is signed and
+        // broadcast, we will lose everything in these
+        for (const auto &txin : mtx.vin) {
+            const auto &outpoint = txin.prevout;
+            if (spent.contains(outpoint)) {
+                throw JSONRPCError(RPC_INVALID_PARAMETER, "Transaction(s) are spending the same output more than once");
+            }
+            if (auto it = new_utxos.find(outpoint); it != new_utxos.end()) {
+                changes -= it->second;
+                new_utxos.erase(it);
+            } else {
+                if (coins.at(outpoint).IsSpent()) {
+                    throw JSONRPCError(RPC_INVALID_PARAMETER, "One or more transaction inputs are missing or have been spent already");
+                }
+                changes -= wallet.GetDebit(txin, filter);
+            }
+            spent.insert(outpoint);
+        }
+
+        // Iterate over outputs; we are *receiving* these, if the wallet considers
+        // them "mine"; if the transaction is signed and broadcast, we will receive
+        // everything in these
+        // Also populate new_utxos in case these are spent in later transactions
+        const auto txid = mtx.GetId();
+        for (size_t i = 0; i < mtx.vout.size(); ++i) {
+            const auto &txout = mtx.vout[i];
+            changes += new_utxos[COutPoint(txid, i)] = wallet.GetCredit(txout, filter);
+        }
+    }
+
+    UniValue::Object result;
+    result.reserve(1);
+    result.emplace_back("balance_change", ValueFromAmount(changes));
+
+    return result;
+}
+
+
 // clang-format off
 static const ContextFreeRPCCommand commands[] = {
     //  category            name                            actor (function)              argNames
@@ -4548,6 +4666,7 @@ static const ContextFreeRPCCommand commands[] = {
     { "wallet",             "settxfee",                     settxfee,                     {"amount"} },
     { "wallet",             "signmessage",                  signmessage,                  {"address","message"} },
     { "wallet",             "signrawtransactionwithwallet", signrawtransactionwithwallet, {"hexstring","prevtxs","sighashtype"} },
+    { "wallet",             "simulaterawtransaction",       simulaterawtransaction,       {"rawtxs", "options"} },
     { "wallet",             "unloadwallet",                 unloadwallet,                 {"wallet_name"} },
     { "wallet",             "walletcreatefundedpsbt",       walletcreatefundedpsbt,       {"inputs","outputs","locktime","options","bip32derivs"} },
     { "wallet",             "walletlock",                   walletlock,                   {} },
