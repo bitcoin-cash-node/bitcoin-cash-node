@@ -23,6 +23,11 @@ Users who are running v29.1.0 or older are encouraged to upgrade to v29.1.1.
 
 - A new CLI arg, `-signschnorr` (default: 1) has been added. It controls whether the node signs with Schnorr signatures
   or not. If disabled (by e.g.: `-signschnorr=0` and/or `-nosignschnorr`), the node reverts back to signing with ECDSA.
+- Added the ability to restrict which RPC methods may be accessed on a per-user basis via the new CLI & conf arg
+  `-rpcwhitelist`. For more information see the built-in help for this option (`bitcoind --help`). Note that
+  cookie-authenticated clients such as some configurations of `bitcoin-cli` authenticate as the user `__cookie__`; when
+  using -rpcwhitelist with such configurations, you must either add an `-rpcwhitelist` entry for `__cookie__` or set
+  `-rpcwhitelistdefault=0`.
 
 ## Deprecated functionality
 

@@ -25,14 +25,7 @@ void JSONRPCRequest::parse(UniValue&& valRequest) {
     }
 
     // Parse method
-    auto methodFound = request.locate("method");
-    if (!methodFound) {
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Missing method");
-    }
-    if (!methodFound->isStr()) {
-        throw JSONRPCError(RPC_INVALID_REQUEST, "Method must be a string");
-    }
-    strMethod = std::move(methodFound->get_str());
+    strMethod = std::move(parseMethod(request));
     if (fLogIPs) {
         LogPrint(BCLog::RPC, "ThreadRPCServer method=%s user=%s peeraddr=%s\n", SanitizeString(strMethod),
                  this->authUser, this->peerAddr);
@@ -52,4 +45,16 @@ void JSONRPCRequest::parse(UniValue&& valRequest) {
     } else {
         params.setArray();
     }
+}
+
+/* static */
+std::string &JSONRPCRequest::parseMethod(UniValue::Object &request) {
+    UniValue *methodFound = request.locate("method");
+    if (!methodFound) {
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Missing method");
+    }
+    if (!methodFound->isStr()) {
+        throw JSONRPCError(RPC_INVALID_REQUEST, "Method must be a string");
+    }
+    return methodFound->get_str();
 }
