@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2023 The Bitcoin developers
+// Copyright (c) 2017-present The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -47,7 +47,7 @@ UniValue::Object MempoolInfoToJSON(const Config &config, const CTxMemPool &pool)
 UniValue MempoolToJSON(const CTxMemPool &pool, bool verbose = false);
 
 /** Block header to JSON */
-UniValue::Object blockheaderToJSON(const Config &config, const CBlockIndex *tip, const CBlockIndex *blockindex);
+UniValue::Object blockheaderToJSON(const Config &config, const CBlockIndex *tip, const CBlockIndex *blockindex) LOCKS_EXCLUDED(cs_main);
 
 /** ABLA state to JSON */
 UniValue::Object ablaStateToJSON(const Config &config, const abla::State &ablaState);
