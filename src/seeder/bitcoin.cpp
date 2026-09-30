@@ -1,4 +1,4 @@
-// Copyright (c) 2017-2024 The Bitcoin developers
+// Copyright (c) 2017-2026 The Bitcoin developers
 // Distributed under the MIT software license, see the accompanying
 // file COPYING or http://www.opensource.org/licenses/mit-license.php.
 
@@ -14,6 +14,7 @@
 #include <serialize.h>
 #include <span.h>
 #include <uint256.h>
+#include <util/strencodings.h>
 #include <validation.h>
 
 #include <algorithm>
@@ -118,7 +119,8 @@ PeerMessagingState CSeederNode::ProcessMessage(const std::string &msg_type,
         recv >> nVersion >> nServiceInt >> nTime >> addrMe;
         you.nServices = ServiceFlags(nServiceInt);
         recv >> addrFrom >> nNonce;
-        recv >> strSubVer;
+        recv >> LIMITED_STRING(strSubVer, /* MAX_SUBVERSION_LENGTH = */ 256);
+        strSubVer = SanitizeString(strSubVer);
         recv >> nStartingHeight;
 
         if (nVersion >= FEATURE_NEGOTIATION_BEFORE_VERACK_VERSION) {
