@@ -5,7 +5,7 @@
 # file COPYING or http://www.opensource.org/licenses/mit-license.php.
 """Test the listsincelast RPC."""
 from test_framework.test_framework import BitcoinTestFramework
-from test_framework.util import assert_equal, assert_array_result, assert_raises_rpc_error
+from test_framework.util import assert_equal, assert_greater_than, assert_array_result, assert_raises_rpc_error
 
 
 class ListSinceBlockTest (BitcoinTestFramework):
@@ -316,6 +316,11 @@ class ListSinceBlockTest (BitcoinTestFramework):
 
     def test_label(self):
         self.log.info('Test passing "label" argument fetches incoming transactions having the specified label')
+
+        # First, assert that label="*" is rejected
+        assert_raises_rpc_error(-11, "Invalid label name", self.nodes[1].listsinceblock, label="*")
+
+        # Next, create an address with a label and ensure behavior is as expected
         new_addr = self.nodes[1].getnewaddress(label="new_addr")
 
         self.nodes[2].sendtoaddress(address=new_addr, amount="0.001")
@@ -326,6 +331,9 @@ class ListSinceBlockTest (BitcoinTestFramework):
             transactions = self.nodes[1].listsinceblock(label=label)["transactions"]
             if label == "new_addr":
                 assert_equal(len(transactions), 1)
+            else:
+                # If label="", we grab everything that has no label or whose label is ""
+                assert_greater_than(len(transactions), 1)
             for txn in transactions:
                 assert_equal(txn.get("label", ""), label)
                 if label == "new_addr":
