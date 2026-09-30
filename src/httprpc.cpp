@@ -354,7 +354,7 @@ bool HTTPRPCRequestProcessor::ProcessHTTPRequest(const std::any& context, HTTPRe
 
             // If this username has a whitelist, ensure this method is listed, otherwise deny access.
             if (user_whitelist && !user_whitelist->contains(jreq.strMethod)) {
-                LogPrintf("RPC User %s not allowed to call method \"%s\"\n", jreq.authUser, jreq.strMethod);
+                LogPrintf("RPC User %s not allowed to call method \"%s\"\n", jreq.authUser, SanitizeString(jreq.strMethod));
                 req->WriteReply(HTTP_FORBIDDEN);
                 return false;
             }
@@ -376,7 +376,7 @@ bool HTTPRPCRequestProcessor::ProcessHTTPRequest(const std::any& context, HTTPRe
                         // Parse method
                         const std::string &strMethod = JSONRPCRequest::parseMethod(item.get_obj());
                         if (!user_whitelist->contains(strMethod)) {
-                            LogPrintf("RPC User %s not allowed to call method \"%s\"\n", jreq.authUser, strMethod);
+                            LogPrintf("RPC User %s not allowed to call method \"%s\"\n", jreq.authUser, SanitizeString(strMethod));
                             req->WriteReply(HTTP_FORBIDDEN);
                             return false;
                         }
