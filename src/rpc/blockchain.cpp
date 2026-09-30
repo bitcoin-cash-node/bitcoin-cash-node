@@ -84,35 +84,73 @@ double GetDifficulty(const CBlockIndex *blockindex) {
     return dDiff;
 }
 
-static int ComputeNextBlockAndDepth(const CBlockIndex *tip,
-                                    const CBlockIndex *blockindex,
-                                    const CBlockIndex *&next) {
-    next = tip->GetAncestor(blockindex->nHeight + 1);
-    if (next && next->pprev == blockindex) {
-        return tip->nHeight - blockindex->nHeight + 1;
-    }
-    next = nullptr;
-    return blockindex == tip ? 1 : -1;
-}
-
-UniValue::Object blockheaderToJSON(const Config &config, const CBlockIndex *tip, const CBlockIndex *blockindex) {
-    const CBlockIndex *pnext;
-    int confirmations = ComputeNextBlockAndDepth(tip, blockindex, pnext);
-    bool previousblockhash = blockindex->pprev;
-    bool nextblockhash = pnext;
+static UniValue::Object blockToJSONCommon(const Config &config, const CBlockIndex *tip, const CBlockIndex *blockindex,
+                                          const CBlock *block /* nullable */, const TransactionFormatOptions &txOptions)
+    LOCKS_EXCLUDED(cs_main) {
+    const auto res = [&tip, &blockindex] {
+        struct Result {
+            const CBlockIndex *next{};     ///< The next block; if nullptr is not on active chain or is tip
+            int confirmations{};           ///< The # of confirmations. 1 = tip, -1 is a block not on the active chain (orphan)
+        } ret;
+        ret.next = tip->GetAncestor(blockindex->nHeight + 1);
+        if (ret.next && ret.next->pprev == blockindex) {
+            // Some block on the main chain, behind the tip
+            ret.confirmations = tip->nHeight - blockindex->nHeight + 1;
+            return ret;
+        }
+        // No "next" on the active chain, ensure it's nullptr for good measure
+        ret.next = nullptr;
+        if (blockindex == tip) {
+            // A block at the tip, no `next` but we definitely have 1 confirmation
+            ret.confirmations = 1;
+        } else {
+            // Special case for orphaned block -- has "-1" confirmations
+            ret.confirmations = -1;
+        }
+        return ret;
+    }();
+    const bool previousblockhash = blockindex->pprev;
+    const bool nextblockhash = res.next;
     const auto ablaStateOpt = blockindex->GetAblaStateOpt();
     UniValue::Object result;
-    result.reserve(13 + previousblockhash + nextblockhash + bool(ablaStateOpt));
+    result.reserve(13 + (2 * bool(block)) + previousblockhash + nextblockhash + bool(ablaStateOpt));
     result.emplace_back("hash", blockindex->GetBlockHash().GetHex());
-    result.emplace_back("confirmations", confirmations);
+    result.emplace_back("confirmations", res.confirmations);
+    if (block) {
+        result.emplace_back("size", ::GetSerializeSize(*block, PROTOCOL_VERSION));
+    }
     result.emplace_back("height", blockindex->nHeight);
-    result.emplace_back("version", blockindex->nVersion);
-    result.emplace_back("versionHex", strprintf("%08x", blockindex->nVersion));
-    result.emplace_back("merkleroot", blockindex->hashMerkleRoot.GetHex());
-    result.emplace_back("time", blockindex->nTime);
+    result.emplace_back("version", block ? block->nVersion : blockindex->nVersion);
+    result.emplace_back("versionHex", strprintf("%08x", block ? block->nVersion : blockindex->nVersion));
+    result.emplace_back("merkleroot", block ? block->hashMerkleRoot.GetHex() : blockindex->hashMerkleRoot.GetHex());
+    if (block) {
+        UniValue::Array txs;
+        txs.reserve(block->vtx.size());
+
+        if (txOptions.block_level.txids_only) {
+            // Equivalent to BlockTxVerbosity::SHOW_TXID: only transaction IDs
+            for (const auto &tx : block->vtx) {
+                txs.emplace_back(tx->GetId().GetHex());
+            }
+        } else {
+            // Detailed serialization with options
+            CBlockUndo blockUndo;
+            const bool have_undo{WITH_LOCK(::cs_main, return !IsBlockPruned(blockindex) && UndoReadFromDisk(blockUndo, blockindex))};
+
+            for (size_t i = 0u; i < block->vtx.size(); ++i) {
+                const CTransactionRef& tx = block->vtx[i];
+                // coinbase transaction (i.e. i == 0) doesn't have undo data
+                const CTxUndo* txundo = (have_undo && i > 0u) ? &blockUndo.vtxundo.at(i - 1u) : nullptr;
+                txs.push_back(TransactionToUniv(config, *tx, txundo, txOptions));
+            }
+        }
+
+        result.emplace_back("tx", std::move(txs));
+    }
+    result.emplace_back("time", block ? block->GetBlockTime() : blockindex->nTime);
     result.emplace_back("mediantime", blockindex->GetMedianTimePast());
-    result.emplace_back("nonce", blockindex->nNonce);
-    result.emplace_back("bits", strprintf("%08x", blockindex->nBits));
+    result.emplace_back("nonce", block ? block->nNonce : blockindex->nNonce);
+    result.emplace_back("bits", strprintf("%08x", block ? block->nBits : blockindex->nBits));
     result.emplace_back("difficulty", GetDifficulty(blockindex));
     result.emplace_back("chainwork", blockindex->nChainWork.GetHex());
     result.emplace_back("nTx", blockindex->nTx);
@@ -120,69 +158,21 @@ UniValue::Object blockheaderToJSON(const Config &config, const CBlockIndex *tip,
         result.emplace_back("previousblockhash", blockindex->pprev->GetBlockHash().GetHex());
     }
     if (nextblockhash) {
-        result.emplace_back("nextblockhash", pnext->GetBlockHash().GetHex());
+        result.emplace_back("nextblockhash", res.next->GetBlockHash().GetHex());
     }
     if (ablaStateOpt) {
         result.emplace_back("ablastate", ablaStateToJSON(config, *ablaStateOpt));
     }
     return result;
+}
+
+UniValue::Object blockheaderToJSON(const Config &config, const CBlockIndex *tip, const CBlockIndex *blockindex) LOCKS_EXCLUDED(cs_main) {
+    return blockToJSONCommon(config, tip, blockindex, nullptr, /* tx format option not relevant: */ {});
 }
 
 UniValue::Object blockToJSON(const Config &config, const CBlock &block, const CBlockIndex *tip,
                              const CBlockIndex *blockindex, const TransactionFormatOptions &txOptions) LOCKS_EXCLUDED(cs_main) {
-    const CBlockIndex *pnext;
-    int confirmations = ComputeNextBlockAndDepth(tip, blockindex, pnext);
-    bool previousblockhash = blockindex->pprev;
-    bool nextblockhash = pnext;
-    const auto ablaStateOpt = blockindex->GetAblaStateOpt();
-    UniValue::Object result;
-    result.reserve(15 + previousblockhash + nextblockhash + bool(ablaStateOpt));
-    result.emplace_back("hash", blockindex->GetBlockHash().GetHex());
-    result.emplace_back("confirmations", confirmations);
-    result.emplace_back("size", ::GetSerializeSize(block, PROTOCOL_VERSION));
-    result.emplace_back("height", blockindex->nHeight);
-    result.emplace_back("version", block.nVersion);
-    result.emplace_back("versionHex", strprintf("%08x", block.nVersion));
-    result.emplace_back("merkleroot", block.hashMerkleRoot.GetHex());
-    UniValue::Array txs;
-    txs.reserve(block.vtx.size());
-
-    if (txOptions.block_level.txids_only) {
-        // Equivalent to BlockTxVerbosity::SHOW_TXID: only transaction IDs
-        for (const auto &tx : block.vtx) {
-            txs.emplace_back(tx->GetId().GetHex());
-        }
-    } else {
-        // Detailed serialization with options
-        CBlockUndo blockUndo;
-        const bool have_undo{WITH_LOCK(::cs_main, return !IsBlockPruned(blockindex) && UndoReadFromDisk(blockUndo, blockindex))};
-
-        for (size_t i = 0u; i < block.vtx.size(); ++i) {
-            const CTransactionRef& tx = block.vtx[i];
-            // coinbase transaction (i.e. i == 0) doesn't have undo data
-            const CTxUndo* txundo = (have_undo && i > 0u) ? &blockUndo.vtxundo.at(i - 1u) : nullptr;
-            txs.push_back(TransactionToUniv(config, *tx, txundo, txOptions));
-        }
-    }
-
-    result.emplace_back("tx", std::move(txs));
-    result.emplace_back("time", block.GetBlockTime());
-    result.emplace_back("mediantime", blockindex->GetMedianTimePast());
-    result.emplace_back("nonce", block.nNonce);
-    result.emplace_back("bits", strprintf("%08x", block.nBits));
-    result.emplace_back("difficulty", GetDifficulty(blockindex));
-    result.emplace_back("chainwork", blockindex->nChainWork.GetHex());
-    result.emplace_back("nTx", blockindex->nTx);
-    if (previousblockhash) {
-        result.emplace_back("previousblockhash", blockindex->pprev->GetBlockHash().GetHex());
-    }
-    if (nextblockhash) {
-        result.emplace_back("nextblockhash", pnext->GetBlockHash().GetHex());
-    }
-    if (ablaStateOpt) {
-        result.emplace_back("ablastate", ablaStateToJSON(config, *ablaStateOpt));
-    }
-    return result;
+    return blockToJSONCommon(config, tip, blockindex, &block, txOptions);
 }
 
 UniValue::Object ablaStateToJSON(const Config &config, const abla::State &state) {
@@ -793,7 +783,7 @@ static std::string ablaStateHelpCommon(bool trailingComma, size_t extraSpaceLeft
         "%s    \"beta\" : n,                  %s(numeric) ABLA state beta value\n"
         "%s    \"blocksize\" : n,             %s(numeric) The size of this block\n"
         "%s    \"blocksizelimit\" : n,        %s(numeric) The size limit for this block\n"
-        "%s    \"nextblocksizelimit\" : n,    %s(numeric) The size limit for the next block\n"
+        "%s    \"nextblocksizelimit\" : n     %s(numeric) The size limit for the next block\n"
         "%s  }%s\n", spL, spM, spL, spM, spL, spM, spL, spM, spL, spM, spL, spM, spL, trailingComma ? "," : "");
 }
 
@@ -843,6 +833,39 @@ static const CBlockIndex *ParseHashOrHeight(const UniValue &param, bool active_c
     return pindex;
 }
 
+static std::string getblockHelpCommon(const bool block, const size_t extraSpaceMiddle=0) {
+    const std::string spM(extraSpaceMiddle, ' ');
+    const std::string sizeLine =
+        block ? strprintf("  \"size\" : n,                    %s(numeric) The block size\n", spM)
+              : std::string{};
+    const std::string txPart =
+        block ? strprintf("  \"tx\" : [                       %s(array of string) The transaction ids\n"
+                          "     \"transactionid\"             %s(string) The transaction id\n"
+                          "     ,...\n"
+                          "  ],\n", spM, spM)
+              : std::string{};
+    return strprintf(
+        "  \"hash\" : \"hash\",               %s(string) the block hash (same as provided)\n"
+        "  \"confirmations\" : n,           %s(numeric) The number of confirmations, or -1 if the block is not on the main chain\n"
+        + sizeLine +
+        "  \"height\" : n,                  %s(numeric) The block height or index\n"
+        "  \"version\" : n,                 %s(numeric) The block version\n"
+        "  \"versionHex\" : \"00000000\",     %s(string) The block version formatted in hexadecimal\n"
+        "  \"merkleroot\" : \"xxxx\",         %s(string) The merkle root\n"
+        + txPart +
+        "  \"time\" : ttt,                  %s(numeric) The block time in seconds since epoch (Jan 1 1970 GMT)\n"
+        "  \"mediantime\" : ttt,            %s(numeric) The median block time in seconds since epoch (Jan 1 1970 GMT)\n"
+        "  \"nonce\" : n,                   %s(numeric) The nonce\n"
+        "  \"bits\" : \"1d00ffff\",           %s(string) The bits\n"
+        "  \"difficulty\" : x.xxx,          %s(numeric) The difficulty\n"
+        "  \"chainwork\" : \"0000...1f3\",    %s(string) Expected number of hashes required to produce the chain up to this block (in hex)\n"
+        "  \"nTx\" : n,                     %s(numeric) The number of transactions in the block.\n"
+        "  \"previousblockhash\" : \"hash\",  %s(string) The hash of the previous block\n"
+        "  \"nextblockhash\" : \"hash\",      %s(string) The hash of the next block\n",
+        spM, spM, spM, spM, spM, spM, spM, spM, spM, spM, spM, spM, spM, spM, spM
+    );
+}
+
 static UniValue getblockheader(const Config &config,
                                const JSONRPCRequest &request) {
     if (request.fHelp || request.params.size() < 1 ||
@@ -858,21 +881,7 @@ static UniValue getblockheader(const Config &config,
                 .ToString() +
             "\nResult (for verbose = true):\n"
             "{\n"
-            "  \"hash\" : \"hash\",               (string) the block hash (same as provided)\n"
-            "  \"confirmations\" : n,           (numeric) The number of confirmations, or -1 if the block is not on the main chain\n"
-            "  \"height\" : n,                  (numeric) The block height or index\n"
-            "  \"version\" : n,                 (numeric) The block version\n"
-            "  \"versionHex\" : \"00000000\",     (string) The block version formatted in hexadecimal\n"
-            "  \"merkleroot\" : \"xxxx\",         (string) The merkle root\n"
-            "  \"time\" : ttt,                  (numeric) The block time in seconds since epoch (Jan 1 1970 GMT)\n"
-            "  \"mediantime\" : ttt,            (numeric) The median block time in seconds since epoch (Jan 1 1970 GMT)\n"
-            "  \"nonce\" : n,                   (numeric) The nonce\n"
-            "  \"bits\" : \"1d00ffff\",           (string) The bits\n"
-            "  \"difficulty\" : x.xxx,          (numeric) The difficulty\n"
-            "  \"chainwork\" : \"0000...1f3\"     (string) Expected number of hashes required to produce the current chain (in hex)\n"
-            "  \"nTx\" : n,                     (numeric) The number of transactions in the block.\n"
-            "  \"previousblockhash\" : \"hash\",  (string) The hash of the previous block\n"
-            "  \"nextblockhash\" : \"hash\",      (string) The hash of the next block,\n"
+            + getblockHelpCommon(false)
             + ablaStateHelpCommon(false) +
             "}\n"
             "\nResult (for verbose=false):\n"
@@ -970,26 +979,7 @@ static UniValue getblock(const Config &config, const JSONRPCRequest &request) {
             "\"data\"                                  (string) A string that is serialized, hex-encoded data for block 'hash'.\n"
             "\nResult (for verbosity = 1):\n"
             "{\n"
-            "  \"hash\" : \"hash\",                      (string) The block hash (same as provided)\n"
-            "  \"confirmations\" : n,                  (numeric) The number of confirmations, or -1 if the block is not on the main chain\n"
-            "  \"size\" : n,                           (numeric) The block size\n"
-            "  \"height\" : n,                         (numeric) The block height or index\n"
-            "  \"version\" : n,                        (numeric) The block version\n"
-            "  \"versionHex\" : \"00000000\",            (string) The block version formatted in hexadecimal\n"
-            "  \"merkleroot\" : \"xxxx\",                (string) The merkle root\n"
-            "  \"tx\" : [                              (array of string) The transaction ids\n"
-            "     \"transactionid\"                    (string) The transaction id\n"
-            "     ,...\n"
-            "  ],\n"
-            "  \"time\" : ttt,                         (numeric) The block time in seconds since epoch (Jan 1 1970 GMT)\n"
-            "  \"mediantime\" : ttt,                   (numeric) The median block time in seconds since epoch (Jan 1 1970 GMT)\n"
-            "  \"nonce\" : n,                          (numeric) The nonce\n"
-            "  \"bits\" : \"1d00ffff\",                  (string) The bits\n"
-            "  \"difficulty\" : x.xxx,                 (numeric) The difficulty\n"
-            "  \"chainwork\" : \"xxxx\",                 (string) Expected number of hashes required to produce the chain up to this block (in hex)\n"
-            "  \"nTx\" : n,                            (numeric) The number of transactions in the block.\n"
-            "  \"previousblockhash\" : \"hash\",         (string) The hash of the previous block\n"
-            "  \"nextblockhash\" : \"hash\"              (string) The hash of the next block,\n"
+            + getblockHelpCommon(true, 7)
             + ablaStateHelpCommon(false, 0, 7) +
             "}\n"
             "\nResult (for verbosity = 2):\n"
