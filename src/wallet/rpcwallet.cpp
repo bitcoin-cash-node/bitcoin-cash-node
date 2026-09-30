@@ -1777,7 +1777,7 @@ static UniValue listsinceblock(const Config &config,
                     {"include_removed", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "true", "Show transactions that were removed due to a reorg in the \"removed\" array\n"
             "                                                           (not guaranteed to work on pruned nodes)"},
                     {"include_change", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Also add entries for change outputs."},
-                    {"label", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Return only incoming transactions paying to addresses with the specified label. Note that if this argument is specified, no 'send' transactions spending from \"label\" will be returned in either the \"transactions\" or \"removed\" arrays."},
+                    {"label", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Return only incoming entries paying to addresses with the specified label. When this argument is used, no 'send' entries are returned in either the transactions or removed array; incoming coinbase entries appear with category 'generate', 'immature' or 'orphan' rather than 'receive'. Note that label=\"\" matches both addresses whose label really is \"\" (what getnewaddress stores) and every destination absent from the address book."},
                 }}
                 .ToString() +
             "\nResult:\n"
