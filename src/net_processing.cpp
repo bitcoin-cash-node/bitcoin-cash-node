@@ -139,6 +139,12 @@ static constexpr unsigned int MAX_FEEFILTER_CHANGE_DELAY = 5 * 60;
  */
 static constexpr size_t MAX_PCT_ADDR_TO_SEND = 23;
 
+/**
+ * The maximum number of MSG_DSPROOF getdata's to batch, per peer. This is the maximum size of
+ * CNodeState::dsproofGetDatasToBatch.
+ */
+static constexpr size_t MAX_DSPROOF_GET_DATAS_TO_BATCH = 5000;
+
 // Internal stuff
 namespace {
 /** Number of nodes with fSyncStarted. */
@@ -349,6 +355,9 @@ struct CNodeState {
 
     //! Time of last new block announcement
     int64_t m_last_block_announcement;
+
+    //! Batching for dsproof getdatas; dspid's that we want are enqueued here for getdata batching.
+    std::vector<DspId> dsproofGetDatasToBatch;
 
     CNodeState(const CAddress &addrIn, const std::string &addrNameIn)
         : address(addrIn), name(addrNameIn) {
@@ -2550,6 +2559,7 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
 
         const auto current_time = GetTime<std::chrono::microseconds>(); // mockable time
         const uint256 *best_block = nullptr; /* may point into vInv */
+        CNodeState *state = nullptr; // lazy-initted on first use in MSG_DOUBLESPENDPROOF below
 
         for (const CInv &inv : vInv) {
             if (interruptMsgProc) {
@@ -2577,14 +2587,19 @@ bool PeerLogicValidation::ProcessMessage(const Config &config, const NodeRef &pf
                              "transaction (%s) inv sent in violation of "
                              "protocol peer=%d\n",
                              inv.hash.ToString(), pfrom->GetId());
-                } else if (!fAlreadyHave && !fImporting && !fReindex &&
-                           !IsInitialBlockDownload()) {
+                } else if (!fAlreadyHave && !fImporting && !fReindex && !IsInitialBlockDownload()) {
                     if (inv.type == MSG_DOUBLESPENDPROOF) {
                         if (DoubleSpendProof::IsEnabled()) {
+                            if (!state) state = Assert(State(pfrom->GetId()));
                             // dsproof subsystem enabled, ask peer for the proof
                             LogPrint(BCLog::DSPROOF, "Got DSProof INV %s\n", inv.hash.ToString());
-                            connman->PushMessage(pfrom,
-                                                 msgMaker.Make(NetMsgType::GETDATA, std::vector<CInv>{inv}));
+                            if (state->dsproofGetDatasToBatch.size() < MAX_DSPROOF_GET_DATAS_TO_BATCH) {
+                                // Enqueue so that a batched GETDATA may be sent in SendMessages()
+                                state->dsproofGetDatasToBatch.emplace_back(inv.hash);
+                            } else {
+                                LogPrint(BCLog::DSPROOF, "  DSProof batch queue full (size: %d) for peer %d, ignoring inv\n",
+                                         state->dsproofGetDatasToBatch.size(), pfrom->GetId());
+                            }
                         } else {
                             // dsproof subsystem disabled, ignore this inv
                             LogPrint(BCLog::DSPROOF, "Got DSProof INV %s (ignored, -doublespendproof=0)\n",
@@ -4723,6 +4738,18 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
     // Message: getdata (blocks)
     //
     std::vector<CInv> vGetData;
+    auto FlushGetData = [&] {
+        if (!vGetData.empty()) {
+            connman->PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
+            vGetData.clear();
+        }
+    };
+    auto EmplaceVGetData = [&](auto && ...args) {
+        vGetData.emplace_back(std::forward<decltype(args)>(args)...);
+        if (vGetData.size() >= MAX_GETDATA_SZ) {
+            FlushGetData();
+        }
+    };
     if (!pto->fClient && ((fFetch && !pto->m_limited_node) || !IsInitialBlockDownload())
         && state.vBlocksInFlight.size() < MAX_BLOCKS_IN_TRANSIT_PER_PEER) {
         std::vector<const CBlockIndex *> vToDownload;
@@ -4731,7 +4758,7 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
                                  MAX_BLOCKS_IN_TRANSIT_PER_PEER - state.vBlocksInFlight.size(),
                                  vToDownload, staller, consensusParams);
         for (const CBlockIndex *pindex : vToDownload) {
-            vGetData.emplace_back(MSG_BLOCK, pindex->GetBlockHash());
+            EmplaceVGetData(MSG_BLOCK, pindex->GetBlockHash());
             MarkBlockAsInFlight(config, pto->GetId(), pindex->GetBlockHash(),
                                 consensusParams, pindex);
             LogPrint(BCLog::NET, "Requesting block %s (%d) peer=%d\n",
@@ -4742,6 +4769,20 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
             if (State(staller)->nStallingSince == 0) {
                 State(staller)->nStallingSince = nNow;
                 LogPrint(BCLog::NET, "Stall started peer=%d\n", staller);
+            }
+        }
+    }
+
+    //
+    // Message: getdata (double spend proofs)
+    //
+    if (auto batch = std::move(state.dsproofGetDatasToBatch); !batch.empty()) {
+        // Note that we don't de-dupe here. Theoretically a peer can send us dupe dsproof invs in a batch, which is odd
+        // but not fatal; it's not worth the extra cycles to sort + uniqueify here.
+        for (const auto &hash : batch) {
+            if (CInv inv(MSG_DOUBLESPENDPROOF, hash); !AlreadyHave(inv)) {
+                LogPrint(BCLog::NET, "Requesting %s peer=%d\n", inv.ToString(), pto->GetId());
+                EmplaceVGetData(std::move(inv));
             }
         }
     }
@@ -4758,12 +4799,8 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
         const CInv inv(MSG_TX, txid);
         if (!AlreadyHave(inv)) {
             LogPrint(BCLog::NET, "Requesting tx %s peer=%d\n", txid.ToString(), pto->GetId());
-            vGetData.push_back(inv);
-            if (vGetData.size() >= MAX_GETDATA_SZ) {
-                connman->PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
-                vGetData.clear();
-            }
-            m_txrequest.RequestedTx(pto->GetId(),txid, current_time + GETDATA_TX_INTERVAL);
+            EmplaceVGetData(inv);
+            m_txrequest.RequestedTx(pto->GetId(), txid, current_time + GETDATA_TX_INTERVAL);
         } else {
             // We have already seen this transaction, no need to download. This is just a belt-and-suspenders, as
             // this should already be called whenever a transaction becomes Already().
@@ -4771,9 +4808,8 @@ bool PeerLogicValidation::SendMessages(const Config &config, NodeRef pto,
         }
     }
 
-    if (!vGetData.empty()) {
-        connman->PushMessage(pto, msgMaker.Make(NetMsgType::GETDATA, vGetData));
-    }
+    // Send any leftovers that may still be in vGetData
+    FlushGetData();
 
     //
     // Message: feefilter
