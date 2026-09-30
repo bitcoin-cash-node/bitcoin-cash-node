@@ -1777,7 +1777,7 @@ static UniValue listsinceblock(const Config &config,
                     {"include_removed", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "true", "Show transactions that were removed due to a reorg in the \"removed\" array\n"
             "                                                           (not guaranteed to work on pruned nodes)"},
                     {"include_change", RPCArg::Type::BOOL, /* opt */ true, /* default_val */ "false", "Also add entries for change outputs."},
-                    {"label", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Return only incoming transactions paying to addresses with the specified label. Note that if this argument is specified, only 'receive' transactions paying to \"label\" will be returned in both the the \"transactions\" and \"removed\" arrays."},
+                    {"label", RPCArg::Type::STR, /* opt */ true, /* default_val */ "", "Return only incoming transactions paying to addresses with the specified label. Note that if this argument is specified, no 'send' transactions spending from \"label\" will be returned in either the \"transactions\" or \"removed\" arrays."},
                 }}
                 .ToString() +
             "\nResult:\n"
