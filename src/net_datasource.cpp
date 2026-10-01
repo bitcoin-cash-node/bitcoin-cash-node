@@ -277,9 +277,9 @@ CMessageHeader::CheckSum SerializedDataSource::CalculateCheckSum() {
 }
 
 std::span<const uint8_t> SerializedDataSource::GetBytes(const size_t offset, const size_t count, Vec &tmpBuffer) {
-    // Written so that `offset + count` is never formed, since that sum can wrap.
-    static const auto ThrowIfPastEnd = [](const size_t offset, const size_t count, const size_t size) {
-        if (offset > size || count > size - offset) [[unlikely]] {
+    // Written so that `off + ct` is never formed, since that sum can wrap.
+    static const auto ThrowIfPastEnd = [](const size_t off, const size_t ct, const size_t size) {
+        if (off > size || ct > size - off) [[unlikely]] {
             throw std::invalid_argument("Attempt to read past end of buffer");
         }
     };
